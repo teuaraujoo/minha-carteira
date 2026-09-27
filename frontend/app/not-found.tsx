@@ -24,9 +24,9 @@ export default function NotFound() {
         <div className={styles.brandMark}>
           <Image
             className={styles.logo}
-            src="/logo.png"
+            src="/favicon.png"
             alt="Minha Carteira"
-            width={2048}
+            width={148}
             height={768}
             sizes="(max-width: 640px) 11rem, 16rem"
             priority
