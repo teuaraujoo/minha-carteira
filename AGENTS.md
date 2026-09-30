@@ -87,3 +87,13 @@ async function fetchUserById(id: string): Promise<User> {
 async function get(x) {
   return await api.get('/users/' + x).data;
 }
+
+## Maestri orchestration bootstrap
+
+Before processing any task, the orchestrator must:
+
+1. Run `maestri list`.
+2. Read the connected note named `protocol.md` in /docs/Orchestration Protocol.
+3. Read the active task spec completely.
+4. Stop and ask for guidance if the protocol note is unavailable or conflicts
+   with the task spec.
