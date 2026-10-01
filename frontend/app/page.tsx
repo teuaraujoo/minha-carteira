@@ -1,9 +1,12 @@
-import Image from "next/image";
+import { AppShell } from "@/components/app-shell";
 
 export default function Home() {
   return (
-    <div>
-      <h1>Hello World!</h1>
-    </div>
+    <AppShell>
+      <section aria-labelledby="overview-heading" className="space-y-3">
+        <h1 id="overview-heading" className="text-3xl font-bold tracking-tight">Visão Geral</h1>
+        <p className="text-muted-foreground">Bem-vindo ao Minha Carteira. Seu controle financeiro começa aqui.</p>
+      </section>
+    </AppShell>
   );
 }
