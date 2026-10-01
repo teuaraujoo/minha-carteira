@@ -13,9 +13,11 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Repeat,
   Settings,
   Tags,
   UserRound,
+  Wallet,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,13 +26,17 @@ import { cn } from "@/lib/utils";
 const navigationItems = [
   { label: "Visão Geral", href: "/", icon: LayoutDashboard },
   { label: "Transações", href: "/transactions", icon: ArrowLeftRight },
+  { label: "Contas", href: "/accounts", icon: Wallet },
   { label: "Categorias", href: "/categories", icon: Tags },
+  { label: "Recorrências", href: "/recurring-transactions", icon: Repeat },
   { label: "Orçamentos", href: "/budgets", icon: ChartPie },
   { label: "Configurações", href: "/settings", icon: Settings },
 ];
 
 const pageTitles: Record<string, string> = {
   "/profile": "Perfil",
+  "/accounts": "Contas",
+  "/recurring-transactions": "Recorrências",
 };
 
 const recentNotifications = [
