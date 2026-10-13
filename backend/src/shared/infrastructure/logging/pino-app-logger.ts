@@ -5,6 +5,27 @@ import { createLogErrorDiagnostic, sanitizeLogContext, sanitizeLogText } from ".
 export const LOG_LEVELS = ["debug", "info", "warn", "error", "fatal"] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
+const REDACTED = "[REMOVIDO]";
+const SENSITIVE_LOG_KEYS = [
+  "password",
+  "passwd",
+  "passwordHash",
+  "hash",
+  "secret",
+  "token",
+  "accessToken",
+  "refreshToken",
+  "authorization",
+  "cookie",
+  "credential",
+  "apiKey",
+] as const;
+const REDACTION_CONTAINERS = ["context", "error", "error.details", "error.cause", "error.cause.details"] as const;
+export const PINO_REDACT_PATHS = [
+  ...SENSITIVE_LOG_KEYS,
+  ...REDACTION_CONTAINERS.flatMap((container) => SENSITIVE_LOG_KEYS.map((key) => `${container}.${key}`)),
+];
+
 export interface LoggerEnvironment {
   LOG_LEVEL?: string | undefined;
   NODE_ENV?: string | undefined;
@@ -161,6 +182,7 @@ export function createPinoAppLogger(options: PinoAppLoggerOptions = {}): AppLogg
     base: null,
     level: configuration.level,
     messageKey: "message",
+    redact: { paths: PINO_REDACT_PATHS, censor: REDACTED },
     timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
     formatters: {
       level: (label) => ({ level: label }),

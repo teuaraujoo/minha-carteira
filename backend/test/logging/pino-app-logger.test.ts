@@ -6,6 +6,7 @@ import type { Logger as PinoLogger } from "pino";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 import {
   createPinoAppLogger,
+  PINO_REDACT_PATHS,
   PinoAppLogger,
   resolveLoggerConfiguration,
 } from "../../src/shared/infrastructure/logging/pino-app-logger.js";
@@ -50,6 +51,12 @@ test("production emits exact NDJSON fields, textual levels and no Pino metadata"
   assert.match(String(record?.timestamp), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   for (const forbidden of ["time", "msg", "req", "res", "pid", "hostname", "schemaVersion", "service", "environment", "durationMs"]) {
     assert.equal(Object.hasOwn(record ?? {}, forbidden), false);
+  }
+});
+
+test("Pino redaction adds defense in depth for sensitive root and diagnostic paths", () => {
+  for (const path of ["password", "token", "authorization", "cookie", "error.details.password", "error.cause.token", "context.secret"]) {
+    assert.equal(PINO_REDACT_PATHS.includes(path), true, `missing redaction path: ${path}`);
   }
 });
 
@@ -126,21 +133,23 @@ test("close is idempotent and does not close an injected destination", async () 
 
 test("close waits for an internally owned destination", async () => {
   let destinationClosed = false;
+  let finishClose: (() => void) | undefined;
   const destination = Object.assign(new EventEmitter(), {
     write() { return true; },
     end(callback?: () => void) {
-      setTimeout(() => {
+      finishClose = () => {
         destinationClosed = true;
         callback?.();
-      }, 10);
+      };
     },
   });
   const pinoLogger = { flush() {} } as PinoLogger;
   const logger = new PinoAppLogger(pinoLogger, destination);
   let closeResolved = false;
   const closing = logger.close().then(() => { closeResolved = true; });
-  await new Promise<void>((resolve) => setImmediate(resolve));
+  await Promise.resolve();
   assert.equal(closeResolved, false);
+  finishClose?.();
   await closing;
   assert.equal(destinationClosed, true);
 });
