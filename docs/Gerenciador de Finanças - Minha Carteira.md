@@ -381,7 +381,7 @@ Responsável por consolidar e apresentar os principais indicadores do período: 
 ## Contratos da API:
 
 ### 1\. Convenções HTTP
-*   **Base URL:** todas as rotas públicas do MVP devem utilizar o prefixo `/api/v1`.
+*   **Base URL:** todas as rotas funcionais do MVP devem utilizar o prefixo `/api/v1`. Rotas de infraestrutura, como `/health`, ficam fora desse contrato.
 *   **Datas:** datas civis utilizam `YYYY-MM-DD`; competências utilizam `YYYY-MM`; timestamps utilizam ISO 8601 em UTC.
 *   **Valores monetários:** valores entram e saem como strings decimais, por exemplo `"1250.50"`, e são convertidos para `Decimal` no backend.
 *   **Moeda:** o MVP utiliza exclusivamente o código `BRL`.
@@ -390,17 +390,43 @@ Responsável por consolidar e apresentar os principais indicadores do período: 
 *   **Idempotência:** a geração automática de recorrências deve possuir proteção contra processamento duplicado.
 
 ### 2\. Resposta de sucesso
-Toda resposta com conteúdo deve seguir o envelope:
+Toda resposta JSON com conteúdo das rotas em **/api/v1** deve seguir o envelope:
 
 ```json
 {
-  "message": "",
-  "data": {},
+  "data": {}
 }
 ```
 
+O campo opcional **meta** contém metadados próprios da operação. Quando uma
+mensagem de sucesso for necessária, ela deve ficar em **data.message**. Uma
+resposta **204** não possui corpo.
+
+O contrato detalhado está em
+[`response.spec.md`](../backend/.specs/templates/http-contracts/response.spec.md).
+
+### 3\. Resposta de erro
+
+Falhas esperadas devem utilizar um erro tipado e ser convertidas por um
+middleware global. Em produção, a resposta contém somente **status** e uma
+**message** pública em português:
+
+```json
+{
+  "status": 400,
+  "message": "Campo inválido."
+}
+```
+
+Erros inesperados retornam **500** e a mensagem genérica
+**"Erro interno do servidor."**. Código interno, detalhes, stack, causa e
+**requestId** não são expostos em produção. O contrato detalhado e as regras de
+sanitização estão em
+[`error.spec.md`](../backend/.specs/templates/http-contracts/error.spec.md).
+
 ### 4\. Contrato de paginação
-Rotas de listagem paginada devem aceitar **page**, **pageSize**, **sortBy** e **sortOrder** e responder:
+Rotas de listagem paginada devem aceitar **page**, **pageSize**, **sortBy** e
+**sortOrder** e responder:
 
 ```json
 {
@@ -408,15 +434,21 @@ Rotas de listagem paginada devem aceitar **page**, **pageSize**, **sortBy** e **
   "meta": {
     "page": 1,
     "pageSize": 20,
-    "totalItems": 0,
+    "total": 0,
     "totalPages": 0
   }
 }
 ```
 
-O valor padrão de **pageSize** é 20 e o limite máximo é 100.
+Os valores padrão são **page=1** e **pageSize=20**. O limite máximo de
+**pageSize** é 100. No MVP, esse contrato deve ser aplicado inicialmente a
+**GET /api/v1/transactions**. Filtros e autorização devem ser iguais na
+contagem e na consulta paginada.
 
-### 6\. DTOs de entrada
+O contrato detalhado está em
+[`pagination.spec.md`](../backend/.specs/templates/http-contracts/pagination.spec.md).
+
+### 5\. DTOs de entrada
 #### Auth
 *   **LoginInput:** `email`, `password`.
 
@@ -447,7 +479,7 @@ Tipos: `INCOME` e `EXPENSE`. Situações: `PENDING` e `CONFIRMED`.
 
 Frequências iniciais: `WEEKLY`, `MONTHLY` e `YEARLY`. O campo **interval** deve ser um inteiro maior ou igual a 1.
 
-### 7\. DTOs de saída
+### 6\. DTOs de saída
 #### UserView
 `id`, `name`, `email`, `createdAt`, `updatedAt`.
 
@@ -466,7 +498,7 @@ Frequências iniciais: `WEEKLY`, `MONTHLY` e `YEARLY`. O campo **interval** deve
 #### DashboardView
 `competence`, `consolidatedBalance`, `totalIncome`, `totalExpense`, `monthlyResult`, `categoryBreakdown`, `upcomingTransactions`.
 
-### 8\. Contratos internos do backend
+### 7\. Contratos internos do backend
 As interfaces pertencem à camada de aplicação ou domínio. Prisma, bcrypt e demais bibliotecas devem ser implementações substituíveis desses contratos.
 
 #### Repositories
@@ -485,7 +517,7 @@ Todos os métodos devem receber o **userId** quando consultarem recursos privado
 *   **IdGenerator:** `generate`.
 *   **UnitOfWork:** executa operações que exigem atomicidade dentro de uma transação de banco.
 
-### 9\. Regras de retorno dos casos de uso
+### 8\. Regras de retorno dos casos de uso
 *   Casos de uso não devem retornar objetos do Prisma diretamente.
 *   Sucessos retornam entidades ou DTOs da aplicação.
 *   Falhas esperadas retornam erros de domínio tipados.
