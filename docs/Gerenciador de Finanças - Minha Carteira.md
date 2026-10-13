@@ -337,7 +337,7 @@ Responsável por consolidar e apresentar os principais indicadores do período: 
 *   **RNF-013 — Tipagem:** frontend e backend devem utilizar TypeScript com modo estrito habilitado.
 *   **RNF-014 — Organização:** o backend deve preservar separação entre domínio, casos de uso, infraestrutura e camada HTTP.
 *   **RNF-015 — Testes:** regras financeiras críticas devem possuir testes unitários; fluxos da API devem possuir testes de integração; e o fluxo principal deve possuir teste de ponta a ponta.
-*   **RNF-016 — Observabilidade:** a API deve produzir logs estruturados e a aplicação deve registrar erros inesperados em uma ferramenta de monitoramento.
+*   **RNF-016 — Observabilidade:** a API deve produzir logs estruturados internos. Ferramenta externa de monitoramento, retenção e pesquisa histórica será definida depois do MVP.
 *   **RNF-017 — Documentação da API:** os contratos, parâmetros, respostas e erros da API devem ser documentados e versionados.
 *   **RNF-018 — Migrações:** alterações no banco de dados devem ser realizadas por migrações versionadas e revisáveis.
 
@@ -448,7 +448,52 @@ contagem e na consulta paginada.
 O contrato detalhado está em
 [`pagination.spec.md`](../backend/.specs/templates/http-contracts/pagination.spec.md).
 
-### 5\. DTOs de entrada
+### 5\. Logs estruturados internos
+
+A API utiliza um contrato tipado de logging, implementado por um adapter Pino.
+Em produção e homologação, cada registro ocupa uma linha JSON independente
+(NDJSON). O formato não inclui automaticamente `pid`, `hostname`, `time`,
+`msg`, objetos de request/response ou `durationMs`.
+
+Os campos disponíveis são `timestamp`, `level`, `event`, `module`, `message`,
+`requestId`, `context`, `http` e `error`. Os campos opcionais só aparecem quando
+se aplicam ao evento. O `requestId` é um UUID interno gerado pelo backend para
+cada requisição; o cliente não pode defini-lo e ele não é incluído em headers
+ou corpos HTTP.
+
+O catálogo inicial de módulos contém `http`, `server`, `auth`, `accounts`,
+`categories`, `transactions`, `recurring-transactions` e `dashboard`. O
+contexto aceita somente `operation`, `count`, `userId`, `accountId`,
+`categoryId`, `transactionId` e `recurringTransactionId`. Senhas, tokens,
+cookies, e-mails, valores financeiros, corpos HTTP e outros dados pessoais não
+fazem parte dessa allowlist.
+
+Eventos de infraestrutura implementados:
+
+* `http.request.completed`: resumo único de uma requisição concluída;
+* `http.request.aborted`: conexão interrompida antes da conclusão;
+* `http.request.failed`: diagnóstico sanitizado registrado pelo handler global;
+* `server.started`: inicialização confirmada do servidor;
+* `server.failed`: falha de configuração ou inicialização.
+
+O nível padrão é `debug` somente quando `NODE_ENV` vale exatamente
+`development`; nos demais ambientes, é `info`. `LOG_LEVEL` aceita `debug`,
+`info`, `warn`, `error` ou `fatal` e uma configuração inválida impede a
+inicialização. O formato legível do `pino-pretty` é usado somente em
+desenvolvimento, sem destino explícito e quando não foi desabilitado.
+
+O contexto HTTP usa `AsyncLocalStorage`, preserva o identificador em chamadas
+assíncronas e volta ao logger base depois do encerramento da resposta. Falhas
+do próprio logger são isoladas e não alteram status, corpo, headers ou regras
+de negócio. A saída local não representa auditoria durável, monitoramento
+remoto ou garantia de retenção.
+
+A adoção em services permanece pendente porque esses fluxos ainda não foram
+implementados. Eventos de negócio só poderão ser emitidos depois da confirmação
+real de cada operação. O contrato completo está em
+[`spec.md`](../backend/.specs/templates/logs/spec.md).
+
+### 6\. DTOs de entrada
 #### Auth
 *   **LoginInput:** `email`, `password`.
 
@@ -479,7 +524,7 @@ Tipos: `INCOME` e `EXPENSE`. Situações: `PENDING` e `CONFIRMED`.
 
 Frequências iniciais: `WEEKLY`, `MONTHLY` e `YEARLY`. O campo **interval** deve ser um inteiro maior ou igual a 1.
 
-### 6\. DTOs de saída
+### 7\. DTOs de saída
 #### UserView
 `id`, `name`, `email`, `createdAt`, `updatedAt`.
 
@@ -498,7 +543,7 @@ Frequências iniciais: `WEEKLY`, `MONTHLY` e `YEARLY`. O campo **interval** deve
 #### DashboardView
 `competence`, `consolidatedBalance`, `totalIncome`, `totalExpense`, `monthlyResult`, `categoryBreakdown`, `upcomingTransactions`.
 
-### 7\. Contratos internos do backend
+### 8\. Contratos internos do backend
 As interfaces pertencem à camada de aplicação ou domínio. Prisma, bcrypt e demais bibliotecas devem ser implementações substituíveis desses contratos.
 
 #### Repositories
@@ -516,8 +561,9 @@ Todos os métodos devem receber o **userId** quando consultarem recursos privado
 *   **ClockProvider:** `now` e operações determinísticas de competência.
 *   **IdGenerator:** `generate`.
 *   **UnitOfWork:** executa operações que exigem atomicidade dentro de uma transação de banco.
+*   **AppLogger:** emite eventos tipados sem acoplar casos de uso ao Pino ou ao Express.
 
-### 8\. Regras de retorno dos casos de uso
+### 9\. Regras de retorno dos casos de uso
 *   Casos de uso não devem retornar objetos do Prisma diretamente.
 *   Sucessos retornam entidades ou DTOs da aplicação.
 *   Falhas esperadas retornam erros de domínio tipados.
