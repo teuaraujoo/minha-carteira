@@ -1,6 +1,9 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
+import { noopLogger } from "../../application/logging/app-logger.js";
+import { LogContext } from "../../infrastructure/logging/log-context.js";
 import { AppError, ErrorCode } from "./app-error.js";
 import { serializeError } from "./error-response.js";
+import { createHttpLog } from "./request-logging-middleware.js";
 import { readDataProperty, readOwnData } from "./sanitize-diagnostic.js";
 
 export const JSON_BODY_LIMIT = "100kb";
@@ -25,12 +28,38 @@ export const notFoundHandler: RequestHandler = (_request, _response, next) => {
   next(new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Recurso não encontrado." }));
 };
 
-export const errorHandler: ErrorRequestHandler = (error: unknown, _request, response, next) => {
-  if (response.headersSent) {
+const loggedResponses = new WeakSet<object>();
+
+export function createErrorHandler(logContext: LogContext): ErrorRequestHandler {
+  return (error: unknown, request, response, next) => {
+    const body = serializeError(error);
+    if (!loggedResponses.has(response)) {
+      loggedResponses.add(response);
+      const input = {
+        event: "http.request.failed" as const,
+        module: "http" as const,
+        message: "Falha no processamento da requisição",
+        http: { ...createHttpLog(request, response), statusCode: body.status },
+        error,
+      };
+      if (body.status >= 500) logContext.logger().error(input);
+      else logContext.logger().warn(input);
+    }
+
+    if (response.headersSent) {
+      next(error);
+      return;
+    }
+    response.status(body.status).json(body);
+  };
+}
+
+export const terminateStartedResponse: ErrorRequestHandler = (error, _request, response, next) => {
+  if (!response.headersSent) {
     next(error);
     return;
   }
-  const requestId = readOwnData(response.locals, "requestId");
-  const body = serializeError(error, { requestId: typeof requestId === "string" ? requestId : undefined });
-  response.status(body.status).json(body);
+  response.destroy();
 };
+
+export const errorHandler = createErrorHandler(new LogContext(noopLogger));
