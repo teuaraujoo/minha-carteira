@@ -13,7 +13,6 @@ export function startServer(app: Express, logger: AppLogger, port: string | numb
       event: "server.started",
       module: "server",
       message: "Servidor iniciado",
-      context: { operation: "listen" },
     });
   });
 

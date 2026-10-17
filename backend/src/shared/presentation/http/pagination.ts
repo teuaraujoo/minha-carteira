@@ -44,7 +44,7 @@ export function createPaginationMeta(input: PaginationInput, total: number): Pag
     !Number.isSafeInteger(input.offset) || input.offset !== (input.page - 1) * input.pageSize ||
     !Number.isSafeInteger(total) || total < 0
   ) {
-    throw new RangeError("Invalid internal pagination state.");
+    throw new RangeError("Estado interno de paginação inválido.");
   }
   return { page: input.page, pageSize: input.pageSize, total, totalPages: Math.ceil(total / input.pageSize) };
 }

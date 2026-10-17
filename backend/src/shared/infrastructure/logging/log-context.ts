@@ -14,7 +14,7 @@ function bindRequestId(baseLogger: AppLogger, requestId: string): AppLogger {
       const boundInput = Object.defineProperties(Object.create(null) as LogInput, descriptors);
       baseLogger[method](boundInput);
     } catch {
-      // Invalid log input must not replace the application flow.
+      // Uma entrada de log inválida não deve interromper o fluxo da aplicação.
     }
   };
   return {

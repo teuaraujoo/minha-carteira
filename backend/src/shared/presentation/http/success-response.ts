@@ -9,10 +9,10 @@ const createdEnvelopes = new WeakSet<object>();
 
 export function createSuccessResponse<T, M = never>(data: T, meta?: M): SuccessResponse<T, M> {
   if (data === undefined) {
-    throw new TypeError("Success response data must not be undefined.");
+    throw new TypeError("Os dados da resposta de sucesso não podem ser undefined.");
   }
   if (typeof data === "object" && data !== null && createdEnvelopes.has(data)) {
-    throw new TypeError("A success response must not wrap an existing envelope.");
+    throw new TypeError("A resposta de sucesso não pode encapsular uma resposta já criada.");
   }
   const body: SuccessResponse<T, M> = meta === undefined ? { data } : { data, meta };
   createdEnvelopes.add(body);

@@ -22,13 +22,13 @@ export class AppError extends Error {
 
   constructor(options: AppErrorOptions) {
     if (!Number.isInteger(options.status) || options.status < 400 || options.status > 599) {
-      throw new RangeError("AppError status must be an integer between 400 and 599.");
+      throw new RangeError("O status de AppError deve ser um inteiro entre 400 e 599.");
     }
     if (!Object.values(ErrorCode).includes(options.code)) {
-      throw new TypeError("AppError code must belong to ErrorCode.");
+      throw new TypeError("O código de AppError deve pertencer a ErrorCode.");
     }
     if (typeof options.message !== "string" || !options.message.trim()) {
-      throw new TypeError("AppError message must be a non-empty public message.");
+      throw new TypeError("A mensagem de AppError deve ser pública e não pode estar vazia.");
     }
 
     super(options.message, { cause: options.cause });
