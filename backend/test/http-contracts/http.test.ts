@@ -6,7 +6,7 @@ import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { createApp } from "../../src/app/app.js";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
-import { bodyParserErrorHandler, errorHandler, JSON_BODY_LIMIT, notFoundHandler } from "../../src/shared/presentation/http/error-middleware.js";
+import { bodyParserErrorHandler, errorHandler, JSON_BODY_LIMIT, notFoundHandler } from "../../src/shared/presentation/middlewares/error-middleware.js";
 import { createPaginationMeta, parsePagination } from "../../src/shared/presentation/http/pagination.js";
 import { sendCreated, sendNoContent, sendSuccess } from "../../src/shared/presentation/http/success-response.js";
 

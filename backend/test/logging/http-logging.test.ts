@@ -10,8 +10,8 @@ import { createApp } from "../../src/app/app.js";
 import { LogContext } from "../../src/shared/infrastructure/logging/log-context.js";
 import { createPinoAppLogger } from "../../src/shared/infrastructure/logging/pino-app-logger.js";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
-import { bodyParserErrorHandler, createErrorHandler, notFoundHandler, terminateStartedResponse } from "../../src/shared/presentation/http/error-middleware.js";
-import { createRequestLoggingMiddleware, resolveRoutePattern } from "../../src/shared/presentation/http/request-logging-middleware.js";
+import { bodyParserErrorHandler, createErrorHandler, notFoundHandler, terminateStartedResponse } from "../../src/shared/presentation/middlewares/error-middleware.js";
+import { createRequestLoggingMiddleware, resolveRoutePattern } from "../../src/shared/presentation/middlewares/request-logging-middleware.js";
 import type { Express, NextFunction, Request, Response } from "express";
 
 interface CapturedLog {

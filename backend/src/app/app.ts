@@ -11,8 +11,8 @@ import {
   JSON_BODY_LIMIT,
   notFoundHandler,
   terminateStartedResponse,
-} from "../shared/presentation/http/error-middleware.js";
-import { createRequestLoggingMiddleware } from "../shared/presentation/http/request-logging-middleware.js";
+} from "../shared/presentation/middlewares/error-middleware.js";
+import { createRequestLoggingMiddleware } from "../shared/presentation/middlewares/request-logging-middleware.js";
 
 export interface CreateAppOptions {
   logger?: AppLogger;

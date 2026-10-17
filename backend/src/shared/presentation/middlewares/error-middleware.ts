@@ -1,10 +1,10 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import { noopLogger } from "../../application/logging/app-logger.js";
 import { LogContext } from "../../infrastructure/logging/log-context.js";
-import { AppError, ErrorCode } from "./app-error.js";
-import { serializeError } from "./error-response.js";
+import { AppError, ErrorCode } from "../http/app-error.js";
+import { serializeError } from "../http/error-response.js";
 import { createHttpLog } from "./request-logging-middleware.js";
-import { readDataProperty, readOwnData } from "./sanitize-diagnostic.js";
+import { readDataProperty, readOwnData } from "../http/sanitize-diagnostic.js";
 
 export const JSON_BODY_LIMIT = "100kb";
 
