@@ -16,7 +16,7 @@ ao MVP financeiro.
 
 ### STR-00 — Extrair client e serviço do Cloudflare R2
 
-**Status:** Revisão
+**Status:** Feito
 
 **Depende de:** revisão dos consumidores atuais e da configuração de R2.
 
@@ -44,7 +44,7 @@ verificada novamente em STR-05.
 
 ### STR-01 — Definir domínio e contratos
 
-**Status:** Revisão
+**Status:** Feito
 
 **Depende de:** STR-00 e entidade `User`.
 
@@ -84,7 +84,7 @@ de um PostgreSQL de teste configurado.
 
 ### STR-03 — Implementar adapter do Cloudflare R2
 
-**Status:** Revisão
+**Status:** Feito
 
 **Depende de:** STR-00, STR-01 e credenciais configuradas fora do repositório.
 
