@@ -15,7 +15,7 @@ As funcionalidades iniciais do produto serão:
 
 ### Fora do MVP
 
-Ficam explicitamente fora desta primeira versão: cadastro público de usuários, recuperação ou redefinição de senha, equipes e permissões, planos e assinaturas, orçamentos independentes por categoria, metas financeiras completas, gestão de dívidas, investimentos detalhados, cartões e faturas, integrações bancárias, movimentação automática de dinheiro, assistente com IA, múltiplas moedas, Redis, Cloudflare R2, cache distribuído, Lenis, Sentry e rate limiting avançado.
+Ficam explicitamente fora desta primeira versão: cadastro público de usuários, recuperação ou redefinição de senha, equipes e permissões, planos e assinaturas, orçamentos independentes por categoria, metas financeiras completas, gestão de dívidas, investimentos detalhados, cartões e faturas, integrações bancárias, integração com canais de mensageria, movimentação automática de dinheiro, assistente com IA, múltiplas moedas, Redis, Cloudflare R2, cache distribuído, Lenis, Sentry e rate limiting avançado.
 
 O acesso continua protegido por uma credencial única previamente configurada. Isso é diferente do cadastro de contas financeiras, que permanece no escopo.
 
@@ -25,7 +25,8 @@ As funcionalidades abaixo não fazem parte da primeira entrega. Elas serão dese
 
 ### Cadastro público e acesso de usuários
 
-* Permitir que qualquer pessoa crie uma conta com nome, e-mail e senha.
+* Permitir que qualquer pessoa crie uma conta com nome de usuário, nome,
+  e-mail, telefone e senha.
 * Exigir e-mail no cadastro e impedir e-mails duplicados.
 * Permitir login, logout, manutenção de sessão e recuperação de senha.
 * Permitir edição dos dados do perfil.
@@ -33,6 +34,88 @@ As funcionalidades abaixo não fazem parte da primeira entrega. Elas serão dese
 * Definir posteriormente se a confirmação do e-mail será obrigatória antes do primeiro acesso.
 
 O cadastro público substitui o modelo inicial de uma única credencial previamente configurada, mas não altera o escopo do MVP atual.
+
+#### Entidade `User`
+
+A entidade de acesso planejada para a etapa pós-MVP possui os campos:
+
+* `id`: identificador interno do usuário;
+* `username`: nome único utilizado para identificar o perfil;
+* `name`: nome de exibição;
+* `email`: endereço utilizado no acesso e na comunicação;
+* `phone`: telefone associado ao perfil;
+* `passwordHash`: hash interno da senha, nunca exposto em respostas;
+* `capabilities`: conjunto de funcionalidades concedidas ao usuário;
+* `status`: estado atual do usuário;
+* `createdAt`: instante de criação;
+* `updatedAt`: instante da última alteração.
+
+O `email` é obrigatório e único, e o `username` também identifica um único
+perfil. As regras de formato e alteração desses campos, assim como a
+formato e a unicidade de `phone`, devem ser definidas na especificação do
+módulo de usuários antes da implementação. `phone` é obrigatório e não aceita
+valor vazio. O campo `capabilities` controla funcionalidades restritas sem
+introduzir planos, assinaturas ou permissões de equipe.
+
+### Integração restrita com Telegram
+
+* Utilizar a Telegram Bot API como canal de entrada para movimentações.
+* Permitir a integração somente para usuários que possuam a capability
+  `TELEGRAM_TRANSACTIONS`.
+* Associar a identidade recebida do Telegram a um usuário do Minha Carteira.
+* Impedir que conhecer um bot, identificador externo ou identificador de conversa
+  conceda acesso aos dados financeiros.
+* Reutilizar os casos de uso e as regras do módulo de movimentações, sem
+  acessar diretamente seu repository.
+* Proteger o processamento contra a criação duplicada de movimentações.
+* Manter a integração desabilitada para os demais usuários.
+* Persistir o vínculo e o estado inicial no PostgreSQL, sem exigir Redis.
+
+A capability concede o direito de utilizar a integração, mas não cria nem
+ativa automaticamente um vínculo com o Telegram. A identidade de mensageria
+precisa estar associada, verificada e habilitada.
+
+#### Entidade `MessagingIdentity`
+
+A identidade externa de mensageria permanece separada da entidade `User` e
+possui os campos:
+
+* `id`: identificador interno do vínculo;
+* `userId`: usuário proprietário da integração;
+* `provider`: provedor externo, inicialmente `TELEGRAM`;
+* `externalUserId`: identificador do usuário no provedor;
+* `conversationId`: identificador da conversa utilizada pelo bot;
+* `enabled`: indica se o processamento de mensagens está habilitado;
+* `verifiedAt`: instante em que o vínculo foi verificado;
+* `status`: estado do ciclo de vida do vínculo;
+* `createdAt`: instante de criação;
+* `updatedAt`: instante da última alteração.
+
+`enabled` representa a liberação operacional do vínculo. `status` representa
+seu ciclo de vida. Os valores aceitos para `status` e as transições permitidas
+ainda precisam de uma decisão antes da implementação. O par `provider` e
+`externalUserId` deve identificar no máximo um vínculo, evitando que a mesma
+identidade externa seja associada a mais de um usuário.
+
+#### Fluxo pós-MVP — processamento de uma mensagem do Telegram
+
+1. A Telegram Bot API envia uma mensagem para o endpoint de integração.
+2. A camada de apresentação valida o evento recebido e extrai os identificadores
+   externos e o conteúdo aceito.
+3. O caso de uso consulta o repository de identidades pelo provedor e pelo
+   `externalUserId`.
+4. O módulo de usuários valida se o proprietário está autorizado pela capability
+   `TELEGRAM_TRANSACTIONS`.
+5. O módulo de mensageria verifica `enabled`, `verifiedAt` e `status` antes de
+   aceitar o comando.
+6. O caso de uso interpreta os dados da movimentação e chama o contrato público
+   do módulo de movimentações.
+7. O módulo de movimentações aplica as mesmas validações utilizadas pela API
+   web e persiste o resultado no PostgreSQL.
+8. O adapter do Telegram envia ao usuário o resultado da operação.
+
+A sintaxe inicial das mensagens, o uso de confirmação antes da persistência e
+o tratamento de mensagens ambíguas permanecem pendentes de especificação.
 
 ### Amizades
 
@@ -214,6 +297,20 @@ Responsável pelo cadastro e processamento de receitas e despesas recorrentes, c
 
 ### 6\. Dashboard & Financial Analytics
 Responsável por consolidar e apresentar os principais indicadores do período: saldos, receitas, despesas, resultado mensal, gastos por categoria e lançamentos pendentes.
+
+### Componentes planejados para o pós-MVP
+
+#### User Management
+
+Responsável pelo cadastro público, perfil, isolamento dos dados e capabilities
+de cada usuário. `passwordHash` permanece interno e não pode ser retornado por
+controllers, presenters ou integrações.
+
+#### Messaging Integration
+
+Responsável por vincular identidades externas, receber eventos da Telegram Bot
+API e convertê-los em comandos para contratos públicos da aplicação. O módulo
+não acessa diretamente repositories de usuários ou movimentações.
 
 ## Fluxos:
 
@@ -497,6 +594,20 @@ real de cada operação. O contrato completo está em
 #### Auth
 *   **LoginInput:** `email`, `password`.
 
+#### Users pós-MVP
+
+* **CreateUserInput:** `username`, `name`, `email`, `phone`, `password`.
+
+Todos os campos são strings obrigatórias e não aceitam valor vazio. `email`
+também deve possuir um formato de endereço válido. Ainda não foram aprovadas
+regras adicionais de formato para `username` e `phone`.
+
+O schema HTTP remove espaços externos de `username`, `name`, `email` e
+`phone`, normaliza `email` para letras minúsculas e rejeita campos internos
+como `passwordHash`, `capabilities`, `status`, `createdAt` e `updatedAt`.
+Enquanto a política de senha não for definida, `password` é obrigatória e não
+pode conter somente espaços. O valor original da senha não é normalizado.
+
 #### Accounts
 *   **CreateAccountInput:** `name`, `type`, `institution?`, `initialBalance`, `color?`, `icon?`.
 *   **UpdateAccountInput:** versão parcial dos campos editáveis de criação.
@@ -527,6 +638,13 @@ Frequências iniciais: `WEEKLY`, `MONTHLY` e `YEARLY`. O campo **interval** deve
 ### 7\. DTOs de saída
 #### UserView
 `id`, `name`, `email`, `createdAt`, `updatedAt`.
+
+#### UserView pós-MVP
+
+`id`, `username`, `name`, `email`, `phone`, `capabilities`, `status`,
+`createdAt`, `updatedAt`.
+
+O campo `passwordHash` nunca faz parte de um DTO de saída.
 
 #### AccountView
 `id`, `name`, `type`, `institution`, `initialBalance`, `currentBalance`, `currency`, `color`, `icon`, `isActive`, `createdAt`, `updatedAt`.
@@ -633,6 +751,11 @@ Essa estrutura é uma referência inicial, não uma obrigação de criar abstra�
 para todos os arquivos. O código deve evoluir conforme as necessidades reais dos
 casos de uso.
 
+Depois da conclusão do MVP, os módulos `users` e `messaging` poderão ser
+adicionados a `backend/src/modules/`. A integração concreta com a Telegram Bot
+API pertence à infraestrutura do módulo de mensageria e deve implementar uma
+porta definida pela aplicação.
+
 ### Dependency Injection e dependências entre módulos
 
 As dependências serão fornecidas por **Dependency Injection**, preferencialmente
@@ -651,6 +774,9 @@ Exemplos:
   **Transactions** para obter agregações.
 * **Transactions** pode validar referências por portas públicas de **Accounts**
   e **Categories**.
+* **Messaging** pode validar a capability do usuário pelo contrato público de
+  **Users** e solicitar o registro financeiro pelo contrato público de
+  **Transactions**.
 
 O `Composition Root` conecta essas implementações sem transferir detalhes de
 infraestrutura para o domínio ou para os casos de uso.
