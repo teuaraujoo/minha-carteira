@@ -83,8 +83,24 @@ interface RefreshToken {
 
 Persistir o hash do refresh token reduz o impacto de leitura indevida do banco.
 A ausência de rotação significa que o mesmo refresh token continua válido até
-expirar ou até o registro ser revogado. A duração é representada por
-`expiresAt`; não é necessário persistir um campo separado de duração.
+expirar após cinco dias ou até o registro ser revogado. A duração é representada
+por `expiresAt`; não é necessário persistir um campo separado de duração.
+
+Os valores confirmados para `RefreshTokenRevokeReason` são:
+
+```typescript
+enum RefreshTokenRevokeReason {
+  LOGOUT = "LOGOUT",
+  PASSWORD_RESET = "PASSWORD_RESET",
+  USER_DEACTIVATED = "USER_DEACTIVATED",
+  ADMINISTRATIVE_ACTION = "ADMINISTRATIVE_ACTION",
+  SECURITY_EVENT = "SECURITY_EVENT",
+}
+```
+
+`EXPIRED` não aparece como motivo de revogação porque expiração e revogação são
+estados diferentes. Um token vencido pode ter `revokedAt` e `revokeReason`
+nulos.
 
 ## Modelo de recuperação
 
@@ -105,6 +121,7 @@ interface PasswordResetRequest {
 enum PasswordResetRequestStatus {
   PENDING = "PENDING",
   COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
   EXPIRED = "EXPIRED",
   CANCELLED = "CANCELLED",
 }
@@ -142,6 +159,13 @@ enum ChallengeSubjectType {
   USER = "USER",
   PASSWORD_RESET_REQUEST = "PASSWORD_RESET_REQUEST",
   MESSAGING_IDENTITY = "MESSAGING_IDENTITY",
+}
+
+enum ChallengeStatus {
+  REQUESTED = "REQUESTED",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+  EXPIRED = "EXPIRED",
 }
 ```
 
@@ -270,8 +294,8 @@ do PostgreSQL. Nenhum tipo do Prisma pode aparecer na assinatura da aplicação.
   criá-los;
 - valores não aparecem em resposta JSON nem em logs.
 
-Os nomes dos cookies, a duração do refresh token, e a duração dos desafios
-permanecem pendentes. O access token expira em 15 minutos.
+Os nomes dos cookies e a duração dos desafios permanecem pendentes. O access
+token expira em 15 minutos e o refresh token em cinco dias.
 
 ## Fluxos
 
@@ -421,8 +445,35 @@ futura deve definir regras de risco, origem confiável dos sinais, retenção,
 tratamento de VPN e proxies, falsos positivos e forma de notificar o usuário
 antes de interferir em qualquer fluxo de autenticação.
 
-## Divergência documental conhecida
+## Backlog de encerramento de pendências
 
-A documentação geral afirma que o refresh rotaciona tokens. A decisão atual é
-não rotacionar o refresh token. Essa frase deve ser corrigida na tarefa de
-documentação posterior à implementação.
+Um processo agendado deve buscar registros pendentes cujo `expiresAt` já passou.
+Ele marca `PasswordResetRequest` e desafios vencidos como `EXPIRED`. Registros
+que não podem ser processados recebem `FAILED`. Esse job não envia e-mails, não
+troca senhas e não autentica usuários.
+
+As relações obrigatórias de `RefreshToken` e `PasswordResetRequest` com `User`
+usam `onDelete: Cascade`. A exclusão definitiva do usuário remove esses
+registros. `Challenge` permanece polimórfico e não possui foreign key direta.
+
+A metadata terá política de retenção. O prazo, a anonimização e o mecanismo de
+remoção devem ser definidos antes da disponibilização pública.
+
+## Ordem das migrations
+
+As migrations podem ser pequenas e revisadas separadamente. A ordem prevista
+até o momento é:
+
+1. `create-users`;
+2. `create-images`;
+3. `create-refresh-tokens`;
+4. `create-password-reset-requests`;
+5. `create-challenges`.
+
+`create-images` pertence ao módulo `images`. As migrations de refresh,
+recuperação e desafios pertencem a `auth` e dependem da existência de `User`.
+`create-messaging-identities` permanece futura e não autorizada enquanto a
+especificação de mensageria estiver em draft.
+
+Cada migration deve ser gerada com `--create-only`, revisada e aplicada somente
+no banco local de desenvolvimento.

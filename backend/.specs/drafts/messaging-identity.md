@@ -31,6 +31,9 @@ enum MessagingIdentityStatus {
 Restrições previstas para a persistência:
 
 - `userId` referencia `User`;
+- o schema inicial usa `onDelete: Restrict` provisoriamente;
+- a política definitiva permanece pendente na futura especificação de
+  mensageria, e o vínculo bloqueia a exclusão do usuário até ser removido;
 - `provider + externalUserId` deve ser único;
 - `externalUserId` permanece string;
 - `verifiedAt` só possui valor quando a identidade foi verificada;

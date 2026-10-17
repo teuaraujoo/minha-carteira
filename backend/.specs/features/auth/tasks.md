@@ -9,6 +9,7 @@ ser entregue depois por USR-09.
 
 - criar `RefreshToken`, `PasswordResetRequest` e `Challenge` sem sufixo
   `Props`;
+- implementar os cinco motivos de revogação aprovados;
 - definir `RequestMetadata` sem importar tipos do Prisma;
 - definir DTOs da aplicação;
 - definir repositories e providers;
@@ -43,11 +44,12 @@ compartilhado é coberto por USR-00.
 
 - criar modelo e repository Prisma de refresh token;
 - armazenar hash do refresh token;
+- calcular `expiresAt` para cinco dias após a emissão;
 - persistir `userAgent` e endereço IP como dados opcionais de auditoria;
 - consultar somente refresh tokens não revogados e não expirados;
 - revogar um refresh token e todos os refresh tokens de um usuário;
 - expor `RefreshTokensGateway` para revogação por outros módulos;
-- preparar migration sem executá-la em produção.
+- preparar a migration `create-refresh-tokens` sem executá-la em produção.
 
 **Testes:** integração de criação, consulta, expiração e revogação.
 
@@ -134,8 +136,10 @@ USR-09.
 - iniciar `Challenge.metadata.consumed` como nulo;
 - consultar apenas desafio pendente e não expirado;
 - consumir desafio de forma atômica contra confirmações concorrentes;
-- invalidar solicitações anteriores conforme decisão final;
-- preparar migration sem executá-la em produção.
+- manter múltiplas solicitações pendentes até conclusão, cancelamento ou
+  processamento do job de backlog;
+- preparar as migrations `create-password-reset-requests` e
+  `create-challenges` sem executá-las em produção.
 
 **Testes:** criação, uso único, concorrência, expiração e invalidação.
 
@@ -250,6 +254,26 @@ USR-09.
 
 **Commit sugerido:** `docs(auth): document authentication flows`
 
+### AUTH-15 — Expirar solicitações e desafios pendentes
+
+**Status:** backlog.
+
+**Depende de:** AUTH-08 e mecanismo de agendamento aprovado.
+
+- buscar registros pendentes com `expiresAt` vencido;
+- marcar solicitações como `EXPIRED`;
+- marcar solicitações ou desafios não processáveis como `FAILED`;
+- marcar desafios vencidos como `EXPIRED`;
+- processar em lotes e de forma idempotente;
+- não enviar e-mail, trocar senha ou criar sessão;
+- aplicar a política de retenção da metadata.
+
+**Testes:** limite de expiração, idempotência, paginação e concorrência.
+
+**Gate:** nenhum registro ainda válido é encerrado.
+
+**Commit sugerido:** `feat(auth): expire pending authentication challenges`
+
 ## Matriz de cobertura
 
 | Requisito | Tarefas | Evidência esperada |
@@ -277,9 +301,9 @@ O padrão de arquivos deve ser ajustado ao suporte de glob do ambiente.
 
 ## Bloqueios antes das tarefas afetadas
 
-- aprovar a duração do refresh token e dos desafios antes de AUTH-02 e AUTH-08;
+- aprovar a duração dos desafios antes de AUTH-02 e AUTH-08;
 - aprovar nomes e atributos finais dos cookies antes de AUTH-04;
-- aprovar schema e migrations antes de AUTH-03 e AUTH-08;
+- criar e revisar as migrations antes de AUTH-03 e AUTH-08;
 - autorizar instalação do SDK `resend` antes de AUTH-09;
 - informar remetente verificado e `FRONTEND_URL` antes de validar AUTH-09;
 - aprovar limites contra abuso antes de concluir AUTH-10;
@@ -287,6 +311,5 @@ O padrão de arquivos deve ser ajustado ao suporte de glob do ambiente.
   AUTH-11;
 - aprovar estratégia CSRF e topologia de domínios antes de AUTH-12;
 - aprovar política final de senha antes de concluir AUTH-11;
-- aprovar retenção e minimização da metadata antes da disponibilização pública;
-- definir valores de `ChallengeStatus` e `RefreshTokenRevokeReason` antes de
-  AUTH-01.
+- definir prazo e mecanismo de retenção da metadata antes da disponibilização
+  pública.

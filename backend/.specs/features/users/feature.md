@@ -17,7 +17,7 @@ Ela não amplia automaticamente o escopo dos módulos financeiros.
 - permitir consulta e atualização do próprio perfil autenticado;
 - manter desativação, reativação e exclusão definitiva programada;
 - manter o upload de imagem associado ao usuário autenticado;
-- persistir imagens em uma entidade reutilizável por contexto;
+- integrar a foto de perfil ao módulo `images` por contrato público;
 - preservar a role e as capabilities definidas por enums;
 - expor um contrato público mínimo para autenticação e autorização;
 - nunca devolver `passwordHash` em respostas HTTP.
@@ -98,9 +98,9 @@ inativos por mais de 30 dias, conforme a decisão já registrada no projeto.
 O sistema DEVE associar o upload ao `userId` autenticado. O cliente não pode
 escolher outro usuário por body, query ou parâmetro de rota.
 
-A imagem DEVE ser persistida como `Image` com
-`contextType=USER_PROFILE`, `contextId=userId` e `ownerUserId=userId`. A
-entidade é reutilizável por outros contextos, mas capa de grupo, anexo de
+O módulo `users` DEVE solicitar ao contrato público de `images` a persistência
+de `Image` com `contextType=USER_PROFILE`, `contextId=userId` e
+`ownerUserId=userId`. A entidade pertence a `images`; capa de grupo, anexo de
 movimentação e comprovante continuam fora desta entrega.
 
 ### USR-RF-008 — Role e capabilities
@@ -119,7 +119,9 @@ log.
 - [ ] `IUsersRepository` não possui `any` e não contém casos de uso.
 - [ ] O erro de digitação `cpdateUser` não existe nos contratos finais.
 - [ ] `createUser` e `registerUser` não permanecem como operações duplicadas.
-- [ ] Cadastro rejeita e-mail e nome de usuário duplicados.
+- [ ] Cadastro rejeita e-mail e nome de usuário duplicados sem diferenciar
+  letras maiúsculas e minúsculas.
+- [ ] Usuários distintos podem possuir o mesmo telefone.
 - [ ] Senhas são persistidas somente como hash.
 - [ ] A senha de cadastro preserva espaços externos e não recebe `trim`.
 - [ ] O perfil autenticado é obtido a partir de `request.auth.userId`.
@@ -139,7 +141,7 @@ log.
 - `PasswordHasher` para cadastro;
 - `IdGenerator` e `ClockProvider`;
 - Prisma e PostgreSQL para persistência;
-- `IStorageProvider` para imagem de perfil;
+- `ImagesGateway`, contrato público do módulo `images`;
 - `AppLogger` com mensagens em português;
 - contratos HTTP compartilhados já implementados.
 
@@ -152,21 +154,24 @@ log.
 - cadastro público sempre cria role `USER`;
 - capabilities continuam como enum, sem tabelas associativas;
 - imagens usam uma entidade genérica vinculada por contexto;
+- a entidade genérica pertence ao módulo `images`;
 - upload de imagem exige usuário autenticado;
+- telefone não é único;
+- e-mail e nome de usuário são únicos sem diferenciar maiúsculas de minúsculas;
+- o módulo `images` usa Cloudflare R2 e possui uma especificação própria;
 - autenticação pode aceitar e-mail ou nome de usuário;
 - `passwordHash` é interno;
-- exclusão definitiva ocorre somente após 30 dias de inatividade.
+- exclusão definitiva ocorre somente após 30 dias de inatividade;
+- sessões, solicitações de reset e imagens são removidas em cascata com a
+  exclusão definitiva.
 
 ## Decisões pendentes
 
-- regras finais de formato e unicidade de `phone`;
+- regras finais de formato de `phone`;
 - campos de perfil que poderão ser alterados inicialmente;
 - confirmação de e-mail antes do primeiro acesso;
 - endpoint e autorização para alterar capabilities em uma especificação futura;
 - política de remoção dos objetos de imagem após exclusão definitiva;
-- valores finais de `StorageProvider` e `ImageStatus`;
-- módulo que será proprietário da entidade genérica `Image` quando outros
-  contextos forem implementados;
 - política de integridade e limpeza do vínculo polimórfico
   `contextType + contextId`.
 

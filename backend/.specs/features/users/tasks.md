@@ -59,6 +59,8 @@
 - criar DTOs, mapper e caso de uso;
 - remover o `trim` da senha no schema HTTP;
 - validar unicidade de e-mail e nome de usuário;
+- aplicar a unicidade sem diferenciar maiúsculas e minúsculas;
+- permitir que usuários diferentes compartilhem o mesmo telefone;
 - usar `PasswordHasher`, `IdGenerator` e `ClockProvider`;
 - criar usuário ativo sem aceitar campos internos do cliente;
 - rejeitar `role` e `capabilities` enviados pelo cliente;
@@ -87,13 +89,14 @@
 
 ### USR-05 — Integrar upload ao contexto autenticado
 
-**Depende de:** USR-04.
+**Depende de:** USR-04 e `ImagesGateway` entregue por IMG-04.
 
 - remover `userId` do schema controlado pelo cliente;
 - combinar arquivo do Multer com o contexto autenticado no controller;
 - preservar validações de MIME, tamanho e conteúdo;
-- criar registro `Image` com contexto `USER_PROFILE` e propriedade derivada do
-  usuário autenticado;
+- chamar `ImagesGateway` com contexto e propriedade derivados do usuário
+  autenticado;
+- não acessar diretamente o repository de imagens ou o Cloudflare R2;
 - não aceitar `contextId` ou `ownerUserId` do cliente;
 - manter logs em português e sem dados sensíveis.
 
@@ -126,8 +129,9 @@ sucesso.
 - consultar usuários inativos além da data de corte;
 - processar em lotes;
 - coordenar dependências por contratos públicos;
-- aplicar a política aprovada de retenção, anonimização ou remoção dos dados
-  financeiros, sessões, resets e imagens;
+- remover em cascata sessões, resets e imagens;
+- impedir exclusão enquanto houver identidade de mensageria vinculada;
+- aplicar a política aprovada aos dados financeiros que não usam cascata;
 - excluir de forma transacional;
 - registrar contagens sem dados pessoais.
 
@@ -142,11 +146,15 @@ sucesso.
 **Depende de:** USR-01 e USR-02; alteração de schema exige aprovação.
 
 - mapear entidade e registro de banco;
-- adicionar índices únicos para e-mail e nome de usuário;
+- normalizar e-mail e nome de usuário para letras minúsculas;
+- adicionar constraints únicas para os valores normalizados;
+- adicionar constraints `CHECK` para rejeitar e-mail ou username não
+  normalizados;
+- não adicionar constraint única para telefone;
 - mapear `status`, capabilities e timestamps;
 - mapear `role` e atribuir `USER` por padrão;
-- mapear `Image`, seus índices e o contexto de perfil;
-- preparar migration em script, sem executá-la em produção.
+- preparar a migration `create-users`, sem executá-la em produção;
+- deixar o modelo `Image` para a migration própria do módulo `images`.
 
 **Testes:** integração do repository contra PostgreSQL de teste.
 
@@ -154,21 +162,22 @@ sucesso.
 
 **Commit sugerido:** `feat(users): add prisma persistence`
 
-### USR-09 — Expor contrato público para autenticação
+### USR-09 — Expor contratos públicos
 
 **Depende de:** USR-02 e USR-03.
 
 - implementar `UsersAuthGateway`;
+- implementar `UsersImagesGateway` para confirmar usuário existente e ativo;
 - expor o caso de uso de cadastro para o controller público de `auth`;
 - fornecer credenciais somente ao módulo `auth`;
 - permitir busca ativa por ID e troca de hash;
 - impedir acesso direto ao repository por outro módulo.
 
-**Testes:** adapter público e ausência de hash em saídas HTTP.
+**Testes:** adapters públicos, usuário ativo e ausência de hash em saídas HTTP.
 
-**Gate:** `auth` compila usando apenas o contrato público.
+**Gate:** `auth` e `images` compilam usando apenas contratos públicos.
 
-**Commit sugerido:** `feat(users): expose authentication gateway`
+**Commit sugerido:** `feat(users): expose public module gateways`
 
 ### USR-10 — Atualizar documentação após implementação
 
@@ -212,12 +221,11 @@ comportamento de glob pode variar no PowerShell.
 
 ## Bloqueios antes das tarefas afetadas
 
-- aprovar regras finais de `phone` antes de fechar USR-03;
-- escolher a estratégia case-insensitive e a regra de `@` no username antes de
-  USR-03 e USR-08;
+- aprovar a regra final de formato de `phone` antes de fechar USR-03;
+- definir a regra de `@` no username antes de USR-08;
 - aprovar campos editáveis antes de fechar USR-04;
 - decidir o fluxo autorizado de reativação antes de expor sua rota;
-- aprovar schema e migration antes de USR-08;
+- criar e revisar a migration antes de USR-08;
 - escolher o mecanismo de agendamento antes de USR-07;
-- definir retenção, anonimização, cascata e recuperação dos dados relacionados
-  antes de USR-07, pois a operação é destrutiva.
+- definir retenção e recuperação dos dados financeiros antes de USR-07, pois a
+  operação é destrutiva.

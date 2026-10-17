@@ -82,17 +82,20 @@ factory de criação pode receber esses valores por providers.
 ## Normalização
 
 - `email`: remover espaços externos e persistir em letras minúsculas;
-- `username`: remover espaços externos e comparar de forma insensível a
-  maiúsculas para garantir unicidade;
+- `username`: remover espaços externos, converter para letras minúsculas e
+  persistir a forma normalizada;
 - `name`: remover apenas espaços externos;
 - `password`: não aplicar `trim`, pois isso mudaria a credencial;
 - `phone`: manter como string; a regra final de formato está pendente.
 
 Índices únicos no banco devem sustentar as regras de e-mail e nome de usuário.
 A checagem antecipada melhora a mensagem, mas não substitui a constraint. A
-estratégia de unicidade case-insensitive deve ser escolhida antes da migration:
-canonicalização, `citext` ou índice funcional. Também é necessário decidir se
-`username` pode conter `@`, evitando ambiguidade com e-mail no login.
+unicidade case-insensitive usa canonicalização em letras minúsculas antes da
+persistência. As constraints únicas protegem os valores normalizados. A
+migration deve adicionar constraints `CHECK` para impedir valores que não sejam
+iguais a `lower(email)` e `lower(username)`, inclusive em escritas externas à
+aplicação. `phone` não possui constraint de unicidade. Também é necessário
+decidir se `username` pode conter `@`, evitando ambiguidade com e-mail no login.
 
 ## Contrato de persistência
 
@@ -151,48 +154,21 @@ persistência; `auth` é dono da rota pública `/auth/register`.
 
 DTOs de saída usam um mapper explícito para impedir exposição acidental do hash.
 
-## Entidade `Image`
+## Integração com o módulo `images`
 
-```typescript
-interface Image {
-  id: string;
-  ownerUserId: string;
-  contextType: ImageContextType;
-  contextId: string;
-  storageProvider: StorageProvider;
-  storageKey: string;
-  originalName: string | null;
-  mimeType: string;
-  sizeInBytes: number;
-  checksum: string | null;
-  status: ImageStatus;
-  createdAt: Date;
-  updatedAt: Date;
-  deletedAt: Date | null;
-}
+`Image`, `ImageStatus`, `StorageProvider`, repository e integração com o
+Cloudflare R2 pertencem ao módulo `images`. A definição normativa está em
+`backend/.specs/features/images/design.md`.
 
-enum ImageContextType {
-  USER_PROFILE = "USER_PROFILE",
-  GROUP_COVER = "GROUP_COVER",
-  TRANSACTION_ATTACHMENT = "TRANSACTION_ATTACHMENT",
-  RECEIPT = "RECEIPT",
-}
-```
+O módulo `users` consome somente `ImagesGateway` para substituir a foto de
+perfil. Ele entrega o arquivo e o `userId` autenticado; não acessa o repository
+de imagens nem o provider de storage. Em sentido inverso, `images` usa um
+contrato público mínimo de `users` para confirmar que o usuário existe e está
+ativo.
 
-`ownerUserId` identifica quem enviou o arquivo e possui foreign key para
-`User`. `contextType + contextId` identifica onde a imagem é utilizada. No
-escopo atual, somente `USER_PROFILE` é implementado e o contexto deve apontar
-para o próprio usuário autenticado.
-
-O vínculo de contexto é polimórfico e não pode possuir uma foreign key única
-para usuários, grupos e movimentações. Cada caso de uso deve validar o alvo por
-uma porta pública do módulo proprietário. A migration deve impedir mais de uma
-imagem de perfil ativa por usuário e garantir unicidade de
-`storageProvider + storageKey`.
-
-Os arquivos permanecem no storage; a entidade guarda somente a chave e os
-metadados técnicos. A política de limpeza do objeto após substituição ou
-exclusão continua pendente.
+`images` é interno e não possui camada `presentation`. A rota de upload, o
+Multer e a autenticação permanecem em `users`. O frontend não escolhe o contexto
+da imagem.
 
 ## Fluxos
 
@@ -222,9 +198,10 @@ exclusão continua pendente.
 1. **Input:** Multer disponibiliza o arquivo em memória e o middleware fornece
    `request.auth.userId`.
 2. **Validação:** Zod valida conteúdo, MIME e tamanho; o cliente não envia ID.
-3. **Use case:** confirma que o usuário está ativo.
-4. **Módulos:** chama `IStorageProvider` pela porta da aplicação.
-5. **Persistência:** armazena o objeto e salva `Image` com
+3. **Use case:** encaminha arquivo e contexto autenticado ao módulo `images`.
+4. **Módulos:** chama `ImagesGateway.replaceUserProfileImage`.
+5. **Persistência:** `images` confirma o usuário ativo por `UsersImagesGateway`,
+   armazena o objeto no R2 e salva `Image` com
    `contextType=USER_PROFILE`, `contextId=userId` e `ownerUserId=userId`.
 6. **Resposta:** retorna a URL prevista pelo contrato atual.
 
@@ -243,9 +220,11 @@ exclusão continua pendente.
 1. **Input:** processo interno recebe data de corte e paginação.
 2. **Validação:** data de corte corresponde a mais de 30 dias de inatividade.
 3. **Use case:** lista usuários elegíveis.
-4. **Módulos:** coordena limpeza necessária por contratos públicos, conforme a
-   política aprovada para dados financeiros, sessões, resets e imagens.
-5. **Persistência:** remove somente usuários elegíveis dentro de transação.
+4. **Módulos:** coordena a limpeza dos recursos que não usam cascata.
+5. **Persistência:** remove somente usuários elegíveis dentro de transação; as
+   sessões, solicitações de reset e imagens vinculadas são removidas em cascata.
+   Uma identidade de mensageria ainda vinculada bloqueia a exclusão até que sua
+   política definitiva seja aprovada.
 6. **Resposta:** registra apenas contagens e IDs técnicos permitidos no log.
 
 ## Rotas propostas
@@ -281,7 +260,7 @@ Todas as mensagens devem estar em português do Brasil.
 - conferir propriedade do recurso no servidor;
 - usar resposta genérica quando a diferença revelar existência de usuário;
 - limitar tamanho e MIME do upload antes do armazenamento;
-- evitar que nomes originais de arquivos componham a chave do objeto.
+- evitar que nomes originais de arquivos componham a chave do objeto;
 - validar `contextType + contextId` no servidor;
 - não usar apenas o contexto polimórfico como prova de propriedade;
 - garantir que role `ADMIN` não conceda acesso automático aos dados financeiros
@@ -298,8 +277,7 @@ cadastro e o login. Assim, `users` não depende de uma implementação interna d
 
 - entidade: criação, ativação, desativação, role, capabilities e atualização;
 - casos de uso: cadastro, duplicidade, perfil, atualização e upload;
-- repository: mapeamento completo, imagem, constraints e consultas por
-  identificador;
+- repository: mapeamento completo, constraints e consultas por identificador;
 - apresentação: schemas, contexto autenticado e contratos HTTP;
 - segurança: ausência de `passwordHash` e proteção contra IDOR.
 
@@ -308,3 +286,14 @@ cadastro e o login. Assim, `users` não depende de uma implementação interna d
 A migração de banco deve ser especificada e aprovada separadamente antes de ser
 executada. A implementação precisa corrigir `inactivetedAt` para
 `inactivatedAt` sem perder dados existentes, caso a coluna já exista.
+
+`create-users` é a primeira migration prevista. `create-images` pertence ao
+módulo `images` e vem em seguida para poder referenciar `User.id`.
+
+As relações obrigatórias de refresh token, solicitação de reset e imagem com
+`User` usam `onDelete: Cascade` na exclusão definitiva. Essa regra não autoriza
+a exclusão antecipada nem altera o período de 30 dias de inatividade.
+
+`MessagingIdentity` usa `onDelete: Restrict` provisoriamente. A exclusão do
+usuário exige desvinculação explícita até a futura especificação de mensageria
+definir sua política final.

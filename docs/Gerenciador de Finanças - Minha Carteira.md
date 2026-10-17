@@ -45,17 +45,38 @@ A entidade de acesso planejada para a etapa pós-MVP possui os campos:
 * `email`: endereço utilizado no acesso e na comunicação;
 * `phone`: telefone associado ao perfil;
 * `passwordHash`: hash interno da senha, nunca exposto em respostas;
+* `role`: papel amplo do usuário, inicialmente `USER` ou `ADMIN`;
 * `capabilities`: conjunto de funcionalidades concedidas ao usuário;
 * `status`: estado atual do usuário;
 * `createdAt`: instante de criação;
-* `updatedAt`: instante da última alteração.
+* `updatedAt`: instante da última alteração;
+* `inactivatedAt`: instante opcional da desativação.
 
-O `email` é obrigatório e único, e o `username` também identifica um único
-perfil. As regras de formato e alteração desses campos, assim como a
-formato e a unicidade de `phone`, devem ser definidas na especificação do
-módulo de usuários antes da implementação. `phone` é obrigatório e não aceita
-valor vazio. O campo `capabilities` controla funcionalidades restritas sem
-introduzir planos, assinaturas ou permissões de equipe.
+O `email` e o `username` são obrigatórios e únicos sem diferenciar letras
+maiúsculas e minúsculas. Ambos são normalizados para letras minúsculas antes da
+persistência e protegidos por constraints únicas. As migrations também devem
+impedir a persistência de valores não normalizados. `phone` é obrigatório, não
+aceita valor vazio e não é único. Seu formato final continua pendente. O campo
+`capabilities` controla
+funcionalidades restritas sem introduzir planos, assinaturas ou permissões de
+equipe.
+
+#### Sessões e recuperação de senha
+
+O access token expira em 15 minutos. O refresh token expira em cinco dias,
+permanece sem rotação nesta versão e é persistido somente como hash. Os motivos
+de revogação são `LOGOUT`, `PASSWORD_RESET`, `USER_DEACTIVATED`,
+`ADMINISTRATIVE_ACTION` e `SECURITY_EVENT`.
+
+Solicitações de recuperação e desafios armazenam metadata de auditoria. Esses
+dados terão política de retenção, mas não serão usados inicialmente para
+bloquear, aprovar ou classificar uma solicitação. A duração, anonimização e
+remoção ainda precisam ser definidas.
+
+Um processo agendado para encerrar solicitações e desafios pendentes ficará no
+backlog. Ele poderá marcar registros vencidos como `EXPIRED` e desafios não
+processáveis como `FAILED`, sem trocar senhas ou criar sessões. Solicitações de
+reset também possuem o estado `FAILED`.
 
 ### Integração restrita com Telegram
 
@@ -92,10 +113,10 @@ possui os campos:
 * `updatedAt`: instante da última alteração.
 
 `enabled` representa a liberação operacional do vínculo. `status` representa
-seu ciclo de vida. Os valores aceitos para `status` e as transições permitidas
-ainda precisam de uma decisão antes da implementação. O par `provider` e
-`externalUserId` deve identificar no máximo um vínculo, evitando que a mesma
-identidade externa seja associada a mais de um usuário.
+seu ciclo de vida e aceita `PENDING_VERIFICATION`, `VERIFIED` e `REVOKED`. As
+transições permitidas ainda precisam de uma decisão antes da implementação. O
+par `provider` e `externalUserId` deve identificar no máximo um vínculo,
+evitando que a mesma identidade externa seja associada a mais de um usuário.
 
 #### Fluxo pós-MVP — processamento de uma mensagem do Telegram
 
@@ -269,15 +290,27 @@ app.listen(PORT, () => {
 
 Conexão prisma:
 
-```javascript
+```typescript
+import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error("A variável de ambiente DATABASE_URL é obrigatória.");
+}
+
+const adapter = new PrismaPg({ connectionString: databaseUrl });
 const prisma = new PrismaClient({ adapter });
 
 export default prisma;
 ```
+
+O arquivo `prisma.config.ts` carrega `.env`, aponta para
+`prisma/schema.prisma` e usa `DATABASE_URL` como datasource. A configuração da
+URL é necessária para migrations e acesso ao banco, mas o schema pode ser
+modelado e revisado antes da conexão estar disponível.
 
 ## Componentes CORE:
 ### 1\. Auth Management
@@ -298,15 +331,38 @@ Responsável pelo cadastro e processamento de receitas e despesas recorrentes, c
 ### 6\. Dashboard & Financial Analytics
 Responsável por consolidar e apresentar os principais indicadores do período: saldos, receitas, despesas, resultado mensal, gastos por categoria e lançamentos pendentes.
 
-### Componentes planejados para o pós-MVP
-
-#### User Management
+#### 7\. User Management
 
 Responsável pelo cadastro público, perfil, isolamento dos dados e capabilities
 de cada usuário. `passwordHash` permanece interno e não pode ser retornado por
 controllers, presenters ou integrações.
 
-#### Messaging Integration
+#### 8\. Image Management
+
+Responsável pela entidade genérica `Image`, pelo ciclo de vida do upload e pela
+integração com o Cloudflare R2. Nesta etapa, somente a imagem de perfil será
+funcional. O módulo `users` utilizará um contrato público de `images`, sem
+acessar seu repository ou o provider de storage.
+
+`images` é um módulo interno e não possui camada `presentation` nem rota HTTP.
+O módulo consumidor recebe a requisição, define o contexto no backend e chama o
+caso de uso de imagens. O frontend não envia `contextType`, `contextId` ou
+`ownerUserId`.
+
+A spec de `images` será a primeira executada na próxima etapa de implementação.
+Ela inclui a migração da integração atual de R2, hoje reunida em um arquivo
+compartilhado chamado `aws/s3.service.ts`: configuração do client e operações de
+storage serão componentes separados dentro de `images/infrastructure`. A
+nomenclatura própria do projeto será R2; `S3Client` permanece apenas como nome
+do SDK compatível. `users` deixará de acessar o storage compartilhado e
+consumirá o contrato público de `images`. Essa prioridade não altera o recorte
+do MVP financeiro.
+
+Os estados definidos são `PROCESSING`, `UPLOADING`, `COMPLETED` e `FAILED`. O
+único provider inicial é `CLOUDFLARE_R2`. Capa de grupo, anexo de movimentação e
+comprovante permanecem reservados para evoluções futuras.
+
+#### 9\. Messaging Integration
 
 Responsável por vincular identidades externas, receber eventos da Telegram Bot
 API e convertê-los em comandos para contratos públicos da aplicação. O módulo
@@ -592,7 +648,8 @@ real de cada operação. O contrato completo está em
 
 ### 6\. DTOs de entrada
 #### Auth
-*   **LoginInput:** `email`, `password`.
+*   **LoginInput:** `identifier`, `password`; o identificador aceita e-mail ou
+    nome de usuário.
 
 #### Users pós-MVP
 
@@ -641,8 +698,8 @@ Frequências iniciais: `WEEKLY`, `MONTHLY` e `YEARLY`. O campo **interval** deve
 
 #### UserView pós-MVP
 
-`id`, `username`, `name`, `email`, `phone`, `capabilities`, `status`,
-`createdAt`, `updatedAt`.
+`id`, `username`, `name`, `email`, `phone`, `role`, `capabilities`, `status`,
+`createdAt`, `updatedAt`, `inactivatedAt`.
 
 O campo `passwordHash` nunca faz parte de um DTO de saída.
 
@@ -795,7 +852,7 @@ Todas as rotas abaixo utilizam o prefixo **/api/v1**. A coluna “Auth” indica
 | Método | Rota | Auth | Resultado |
 | ---| ---| ---| --- |
 | POST | `/auth/login` | Não | Autentica e inicia sessão — 200 |
-| POST | `/auth/refresh` | Refresh cookie | Renova a sessão e rotaciona tokens — 204 |
+| POST | `/auth/refresh` | Refresh cookie | Renova apenas o access token — 204 |
 | POST | `/auth/logout` | Sim | Revoga a sessão e remove cookies — 204 |
 | GET | `/auth/me` | Sim | Retorna o usuário autenticado — 200 |
 

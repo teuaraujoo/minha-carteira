@@ -181,20 +181,27 @@ comparação futura sem interferir no comportamento atual.
 - tokens são enviados por cookies;
 - refresh token não é rotacionado nesta versão;
 - access token expira em 15 minutos;
+- refresh token expira em cinco dias;
 - o refresh token é persistido somente como hash;
+- os motivos de revogação são `LOGOUT`, `PASSWORD_RESET`,
+  `USER_DEACTIVATED`, `ADMINISTRATIVE_ACTION` e `SECURITY_EVENT`;
 - recuperação usa `PasswordResetRequest` vinculada a um `Challenge` genérico;
 - `PasswordResetRequest` e `Challenge` guardam metadata para auditoria;
 - metadata não participa de decisões de segurança nesta versão;
+- a metadata terá política de retenção;
 - logout revoga a sessão;
 - recuperação é usada por pessoa deslogada;
 - recuperação usa somente token no link enviado por e-mail;
 - envio de e-mail utiliza Resend;
 - após redefinir, o frontend redireciona para login;
-- não há login automático após redefinição.
+- não há login automático após redefinição;
+- a expiração de solicitações e desafios pendentes por processo agendado fica
+  no backlog;
+- solicitações e desafios podem terminar como `FAILED`;
+- relações obrigatórias com o usuário usam exclusão em cascata.
 
 ## Decisões pendentes
 
-- duração exata do refresh token dentro da faixa proposta de cinco a sete dias;
 - duração do reset token e dos demais desafios;
 - nomes finais dos cookies;
 - política `SameSite` conforme os domínios de frontend e API;
@@ -202,11 +209,9 @@ comparação futura sem interferir no comportamento atual.
 - URL pública do frontend usada no link;
 - limites e janela de proteção contra abuso;
 - política final de complexidade da senha;
-- comportamento de múltiplas solicitações ainda válidas;
 - política de reprocessamento quando o Resend falhar;
 - estratégia de proteção contra CSRF para os domínios finais;
-- retenção, minimização e remoção da metadata de auditoria;
-- valores finais de `ChallengeStatus` e `RefreshTokenRevokeReason`.
+- prazo e mecanismo da política de retenção da metadata de auditoria;
 
 ## Backlog de segurança contextual
 
@@ -216,6 +221,15 @@ equivalente no login exigirá ampliar `RefreshToken` ou criar uma entidade de
 auditoria. Essa evolução exige política de risco, tolerância a falsos positivos,
 retenção de dados, privacidade e comunicação ao usuário. Até essa análise ser
 aprovada, a metadata serve apenas para auditoria e investigação manual.
+
+Também permanece no backlog um processo agendado para encerrar registros
+pendentes. O processo deve marcar solicitações vencidas como `EXPIRED` e
+desafios vencidos ou não processáveis como `EXPIRED` ou `FAILED`. O sistema não
+executa essa rotina durante o fluxo HTTP.
+
+`PasswordResetRequestStatus` e `ChallengeStatus` possuem `FAILED` para falhas de
+processamento. `CANCELLED` permanece reservado para encerramento intencional de
+uma solicitação ainda válida.
 
 ## Referências de segurança
 
