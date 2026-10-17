@@ -56,14 +56,14 @@ enum ChallengeStatus {
   EXPIRED
 }
 
-enum ImageContextType {
+enum StorageContextType {
   USER_PROFILE
   GROUP_COVER
   TRANSACTION_ATTACHMENT
   RECEIPT
 }
 
-enum ImageStatus {
+enum StorageStatus {
   PROCESSING
   UPLOADING
   COMPLETED
@@ -99,7 +99,7 @@ model User {
   inactivatedAt         DateTime?              @map("inactivated_at")
   refreshTokens         RefreshToken[]
   passwordResetRequests PasswordResetRequest[]
-  images                Image[]
+  storedFiles           StoredFile[]
   messagingIdentities   MessagingIdentity[]
 
   @@index([status, inactivatedAt])
@@ -164,27 +164,26 @@ model Challenge {
   @@map("challenges")
 }
 
-model Image {
-  id              String           @id @default(uuid()) @db.Uuid
-  ownerUserId     String           @map("owner_user_id") @db.Uuid
-  contextType     ImageContextType @map("context_type")
-  contextId       String           @map("context_id") @db.Uuid
-  storageProvider StorageProvider  @map("storage_provider")
-  storageKey      String           @map("storage_key")
-  originalName    String?          @map("original_name")
-  mimeType        String           @map("mime_type")
-  size     Int              @map("size_in_bytes")
-  checksum        String?
-  status          ImageStatus
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
-  deletedAt       DateTime?        @map("deleted_at")
-  owner           User             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+model StoredFile {
+  id              String            @id @default(uuid()) @db.Uuid
+  ownerUserId     String            @map("owner_user_id") @db.Uuid
+  contextType     StorageContextType @map("context_type")
+  contextId       String            @map("context_id") @db.Uuid
+  storageProvider StorageProvider   @map("storage_provider")
+  storageKey      String            @db.VarChar(512) @map("storage_key")
+  originalName    String?           @db.VarChar(255) @map("original_name")
+  mimeType        String            @db.VarChar(100) @map("mime_type")
+  sizeInBytes     Int               @map("size_in_bytes")
+  checksum        String
+  status          StorageStatus
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+  owner           User              @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
   @@unique([storageProvider, storageKey])
   @@index([ownerUserId, status])
-  @@index([contextType, contextId, deletedAt])
-  @@map("images")
+  @@map("stored_files")
 }
 
 model MessagingIdentity {

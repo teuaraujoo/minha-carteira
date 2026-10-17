@@ -1,0 +1,17 @@
+export enum StorageContextType {
+  USER_PROFILE = "USER_PROFILE",
+  GROUP_COVER = "GROUP_COVER",
+  TRANSACTION_ATTACHMENT = "TRANSACTION_ATTACHMENT",
+  RECEIPT = "RECEIPT",
+}
+
+export enum StorageProvider {
+  CLOUDFLARE_R2 = "CLOUDFLARE_R2",
+}
+
+export enum StorageStatus {
+  PROCESSING = "PROCESSING",
+  UPLOADING = "UPLOADING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+}
