@@ -30,7 +30,10 @@ function mapStoredFile(record: {
 
 export class PrismaStoredFileRepository implements IStoredFileRepository {
   async findActiveByContext(contextType: StorageContextType, contextId: string): Promise<StoredFile | null> {
-    const record = await prisma.storedFile.findFirst({ where: { contextType: PrismaStorageContextType[contextType], contextId, deletedAt: null, status: PrismaStorageStatus.COMPLETED } });
+    const record = await prisma.storedFile.findFirst({
+      where: { contextType: PrismaStorageContextType[contextType], contextId, deletedAt: null, status: PrismaStorageStatus.COMPLETED },
+      orderBy: [{ createdAt: "desc" }, { updatedAt: "desc" }],
+    });
     return record ? mapStoredFile(record) : null;
   }
 

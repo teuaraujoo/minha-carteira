@@ -102,7 +102,10 @@ export class StoredFile {
   }
 
   fail(at: Date): void {
-    this.transition(StorageStatus.UPLOADING, StorageStatus.FAILED, at);
+    if (this.currentStatus !== StorageStatus.PROCESSING && this.currentStatus !== StorageStatus.UPLOADING) {
+      throw new StoredFileValidationError(`Transição de ${this.currentStatus} para ${StorageStatus.FAILED} não permitida.`);
+    }
+    this.transition(this.currentStatus, StorageStatus.FAILED, at);
   }
 
   private transition(from: StorageStatus, to: StorageStatus, at: Date): void {

@@ -103,10 +103,8 @@ depende de um PostgreSQL de teste configurado.
 
 **Status:** Em andamento
 **blocked:** true
-**blockedReason:** A decodificação completa requer aprovação de uma dependência
-de imagem; a coordenação entre processos sem índice único por contexto ainda
-precisa de uma estratégia aprovada. Também falta definir a compensação se o
-objeto antigo for removido no R2 e a exclusão do registro antigo falhar no banco.
+**blockedReason:** A coordenação entre processos sem índice único por contexto
+precisa de uma estratégia aprovada e validada.
 **blockedAt:** 2026-10-17
 
 **Depende de:** STR-02 e STR-03.
@@ -114,19 +112,24 @@ objeto antigo for removido no R2 e a exclusão do registro antigo falhar no banc
 - implementar `StorageOperations.replaceFileContent` sem conhecer o fluxo de perfil;
 - receber `ownerUserId`, `contextType` e `contextId` do caso de uso consumidor;
 - validar somente arquivo, contexto presente e invariantes de armazenamento;
-- validar presença, tamanho, MIME declarado, assinatura binária e decodificação;
+- validar presença, tamanho, MIME declarado, assinatura binária e estrutura
+  básica do contêiner; não exigir decodificação completa nesta entrega;
 - calcular SHA-256 após a validação do conteúdo;
-- remover o registro e o objeto da imagem anterior do mesmo contexto;
-- criar e persistir a nova imagem somente após a remoção anterior;
-- aplicar a estratégia aprovada para compensação de falhas.
+- manter a imagem anterior ativa até a nova imagem estar `COMPLETED`;
+- em falha antes da conclusão, marcar a tentativa nova como `FAILED` quando a
+  linha existir e o banco aceitar a atualização, preservar a imagem anterior e
+  propagar o erro ao módulo consumidor;
+- após a conclusão, remover o objeto e o registro anteriores; falhas de limpeza
+  não anulam o sucesso da nova imagem e deixam resíduos para limpeza posterior.
 
 **Testes:** sucesso, ausência de imagem anterior, remoção do registro e objeto
 anterior, falha de storage, falha de banco e substituição concorrente; não
 simular repository de usuários.
 
-**Gate:** a imagem anterior é removida antes da nova ser persistida, existe no
-máximo um arquivo por contexto e `storage` não consulta `users` nem interpreta
-status ou autorização do proprietário.
+**Gate:** uma falha na nova tentativa preserva a imagem anterior e marca a nova
+como `FAILED`; `storage` não consulta `users` nem interpreta status ou
+autorização do proprietário. A garantia contra substituições simultâneas entre
+processos permanece pendente de coordenação compartilhada.
 
 **Commit sugerido:** `feat(storage): implement contextual file storage`
 
@@ -175,9 +178,6 @@ nenhum consumidor importa infraestrutura de R2 ou storage de `shared`.
 ## Bloqueios antes da conclusão
 
 - configurar PostgreSQL de teste para verificar repository e constraints;
-- aprovar uma dependência para decodificação completa das imagens;
 - aprovar coordenação entre processos sem índice único por contexto;
-- definir compensação para falha ao excluir o registro anterior depois da
-  remoção do objeto no R2;
 - implementar o middleware de autenticação e a composição/rota de `users` que
   fornecem `request.auth`.

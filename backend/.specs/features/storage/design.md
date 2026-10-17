@@ -130,14 +130,17 @@ nomes estáveis para funcionalidades futuras, sem criar rotas ou casos de uso.
 
 ```text
 PROCESSING -> UPLOADING -> COMPLETED
-                  |
-                  +------> FAILED
+     |            |
+     +------------+------> FAILED
 ```
 
 `PROCESSING` representa o registro inicial e a preparação do arquivo.
-`UPLOADING` representa o envio ao R2. `COMPLETED` permite uso pelo contexto e
-`FAILED` registra falha terminal. Registros `FAILED` permanecem para limpeza
-posterior; uma rotina futura fará a remoção definitiva.
+`UPLOADING` representa o envio ao R2. Ambos podem terminar em `FAILED` em caso
+de falha. `COMPLETED` permite uso pelo contexto. Registros `FAILED` permanecem
+para limpeza posterior; uma rotina futura fará a remoção definitiva. Se nem o
+registro inicial puder ser persistido, não existe linha para marcar `FAILED`.
+Se o banco estiver indisponível durante a atualização de status, não é possível
+garantir que a linha registre a falha naquele momento.
 
 ## Contratos da aplicação
 
@@ -190,8 +193,8 @@ necessária; a operação de substituição segue a compensação definida para
 registros `FAILED`.
 
 `StoredFileOutput` usa URL pré-assinada de 30 minutos quando aplicável. A operação
-de substituição é total: o repository remove o registro anterior e o provider
-remove o objeto anterior antes de salvar a nova imagem.
+de substituição é total: a imagem nova precisa estar `COMPLETED` antes de o
+serviço remover o objeto e o registro anteriores.
 
 ## Validação do arquivo
 
@@ -204,18 +207,20 @@ R2:
 3. Identificar o tipo real pelos bytes do arquivo, usando sua assinatura
    binária (*magic bytes*).
 4. Comparar o tipo detectado com o MIME declarado.
-5. Decodificar a imagem para rejeitar conteúdo corrompido ou incompatível.
-6. Calcular o checksum SHA-256 dos bytes validados.
+5. Conferir a estrutura básica do contêiner, sem decodificar os pixels.
+6. Calcular o checksum SHA-256 dos bytes que passaram pelas validações.
 
 O fluxo inicial de perfil aceita PNG, JPEG e WebP. PDF não passa por esse fluxo;
 quando for habilitado, deverá possuir validação específica. A extensão do nome
-original nunca é suficiente para aprovar um arquivo.
+original nunca é suficiente para aprovar um arquivo. A decodificação completa
+fica para o backlog; o fluxo atual não redimensiona nem transforma imagens.
 
 ## Caso de uso — substituir imagem por contexto
 
 `StorageService.replaceFileContent` recebe um arquivo e um contexto já autorizado pelo
 módulo consumidor. Ele não valida se o proprietário é usuário, grupo ou outra
-entidade. Sua responsabilidade é substituir integralmente o recurso de imagem:
+entidade. Sua responsabilidade é substituir integralmente o recurso de imagem,
+preservando a imagem atual até a nova tentativa ser concluída:
 
 1. **Input:** recebe `ownerUserId`, `contextType`, `contextId` e o arquivo
    validado pelo módulo consumidor.
@@ -224,13 +229,22 @@ entidade. Sua responsabilidade é substituir integralmente o recurso de imagem:
    pertencem ao módulo consumidor.
 3. **Consulta:** procura a imagem existente para o par `contextType` e
    `contextId`.
-4. **Remoção:** se existir uma imagem, remove o objeto do R2 e o registro no
-   repository.
-5. **Armazenamento:** gera uma nova chave, envia o arquivo ao R2 e persiste um
-   novo registro `StoredFile` com status e metadados correspondentes.
-6. **Falha:** aplica a estratégia de compensação aprovada para evitar registros
-   ou objetos órfãos.
-7. **Resposta:** retorna a representação pública aprovada da nova imagem.
+4. **Tentativa:** cria um novo registro `PROCESSING`, muda para `UPLOADING`,
+   envia o novo objeto ao R2 e obtém sua URL temporária. A imagem anterior
+   permanece `COMPLETED` durante essas etapas.
+5. **Conclusão:** persiste a nova imagem como `COMPLETED`; a partir desse ponto,
+   a tentativa é considerada bem-sucedida.
+6. **Limpeza anterior:** remove o objeto e o registro anteriores. Se a limpeza
+   falhar, a nova imagem continua sendo o resultado bem-sucedido, e o registro
+   ou objeto residual fica para limpeza posterior.
+7. **Falha da nova tentativa:** antes da conclusão, marca o novo registro como
+   `FAILED`, tenta remover eventual objeto novo parcialmente enviado e mantém a
+   imagem anterior ativa. O erro retorna ao módulo consumidor para ser
+   apresentado ao usuário. A marcação depende de o registro existir e de o
+   banco aceitar a atualização; se o banco estiver indisponível, o status pode
+   permanecer em estado anterior.
+8. **Resposta:** retorna a representação pública aprovada da nova imagem após
+   ela estar `COMPLETED`.
 
 O contrato `ObjectStorageProvider` é interno à infraestrutura e representa as
 operações do R2. `StorageOperations` é o contrato público usado por `users`; ele
@@ -243,16 +257,20 @@ delega as operações de objeto ao adapter R2.
 1. **Input:** `users` recebe o arquivo do controller e o `userId` autenticado.
 2. **Validação:** `users` confere o usuário ativo e a propriedade pelo ID
    autenticado; sua apresentação valida presença, tamanho e tipo do arquivo.
-   `storage` valida somente os invariantes genéricos do arquivo e do storage.
+   `storage` verifica assinatura e estrutura básica, sem decodificar pixels.
 3. **Use case:** `users` define `USER_PROFILE`, `ownerUserId` e `contextId`
    iguais ao ID autenticado e chama `StorageOperations.replaceFileContent`.
-4. **Módulos:** `storage` não consulta `users`; envia o objeto por
-   `ObjectStorageProvider` para Cloudflare R2.
-5. **Persistência:** `storage` remove o objeto e o registro anteriores, envia a
-   nova imagem e salva `StoredFile` com os IDs, contexto e `CLOUDFLARE_R2` recebidos
-   de `users`.
-6. **Resposta:** retorna somente o identificador e a representação pública
-   aprovada da imagem.
+4. **Tentativa:** `storage` cria a nova linha `PROCESSING`, envia o objeto pelo
+   `ObjectStorageProvider` e conclui a nova linha como `COMPLETED`, mantendo a
+   linha anterior ativa até então.
+5. **Falha:** se o envio ou a persistência da nova imagem falhar, `storage`
+   marca a nova linha como `FAILED`, tenta limpar o objeto parcial e propaga o
+   erro; a linha e o objeto anteriores permanecem ativos.
+6. **Limpeza:** após concluir a nova linha, `storage` tenta remover o objeto e
+   o registro anteriores. Uma falha nessa limpeza não invalida a nova imagem
+   concluída; a consulta prioriza o registro concluído mais recente.
+7. **Resposta:** retorna a URL pré-assinada e seu `expiresAt` somente para a
+   nova imagem concluída.
 
 ## Persistência e índices
 
@@ -293,21 +311,22 @@ configuração de `DATABASE_URL` pode ser feita depois da primeira versão do
   `storage`;
 - limitar memória e quantidade de uploads na borda HTTP.
 
-A implementação atual valida assinatura binária e algumas estruturas de
-contêiner, mas ainda não decodifica os pixels. Essa diferença não satisfaz
-STR-RF-008: STR-04 permanece bloqueada até que uma dependência de decodificação
-seja aprovada e a validação seja implementada.
+O escopo atual valida assinatura binária e estrutura básica dos contêineres,
+mas não decodifica os pixels. Isso é suficiente para o fluxo atual, que apenas
+armazena e entrega os arquivos; processamento e redimensionamento estão fora do
+escopo. Uma validação por decodificação poderá ser adicionada se o sistema
+passar a transformar imagens.
 
 ## Falhas e consistência
 
 A remoção do objeto antigo, o upload do novo objeto e a gravação no PostgreSQL
-não compartilham uma transação. O registro da tentativa deve permanecer como
-`FAILED` quando houver falha, e os objetos ou registros órfãos serão limpos
-posteriormente. Uma rotina futura fará a remoção definitiva desses resíduos.
-Há uma falha ainda sem estratégia aprovada: se a exclusão do objeto antigo no
-R2 funcionar e a exclusão de seu registro no banco falhar, o registro antigo
-permanece `COMPLETED` sem objeto. Essa janela precisa de tratamento e teste antes
-de concluir STR-04.
+não compartilham uma transação. A implementação mantém a imagem anterior ativa
+até a nova estar `COMPLETED`. Falhas antes desse ponto marcam a nova tentativa
+como `FAILED`; a anterior permanece ativa. Depois da conclusão, falhas ao
+limpar a anterior não anulam o sucesso; resíduos podem ser removidos por rotina
+futura, e a consulta prioriza a imagem concluída mais recente.
+Coordenação entre processos ainda precisa de estratégia antes de garantir que
+duas substituições simultâneas não criem mais de uma imagem concluída.
 
 ## Restrições de schema confirmadas
 
@@ -324,4 +343,7 @@ precisa ser aprovada e implementada antes de concluir STR-04.
 
 ## Backlog
 
-- estratégia operacional da rotina futura de limpeza de registros `FAILED`.
+- estratégia operacional da rotina futura de limpeza de registros `FAILED`,
+  linhas concluídas antigas e objetos órfãos;
+- decodificação completa dos pixels, caso uma funcionalidade futura processe ou
+  transforme imagens.

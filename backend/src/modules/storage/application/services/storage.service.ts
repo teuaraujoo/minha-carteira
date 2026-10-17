@@ -53,10 +53,6 @@ export class StorageService implements StorageOperations {
     }
     const validation = validateStoredFile(input.content, input.mimeType);
     const previous = await this.repository.findActiveByContext(input.contextType, input.contextId);
-    if (previous) {
-      await this.delete(previous.storageKey);
-      await this.repository.deleteById(previous.id);
-    }
 
     const id = randomUUID();
     const storageKey = buildStorageKey(input.contextType, input.contextId);
@@ -77,27 +73,43 @@ export class StorageService implements StorageOperations {
       deletedAt: null,
     });
 
-    await this.repository.create(processing);
     let completed = false;
+    let uploadAttempted = false;
+    let file: StoredFile;
+    let url: string;
+    let expiresAt: Date;
     try {
+      await this.repository.create(processing);
       processing.startUpload(this.now());
       await this.repository.updateStatus(id, processing.status);
+      uploadAttempted = true;
       await this.upload(storageKey, input.content, input.mimeType);
 
-      const url = await this.getPresignedUrl(storageKey, PRESIGNED_URL_EXPIRATION_SECONDS);
-      const expiresAt = new Date(this.now().getTime() + PRESIGNED_URL_EXPIRATION_SECONDS * 1000);
+      url = await this.getPresignedUrl(storageKey, PRESIGNED_URL_EXPIRATION_SECONDS);
+      expiresAt = new Date(this.now().getTime() + PRESIGNED_URL_EXPIRATION_SECONDS * 1000);
       processing.complete(this.now());
-      const file = await this.repository.updateStatus(id, processing.status);
+      file = await this.repository.updateStatus(id, processing.status);
       completed = true;
-      return { file, url, expiresAt };
     } catch (error) {
       if (!completed) {
-        if (processing.status === StorageStatus.UPLOADING) {
-        processing.fail(this.now());
+        if (processing.status === StorageStatus.PROCESSING || processing.status === StorageStatus.UPLOADING) {
+          processing.fail(this.now());
         }
         await this.repository.markFailed(id).catch(() => undefined);
+        if (uploadAttempted) await this.delete(storageKey).catch(() => undefined);
       }
       throw error;
     }
+
+    if (previous) {
+      try {
+        await this.delete(previous.storageKey);
+        await this.repository.deleteById(previous.id);
+      } catch {
+        // A nova imagem já está ativa; falhas de limpeza não invalidam o sucesso.
+      }
+    }
+
+    return { file, url, expiresAt };
   }
 }

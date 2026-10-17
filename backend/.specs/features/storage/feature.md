@@ -105,16 +105,24 @@ ex: uma coisa que o modulo de image pode fazer é compara se o id recebido é ig
 
 O sistema DEVE representar o ciclo de vida com `PROCESSING`, `UPLOADING`,
 `COMPLETED` e `FAILED`, seguindo as transições `PROCESSING -> UPLOADING ->
-COMPLETED` ou `UPLOADING -> FAILED`. Registros que falharem permanecem como
-`FAILED` até a limpeza posterior.
+COMPLETED`, `PROCESSING -> FAILED` ou `UPLOADING -> FAILED`. Registros que
+falharem permanecem como `FAILED` até a limpeza posterior. Se o registro inicial
+não puder ser persistido, não há linha para marcar como `FAILED`.
 
 ### STR-RF-005 — Substituição
 
 Ao solicitar a substituição de uma imagem para um contexto, o módulo consumidor
-DEVE indicar o contexto aprovado. `storage` DEVE apagar o registro e o objeto
-existentes antes de persistir a nova imagem. Essa é uma substituição total, não
-um versionamento ou uma substituição lógica. A estratégia de consistência entre
-R2 e PostgreSQL deve tratar falhas durante a sequência.
+DEVE indicar o contexto aprovado. `storage` DEVE manter a imagem atual ativa
+enquanto registra e envia a nova. Se o envio ou a persistência da nova imagem
+falhar, a tentativa nova DEVE ser marcada como `FAILED`, a imagem atual DEVE
+permanecer ativa e o erro DEVE ser devolvido ao consumidor para informar o
+usuário. A marcação depende de o registro ter sido criado e o banco estar
+disponível para persistir a falha. Depois que a nova imagem estiver persistida
+como `COMPLETED`, `storage`
+DEVE remover a imagem anterior. Essa é uma substituição total, não
+um versionamento. Falhas na limpeza da imagem anterior não podem transformar
+uma substituição já concluída em erro para o usuário; os resíduos ficam para
+limpeza posterior.
 
 ### STR-RF-006 — Contrato público
 
@@ -131,13 +139,17 @@ de storage ou o SDK.
 ### STR-RF-008 — Validação do conteúdo
 
 O sistema DEVE validar o arquivo em camadas: presença e tamanho, MIME declarado,
-tipo real identificado pelos bytes e decodificação do conteúdo. No fluxo inicial
-de foto de perfil, os formatos aceitos são PNG, JPEG e WebP. PDF permanece
-reservado para um fluxo futuro com validação específica.
+tipo real identificado pelos bytes e estrutura básica do contêiner. No fluxo
+inicial de foto de perfil, os formatos aceitos são PNG, JPEG e WebP. PDF
+permanece reservado para um fluxo futuro com validação específica. A decodificação
+completa dos pixels não é requisito nesta entrega, pois processamento,
+redimensionamento e transformação de imagens estão fora do escopo.
 
 O sistema DEVE calcular o SHA-256 somente depois que o conteúdo for validado.
-Arquivos com MIME declarado incompatível com o tipo detectado ou com conteúdo
-corrompido DEVEM ser rejeitados antes do upload para o R2.
+Arquivos com MIME declarado incompatível com o tipo detectado ou estrutura
+básica inválida DEVEM ser rejeitados antes do upload para o R2. A validação não
+garante que todos os pixels possam ser decodificados; isso fica para uma etapa
+futura caso o sistema passe a processar ou transformar imagens.
 
 ## Critérios de aceitação
 
@@ -150,9 +162,13 @@ corrompido DEVEM ser rejeitados antes do upload para o R2.
 - [ ] O cliente não consegue associar uma imagem a outro usuário.
 - [ ] O nome original não é usado como chave pública do objeto.
 - [ ] Existe unicidade para `storageProvider + storageKey`.
-- [ ] A substituição remove o registro e o objeto anterior antes de criar o
-  novo registro.
-- [ ] Existe no máximo uma imagem persistida por contexto concluído.
+- [ ] A imagem anterior permanece ativa enquanto a nova tentativa é enviada.
+- [ ] Uma falha ao enviar ou persistir a nova imagem marca a tentativa como
+  `FAILED` quando o registro existe e o banco aceita a atualização, preserva a
+  imagem anterior e retorna erro ao consumidor.
+- [ ] A imagem anterior só é removida depois que a nova imagem estiver
+  `COMPLETED`.
+- [ ] A consulta do arquivo ativo prioriza o registro `COMPLETED` mais recente.
 - [ ] Falhas não deixam o registro marcado como concluído.
 - [ ] Quando necessário, a resposta contém URL pré-assinada com expiração de
   30 minutos.
@@ -189,8 +205,9 @@ corrompido DEVEM ser rejeitados antes do upload para o R2.
 - a exclusão definitiva do usuário remove suas imagens em cascata;
 - `storage` não possui camada `presentation` nem rota HTTP própria;
 - client e serviço específicos do Cloudflare R2 pertencem ao módulo `storage`;
-- a troca de imagem é uma substituição total: o registro e o objeto anteriores
-  são removidos antes da nova imagem ser persistida;
+- a troca de imagem é uma substituição total: a imagem anterior permanece ativa
+  até a nova ser persistida como `COMPLETED`; uma falha da tentativa nova a
+  marca como `FAILED` e preserva a anterior;
 - a URL retornada é pré-assinada e expira em 30 minutos;
 - falhas mantêm o registro como `FAILED`, com limpeza posterior e rotina futura
   para remoção definitiva;
@@ -208,20 +225,20 @@ corrompido DEVEM ser rejeitados antes do upload para o R2.
 - checksum utiliza SHA-256;
 -  a validação do conteúdo real ocorre antes do upload; o fluxo de perfil aceita
   PNG, JPEG e WebP, e PDF fica reservado para validação futura;
+- decodificação completa, processamento e redimensionamento de imagem não fazem
+  parte do escopo atual; a validação confere assinatura e estrutura básica;
 - tratamento de falha entre envio do objeto e persistência no banco: a imagem
   começa em `PROCESSING`, passa para `UPLOADING`, fica `FAILED` em caso de
   falha e chega a `COMPLETED` em caso de sucesso.
 
 ## Backlog
 
-- estratégia operacional da rotina futura de limpeza de registros `FAILED`.
+- estratégia operacional da rotina futura de limpeza de registros `FAILED`,
+  linhas concluídas antigas e objetos órfãos.
+- decodificação completa dos pixels, caso uma funcionalidade futura processe ou
+  transforme imagens.
 
 ## Bloqueios de implementação
 
-- STR-04 ainda exige decodificação completa dos pixels. A implementação atual
-  valida assinaturas e estrutura parcial dos contêineres; a dependência
-  necessária aguarda aprovação.
 - A substituição precisa de coordenação entre processos para garantir no máximo
   um arquivo ativo por contexto. Não há índice único por contexto aprovado.
-- A migration `create-storage` depende da migration `create-users`, ausente no
-  histórico atual.
