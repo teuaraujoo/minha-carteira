@@ -154,19 +154,34 @@ persistência; `auth` é dono da rota pública `/auth/register`.
 
 DTOs de saída usam um mapper explícito para impedir exposição acidental do hash.
 
-## Integração com o módulo `images`
+Quando houver imagem de perfil concluída, `UserOutput` inclui:
 
-`Image`, `ImageStatus`, `StorageProvider`, repository e integração com o
-Cloudflare R2 pertencem ao módulo `images`. A definição normativa está em
-`backend/.specs/features/images/design.md`.
+```typescript
+interface ProfileImageView {
+  id: string;
+  url: string;
+  expiresAt: Date;
+}
+```
 
-O módulo `users` consome somente `ImagesGateway` para substituir a foto de
-perfil. Ele entrega o arquivo e o `userId` autenticado; não acessa o repository
-de imagens nem o provider de storage. Em sentido inverso, `images` usa um
-contrato público mínimo de `users` para confirmar que o usuário existe e está
-ativo.
+`url` é uma URL pré-assinada temporária, válida por 30 minutos. `expiresAt`
+indica o instante de expiração em UTC. A URL não é persistida como dado do
+usuário e o frontend deve solicitar uma nova representação quando ela expirar.
 
-`images` é interno e não possui camada `presentation`. A rota de upload, o
+## Integração com o módulo `storage`
+
+`StoredFile`, `StorageStatus`, `StorageProvider`, repository e integração com o
+Cloudflare R2 pertencem ao módulo `storage`. A definição normativa está em
+`backend/.specs/features/storage/design.md`.
+
+O módulo `users` consome somente `StorageGateway` para substituir a foto de
+perfil. Antes da chamada, `users` consulta o próprio repository, verifica se o
+usuário autenticado existe e está ativo e define `ownerUserId`, `contextId` e
+`USER_PROFILE`. Ele entrega esses dados e o arquivo ao contrato genérico de
+`storage`, sem acessar o repository de arquivos nem o provider de storage.
+`storage` não consulta `users` e não decide sobre status ou autorização.
+
+`storage` é interno e não possui camada `presentation`. A rota de upload, o
 Multer e a autenticação permanecem em `users`. O frontend não escolhe o contexto
 da imagem.
 
@@ -191,19 +206,25 @@ da imagem.
 3. **Use case:** procura usuário ativo pelo identificador autenticado.
 4. **Módulos:** somente `users` participa.
 5. **Persistência:** repository consulta por `id` e `status`.
-6. **Resposta:** retorna `UserOutput` ou erro em português.
+6. **Resposta:** retorna `UserOutput`, incluindo `profileImage.url` e
+   `profileImage.expiresAt` quando houver imagem concluída, ou erro em português.
 
 ### Fluxo — upload da imagem de perfil
 
 1. **Input:** Multer disponibiliza o arquivo em memória e o middleware fornece
    `request.auth.userId`.
-2. **Validação:** Zod valida conteúdo, MIME e tamanho; o cliente não envia ID.
-3. **Use case:** encaminha arquivo e contexto autenticado ao módulo `images`.
-4. **Módulos:** chama `ImagesGateway.replaceUserProfileImage`.
-5. **Persistência:** `images` confirma o usuário ativo por `UsersImagesGateway`,
-   armazena o objeto no R2 e salva `Image` com
-   `contextType=USER_PROFILE`, `contextId=userId` e `ownerUserId=userId`.
-6. **Resposta:** retorna a URL prevista pelo contrato atual.
+2. **Validação:** Zod valida conteúdo, MIME e tamanho; o caso de uso de `users`
+   consulta o próprio repository e confirma usuário existente e ativo. O
+   cliente não envia IDs de proprietário ou contexto.
+3. **Use case:** define `contextType=USER_PROFILE`, `contextId=userId` e
+   `ownerUserId=userId`, usando somente o ID autenticado.
+4. **Módulos:** chama `StorageGateway.replaceForContext`; `storage` não consulta
+   o módulo de usuários.
+5. **Persistência:** `storage` remove a imagem de perfil anterior, apaga seu
+   objeto no R2, armazena o novo objeto e salva `StoredFile` com os identificadores
+   e o contexto validados por `users`.
+6. **Resposta:** retorna, quando necessário, uma URL pré-assinada temporária
+   com expiração de 30 minutos.
 
 ### Fluxo — desativação
 
@@ -287,8 +308,8 @@ A migração de banco deve ser especificada e aprovada separadamente antes de se
 executada. A implementação precisa corrigir `inactivetedAt` para
 `inactivatedAt` sem perder dados existentes, caso a coluna já exista.
 
-`create-users` é a primeira migration prevista. `create-images` pertence ao
-módulo `images` e vem em seguida para poder referenciar `User.id`.
+`create-users` é a primeira migration prevista. `create-storage` pertence ao
+módulo `storage` e vem em seguida para poder referenciar `User.id`.
 
 As relações obrigatórias de refresh token, solicitação de reset e imagem com
 `User` usam `onDelete: Cascade` na exclusão definitiva. Essa regra não autoriza

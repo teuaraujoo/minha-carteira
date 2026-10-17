@@ -337,30 +337,34 @@ Responsável pelo cadastro público, perfil, isolamento dos dados e capabilities
 de cada usuário. `passwordHash` permanece interno e não pode ser retornado por
 controllers, presenters ou integrações.
 
-#### 8\. Image Management
+#### 8\. Storage Management
 
-Responsável pela entidade genérica `Image`, pelo ciclo de vida do upload e pela
+Responsável pela entidade genérica `StoredFile`, pelo ciclo de vida do upload e pela
 integração com o Cloudflare R2. Nesta etapa, somente a imagem de perfil será
-funcional. O módulo `users` utilizará um contrato público de `images`, sem
+funcional. O módulo `users` utilizará um contrato público de `storage`, sem
 acessar seu repository ou o provider de storage.
 
-`images` é um módulo interno e não possui camada `presentation` nem rota HTTP.
+`storage` é um módulo interno e não possui camada `presentation` nem rota HTTP.
 O módulo consumidor recebe a requisição, define o contexto no backend e chama o
-caso de uso de imagens. O frontend não envia `contextType`, `contextId` ou
-`ownerUserId`.
+caso de uso de storage. O frontend não envia `contextType`, `contextId` ou
+`ownerUserId`. No fluxo da foto de perfil, `users` verifica existência, status
+ativo e propriedade antes dessa chamada. `storage` apenas valida e armazena o
+arquivo e seus metadados; não consulta `users` nem interpreta suas regras.
 
-A spec de `images` será a primeira executada na próxima etapa de implementação.
+A spec de `storage` será a primeira executada na próxima etapa de implementação.
 Ela inclui a migração da integração atual de R2, hoje reunida em um arquivo
 compartilhado chamado `aws/s3.service.ts`: configuração do client e operações de
-storage serão componentes separados dentro de `images/infrastructure`. A
+storage serão componentes separados dentro de `storage/infrastructure`. A
 nomenclatura própria do projeto será R2; `S3Client` permanece apenas como nome
 do SDK compatível. `users` deixará de acessar o storage compartilhado e
-consumirá o contrato público de `images`. Essa prioridade não altera o recorte
+consumirá o contrato público de `storage`. Essa prioridade não altera o recorte
 do MVP financeiro.
 
-Os estados definidos são `PROCESSING`, `UPLOADING`, `COMPLETED` e `FAILED`. O
-único provider inicial é `CLOUDFLARE_R2`. Capa de grupo, anexo de movimentação e
-comprovante permanecem reservados para evoluções futuras.
+Os estados definidos são `PROCESSING`, `UPLOADING`, `COMPLETED` e `FAILED`, nessa
+ordem de processamento. Falhas permanecem como `FAILED` para limpeza posterior.
+Quando necessário, o módulo retorna URL pré-assinada com validade de 30 minutos.
+O único provider inicial é `CLOUDFLARE_R2`. Capa de grupo, anexo de movimentação
+e comprovante permanecem reservados para evoluções futuras.
 
 #### 9\. Messaging Integration
 
@@ -699,7 +703,11 @@ Frequências iniciais: `WEEKLY`, `MONTHLY` e `YEARLY`. O campo **interval** deve
 #### UserView pós-MVP
 
 `id`, `username`, `name`, `email`, `phone`, `role`, `capabilities`, `status`,
-`createdAt`, `updatedAt`, `inactivatedAt`.
+`createdAt`, `updatedAt`, `inactivatedAt` e, quando existir, `profileImage`.
+
+`profileImage` possui `id`, `url` e `expiresAt`. A `url` é pré-assinada,
+temporária e válida por 30 minutos. O frontend deve renovar a representação
+quando `expiresAt` for atingido; a URL não é persistida no cadastro do usuário.
 
 O campo `passwordHash` nunca faz parte de um DTO de saída.
 

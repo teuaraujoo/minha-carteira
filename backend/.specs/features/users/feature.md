@@ -17,7 +17,7 @@ Ela não amplia automaticamente o escopo dos módulos financeiros.
 - permitir consulta e atualização do próprio perfil autenticado;
 - manter desativação, reativação e exclusão definitiva programada;
 - manter o upload de imagem associado ao usuário autenticado;
-- integrar a foto de perfil ao módulo `images` por contrato público;
+- integrar a foto de perfil ao módulo `storage` por contrato público;
 - preservar a role e as capabilities definidas por enums;
 - expor um contrato público mínimo para autenticação e autorização;
 - nunca devolver `passwordHash` em respostas HTTP.
@@ -75,7 +75,9 @@ normalização definida no design.
 ### USR-RF-003 — Perfil autenticado
 
 O sistema DEVE retornar apenas o perfil correspondente ao `userId` fornecido
-pelo contexto de autenticação.
+pelo contexto de autenticação. Quando existir uma imagem de perfil concluída,
+`GET /api/v1/users/me` DEVE incluir uma URL pré-assinada temporária e seu
+`expiresAt`, com validade de 30 minutos.
 
 ### USR-RF-004 — Atualização de perfil
 
@@ -98,9 +100,9 @@ inativos por mais de 30 dias, conforme a decisão já registrada no projeto.
 O sistema DEVE associar o upload ao `userId` autenticado. O cliente não pode
 escolher outro usuário por body, query ou parâmetro de rota.
 
-O módulo `users` DEVE solicitar ao contrato público de `images` a persistência
-de `Image` com `contextType=USER_PROFILE`, `contextId=userId` e
-`ownerUserId=userId`. A entidade pertence a `images`; capa de grupo, anexo de
+O módulo `users` DEVE solicitar ao contrato público de `storage` a persistência
+de `StoredFile` com `contextType=USER_PROFILE`, `contextId=userId` e
+`ownerUserId=userId`. A entidade pertence a `storage`; capa de grupo, anexo de
 movimentação e comprovante continuam fora desta entrega.
 
 ### USR-RF-008 — Role e capabilities
@@ -125,11 +127,13 @@ log.
 - [ ] Senhas são persistidas somente como hash.
 - [ ] A senha de cadastro preserva espaços externos e não recebe `trim`.
 - [ ] O perfil autenticado é obtido a partir de `request.auth.userId`.
+- [ ] `GET /users/me` retorna `profileImage.url` e `profileImage.expiresAt`
+  quando existe uma imagem concluída.
 - [ ] O upload ignora qualquer `userId` enviado pelo cliente.
 - [ ] A entidade mantém `status`, `createdAt`, `updatedAt` e `inactivatedAt`.
 - [ ] Cadastro público atribui role `USER` e rejeita role ou capabilities
   enviados pelo cliente.
-- [ ] A imagem de perfil é registrada como `Image` no contexto do usuário
+- [ ] A imagem de perfil é registrada como `StoredFile` no contexto do usuário
   autenticado.
 - [ ] Desativação e reativação preservam o histórico.
 - [ ] Nenhuma saída pública contém `passwordHash`.
@@ -141,7 +145,7 @@ log.
 - `PasswordHasher` para cadastro;
 - `IdGenerator` e `ClockProvider`;
 - Prisma e PostgreSQL para persistência;
-- `ImagesGateway`, contrato público do módulo `images`;
+- `StorageGateway`, contrato público do módulo `storage`;
 - `AppLogger` com mensagens em português;
 - contratos HTTP compartilhados já implementados.
 
@@ -154,11 +158,11 @@ log.
 - cadastro público sempre cria role `USER`;
 - capabilities continuam como enum, sem tabelas associativas;
 - imagens usam uma entidade genérica vinculada por contexto;
-- a entidade genérica pertence ao módulo `images`;
+- a entidade genérica pertence ao módulo `storage`;
 - upload de imagem exige usuário autenticado;
 - telefone não é único;
 - e-mail e nome de usuário são únicos sem diferenciar maiúsculas de minúsculas;
-- o módulo `images` usa Cloudflare R2 e possui uma especificação própria;
+- o módulo `storage` usa Cloudflare R2 e possui uma especificação própria;
 - autenticação pode aceitar e-mail ou nome de usuário;
 - `passwordHash` é interno;
 - exclusão definitiva ocorre somente após 30 dias de inatividade;

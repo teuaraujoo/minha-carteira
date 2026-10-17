@@ -89,12 +89,14 @@
 
 ### USR-05 — Integrar upload ao contexto autenticado
 
-**Depende de:** USR-04 e `ImagesGateway` entregue por IMG-04.
+**Depende de:** USR-04 e `StorageGateway` entregue por STR-04.
 
 - remover `userId` do schema controlado pelo cliente;
 - combinar arquivo do Multer com o contexto autenticado no controller;
 - preservar validações de MIME, tamanho e conteúdo;
-- chamar `ImagesGateway` com contexto e propriedade derivados do usuário
+- consultar o próprio repository para confirmar que o usuário autenticado
+  existe e está ativo antes de chamar `storage`;
+- chamar `StorageGateway` com contexto e propriedade derivados do usuário
   autenticado;
 - não acessar diretamente o repository de imagens ou o Cloudflare R2;
 - não aceitar `contextId` ou `ownerUserId` do cliente;
@@ -154,7 +156,7 @@ sucesso.
 - mapear `status`, capabilities e timestamps;
 - mapear `role` e atribuir `USER` por padrão;
 - preparar a migration `create-users`, sem executá-la em produção;
-- deixar o modelo `Image` para a migration própria do módulo `images`.
+- deixar o modelo `StoredFile` para a migration própria do módulo `storage`.
 
 **Testes:** integração do repository contra PostgreSQL de teste.
 
@@ -167,7 +169,6 @@ sucesso.
 **Depende de:** USR-02 e USR-03.
 
 - implementar `UsersAuthGateway`;
-- implementar `UsersImagesGateway` para confirmar usuário existente e ativo;
 - expor o caso de uso de cadastro para o controller público de `auth`;
 - fornecer credenciais somente ao módulo `auth`;
 - permitir busca ativa por ID e troca de hash;
@@ -175,7 +176,8 @@ sucesso.
 
 **Testes:** adapters públicos, usuário ativo e ausência de hash em saídas HTTP.
 
-**Gate:** `auth` e `images` compilam usando apenas contratos públicos.
+**Gate:** `auth` compila usando apenas contratos públicos; `storage` não depende
+de contratos de `users` para validar existência ou status.
 
 **Commit sugerido:** `feat(users): expose public module gateways`
 

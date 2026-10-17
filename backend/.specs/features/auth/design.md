@@ -465,12 +465,12 @@ As migrations podem ser pequenas e revisadas separadamente. A ordem prevista
 até o momento é:
 
 1. `create-users`;
-2. `create-images`;
+2. `create-storage`;
 3. `create-refresh-tokens`;
 4. `create-password-reset-requests`;
 5. `create-challenges`.
 
-`create-images` pertence ao módulo `images`. As migrations de refresh,
+`create-storage` pertence ao módulo `storage`. As migrations de refresh,
 recuperação e desafios pertencem a `auth` e dependem da existência de `User`.
 `create-messaging-identities` permanece futura e não autorizada enquanto a
 especificação de mensageria estiver em draft.

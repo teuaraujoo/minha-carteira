@@ -173,7 +173,7 @@ model Image {
   storageKey      String           @map("storage_key")
   originalName    String?          @map("original_name")
   mimeType        String           @map("mime_type")
-  sizeInBytes     Int              @map("size_in_bytes")
+  size     Int              @map("size_in_bytes")
   checksum        String?
   status          ImageStatus
   createdAt       DateTime         @default(now()) @map("created_at")
