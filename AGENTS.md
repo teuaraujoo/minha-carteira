@@ -28,11 +28,13 @@
 - Global constants: UPPER_SNAKE_CASE, such as `MAX_PAGE_SIZE`.
 - Backend files and folders: kebab-case, such as `create-transaction.use-case.ts`.
 - On the frontend, adhere to existing conventions and framework-mandated naming.
+- Error messages must always be written in Brazilian Portuguese.
+- Code comments must always be written in Brazilian Portuguese.
+- Log messages must always be written in Brazilian Portuguese.
 - Use real project examples and explicitly detail relevant validations, return values, and errors.
 - Do not present an example as functional without verifying the related contracts and code.
 - Describe flows by name and step: input, validation, use case, modules, persistence, and response.
 - Preserve content unrelated to the request and avoid duplicating rules across multiple documents.
-- Adopt Gitflow; features use `feature/name` branches.
 - Commit messages follow the Conventional Commits specification and use english language.
 
 ## Always do
@@ -75,15 +77,15 @@
 
 **Code style example:**
 ```typescript
-// ✅ Good - descriptive names, proper error handling
+// ✅ Bom - nomes descritivos e tratamento adequado de erros
 async function fetchUserById(id: string): Promise<User> {
-  if (!id) throw new Error('User ID required');
+  if (!id) throw new Error('O ID do usuário é obrigatório.');
   
   const response = await api.get(`/users/${id}`);
   return response.data;
 }
 
-// ❌ Bad - vague names, no error handling
+// ❌ Ruim - nomes vagos e ausência de tratamento de erros
 async function get(x) {
   return await api.get('/users/' + x).data;
 }
