@@ -62,10 +62,8 @@ verificada novamente em STR-05.
 ### STR-02 — Preparar persistência Prisma
 
 **Status:** Em andamento
-**blocked:** true
-**blockedReason:** A validação das migrations, constraints e repository ainda
-depende de um PostgreSQL de teste configurado.
-**blockedAt:** 2026-10-17
+**Validação PostgreSQL:** Adiada até a configuração da `DATABASE_URL`, após a
+conclusão das specs escolhidas para esta etapa.
 
 **Depende de:** STR-01 e aprovação do schema.
 
@@ -75,7 +73,9 @@ depende de um PostgreSQL de teste configurado.
 - manter `create-storage` após `create-users` na ordem cronológica das pastas;
 - revisar os índices de storage, proprietário e status, sem índice por contexto.
 
-**Testes:** integração do repository e constraints no PostgreSQL de teste.
+**Verificação atual:** `prisma validate` e revisão estática do schema e das
+migrations. A integração do repository e as constraints serão verificadas em
+PostgreSQL depois da configuração da `DATABASE_URL`.
 
 **Gate:** migration revisada; não executada em produção.
 
@@ -102,10 +102,8 @@ depende de um PostgreSQL de teste configurado.
 ### STR-04 — Implementar armazenamento por contexto
 
 **Status:** Em andamento
-**blocked:** true
-**blockedReason:** A coordenação entre processos sem índice único por contexto
-precisa de uma estratégia aprovada e validada.
-**blockedAt:** 2026-10-17
+**Concorrência nesta etapa:** serialização por contexto dentro de uma instância
+do processo Node.js. Coordenação entre múltiplas instâncias fica fora do escopo.
 
 **Depende de:** STR-02 e STR-03.
 
@@ -122,14 +120,14 @@ precisa de uma estratégia aprovada e validada.
 - após a conclusão, remover o objeto e o registro anteriores; falhas de limpeza
   não anulam o sucesso da nova imagem e deixam resíduos para limpeza posterior.
 
-**Testes:** sucesso, ausência de imagem anterior, remoção do registro e objeto
-anterior, falha de storage, falha de banco e substituição concorrente; não
-simular repository de usuários.
+**Testes:** sucesso, ausência de imagem anterior, falha no upload com preservação
+da imagem anterior e status `FAILED`, falha ao persistir conclusão, falha ao
+limpar a imagem anterior sem invalidar o sucesso e substituições concorrentes no
+mesmo processo; não simular repository de usuários.
 
 **Gate:** uma falha na nova tentativa preserva a imagem anterior e marca a nova
 como `FAILED`; `storage` não consulta `users` nem interpreta status ou
-autorização do proprietário. A garantia contra substituições simultâneas entre
-processos permanece pendente de coordenação compartilhada.
+autorização do proprietário. A garantia cobre uma instância do processo.
 
 **Commit sugerido:** `feat(storage): implement contextual file storage`
 
@@ -177,7 +175,11 @@ nenhum consumidor importa infraestrutura de R2 ou storage de `shared`.
 
 ## Bloqueios antes da conclusão
 
-- configurar PostgreSQL de teste para verificar repository e constraints;
-- aprovar coordenação entre processos sem índice único por contexto;
 - implementar o middleware de autenticação e a composição/rota de `users` que
   fornecem `request.auth`.
+
+## Validações adiadas
+
+- aplicar e validar as migrations em PostgreSQL após configurar `DATABASE_URL`;
+- planejar coordenação compartilhada se a aplicação passar a executar em mais
+  de uma instância.

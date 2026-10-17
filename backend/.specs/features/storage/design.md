@@ -278,9 +278,11 @@ delega as operações de objeto ao adapter R2.
 - índice único para `storageProvider + storageKey`;
 - índices para consultas por proprietário e status.
 
-Não haverá índice único por `contextType + contextId`. A regra de substituição
-será aplicada pelo caso de uso e pelo repository, conforme a consistência
-definida para a operação.
+Não haverá índice único por `contextType + contextId`. Nesta etapa, a
+serialização por contexto usa um lock em memória e cobre uma única instância do
+processo Node.js. Se a aplicação passar a executar em várias instâncias, será
+necessário adotar coordenação compartilhada antes de garantir a exclusividade
+entre elas.
 
 ## Ordem das migrations
 
@@ -325,8 +327,9 @@ até a nova estar `COMPLETED`. Falhas antes desse ponto marcam a nova tentativa
 como `FAILED`; a anterior permanece ativa. Depois da conclusão, falhas ao
 limpar a anterior não anulam o sucesso; resíduos podem ser removidos por rotina
 futura, e a consulta prioriza a imagem concluída mais recente.
-Coordenação entre processos ainda precisa de estratégia antes de garantir que
-duas substituições simultâneas não criem mais de uma imagem concluída.
+O lock em memória serializa operações concorrentes na mesma instância. Ele não
+coordena processos ou instâncias diferentes; essa escala não faz parte da
+implantação atual e exigirá uma estratégia compartilhada antes de habilitá-la.
 
 ## Restrições de schema confirmadas
 
@@ -337,13 +340,16 @@ duas substituições simultâneas não criem mais de uma imagem concluída.
 - `StorageStatus`, `StorageContextType` e `StorageProvider` são enums nativos do
   Prisma/PostgreSQL.
 
-Não há índice único por contexto. O lock atual existe apenas no processo e não
-garante unicidade entre réplicas; uma estratégia de coordenação compartilhada
-precisa ser aprovada e implementada antes de concluir STR-04.
+Não há índice único por contexto. O lock atual existe apenas no processo e
+serializa substituições na instância única prevista para esta etapa. Ele não
+garante unicidade entre réplicas; coordenação compartilhada só será necessária
+se a implantação passar a usar múltiplas instâncias.
 
 ## Backlog
 
 - estratégia operacional da rotina futura de limpeza de registros `FAILED`,
   linhas concluídas antigas e objetos órfãos;
+- coordenação compartilhada caso a aplicação passe a executar em múltiplas
+  instâncias;
 - decodificação completa dos pixels, caso uma funcionalidade futura processe ou
   transforme imagens.

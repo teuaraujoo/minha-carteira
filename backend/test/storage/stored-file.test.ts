@@ -48,6 +48,13 @@ test("StoredFile permits only the approved status transitions", () => {
   assert.throws(() => file.fail(new Date("2026-10-17T10:03:00.000Z")), /não permitida/);
 });
 
+test("StoredFile can mark a processing attempt as failed", () => {
+  const file = createStoredFile();
+  file.fail(new Date("2026-10-17T10:01:00.000Z"));
+
+  assert.equal(file.status, StorageStatus.FAILED);
+});
+
 test("StoredFile rejects dates that move backwards", () => {
   const file = createStoredFile(StorageStatus.UPLOADING);
   assert.throws(() => file.complete(new Date("2026-10-17T09:59:00.000Z")), /data da transição é inválida/);

@@ -169,6 +169,8 @@ futura caso o sistema passe a processar ou transformar imagens.
 - [ ] A imagem anterior só é removida depois que a nova imagem estiver
   `COMPLETED`.
 - [ ] A consulta do arquivo ativo prioriza o registro `COMPLETED` mais recente.
+- [ ] Requisições simultâneas para o mesmo contexto são serializadas dentro de
+  uma instância do processo; múltiplas instâncias não fazem parte desta etapa.
 - [ ] Falhas não deixam o registro marcado como concluído.
 - [ ] Quando necessário, a resposta contém URL pré-assinada com expiração de
   30 minutos.
@@ -240,5 +242,9 @@ futura caso o sistema passe a processar ou transformar imagens.
 
 ## Bloqueios de implementação
 
-- A substituição precisa de coordenação entre processos para garantir no máximo
-  um arquivo ativo por contexto. Não há índice único por contexto aprovado.
+- A integração final de perfil depende do middleware e da composição de `users`.
+
+## Validações adiadas
+
+- validar migrations e repository em PostgreSQL após configurar `DATABASE_URL`;
+- adotar coordenação compartilhada se houver mais de uma instância da API.

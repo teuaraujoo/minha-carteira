@@ -36,15 +36,24 @@ function existingFile(): StoredFile {
   });
 }
 
-function setup(options: { previous?: StoredFile | null; uploadError?: Error } = {}) {
+function setup(options: {
+  previous?: StoredFile | null;
+  uploadError?: Error;
+  statusError?: StorageStatus;
+  deleteErrorForKey?: string;
+  waitForUpload?: Promise<void>;
+  onUploadStarted?: () => void;
+} = {}) {
   const calls: string[] = [];
   let saved: StoredFile | null = null;
+  let active = options.previous ?? null;
   let failedId: string | null = null;
   const repository: IStoredFileRepository = {
-    async findActiveByContext() { calls.push("find"); return options.previous ?? null; },
+    async findActiveByContext() { calls.push("find"); return active; },
     async create(file) { calls.push("create"); saved = file; return file; },
     async updateStatus(id, status) {
       calls.push(`status:${status}`);
+      if (options.statusError === status) throw new Error("Falha simulada ao persistir o status.");
       if (!saved || saved.id !== id) throw new Error("Arquivo não encontrado.");
       const next = new StoredFile({
         id: saved.id,
@@ -63,21 +72,39 @@ function setup(options: { previous?: StoredFile | null; uploadError?: Error } = 
         deletedAt: saved.deletedAt,
       });
       saved = next;
+      if (status === StorageStatus.COMPLETED) active = next;
       return next;
     },
-    async deleteById() { calls.push("delete-record"); },
+    async deleteById(id) {
+      calls.push("delete-record");
+      if (active?.id === id) active = null;
+    },
     async markFailed(id) { failedId = id; calls.push("failed"); },
   };
   const objectStorage: ObjectStorageProvider = {
-    async upload() { calls.push("upload"); if (options.uploadError) throw options.uploadError; },
-    async delete() { calls.push("delete-object"); },
+    async upload() {
+      calls.push("upload");
+      options.onUploadStarted?.();
+      await options.waitForUpload;
+      if (options.uploadError) throw options.uploadError;
+    },
+    async delete(key) {
+      calls.push("delete-object");
+      if (key === options.deleteErrorForKey) throw new Error("Falha simulada ao remover o objeto.");
+    },
     async getPresignedUrl(_key, expiry) { calls.push(`url:${expiry}`); return "https://storage.example/file"; },
   };
   const service = new StorageService(repository, objectStorage, () => new Date("2026-10-17T10:00:00.000Z"));
-  return { service, calls, get saved() { return saved; }, get failedId() { return failedId; } };
+  return {
+    service,
+    calls,
+    get saved() { return saved; },
+    get active() { return active; },
+    get failedId() { return failedId; },
+  };
 }
 
-test("storage replaces the previous file before creating and uploading the new one", async () => {
+test("storage keeps the previous file until the new file is completed", async () => {
   const state = setup({ previous: existingFile() });
   const result = await state.service.replaceFileContent({
     ownerUserId,
@@ -87,9 +114,12 @@ test("storage replaces the previous file before creating and uploading the new o
     content,
   });
 
-  assert.deepEqual(state.calls.slice(0, 4), ["find", "delete-object", "delete-record", "create"]);
-  assert.deepEqual(state.calls.slice(4), ["status:UPLOADING", "upload", "url:1800", "status:COMPLETED"]);
+  assert.deepEqual(state.calls, [
+    "find", "create", "status:UPLOADING", "upload", "url:1800",
+    "status:COMPLETED", "delete-object", "delete-record",
+  ]);
   assert.equal(result.file.status, StorageStatus.COMPLETED);
+  assert.equal(state.active?.id, result.file.id);
   assert.equal(result.file.checksum, createHash("sha256").update(content).digest("hex"));
   assert.equal(result.expiresAt.toISOString(), "2026-10-17T10:30:00.000Z");
 });
@@ -108,9 +138,10 @@ test("storage creates the first file when the context has no previous file", asy
   assert.equal(result.file.status, StorageStatus.COMPLETED);
 });
 
-test("storage marks an uploaded record as failed when R2 rejects the upload", async () => {
+test("storage marks the new attempt as failed and preserves the previous file when R2 rejects the upload", async () => {
   const failure = new Error("Falha simulada no R2.");
-  const state = setup({ uploadError: failure });
+  const previous = existingFile();
+  const state = setup({ previous, uploadError: failure });
 
   await assert.rejects(state.service.replaceFileContent({
     ownerUserId,
@@ -120,8 +151,82 @@ test("storage marks an uploaded record as failed when R2 rejects the upload", as
     content,
   }), (error) => error === failure);
 
-  assert.equal(state.calls.at(-1), "failed");
+  assert.equal(state.calls.includes("failed"), true);
+  assert.equal(state.calls.includes("delete-record"), false);
   assert.equal(state.failedId, state.saved?.id);
+  assert.equal(state.active?.id, previous.id);
+});
+
+test("storage marks the new attempt as failed and preserves the previous file when completion persistence fails", async () => {
+  const previous = existingFile();
+  const state = setup({ previous, statusError: StorageStatus.COMPLETED });
+
+  await assert.rejects(state.service.replaceFileContent({
+    ownerUserId,
+    contextType: StorageContextType.USER_PROFILE,
+    contextId: ownerUserId,
+    mimeType: "image/png",
+    content,
+  }), { message: "Falha simulada ao persistir o status." });
+
+  assert.equal(state.failedId, state.saved?.id);
+  assert.equal(state.active?.id, previous.id);
+  assert.equal(state.calls.includes("delete-record"), false);
+});
+
+test("storage keeps the new image successful when cleanup of the previous object fails", async () => {
+  const previous = existingFile();
+  const state = setup({ previous, deleteErrorForKey: previous.storageKey });
+
+  const result = await state.service.replaceFileContent({
+    ownerUserId,
+    contextType: StorageContextType.USER_PROFILE,
+    contextId: ownerUserId,
+    mimeType: "image/png",
+    content,
+  });
+
+  assert.equal(result.file.status, StorageStatus.COMPLETED);
+  assert.equal(state.active?.id, result.file.id);
+  assert.equal(state.calls.includes("delete-record"), false);
+});
+
+test("storage serializes concurrent replacements for the same context within one process", async () => {
+  let beginFirstUpload!: () => void;
+  let releaseFirstUpload!: () => void;
+  const firstUploadStarted = new Promise<void>((resolve) => { beginFirstUpload = resolve; });
+  const firstUploadGate = new Promise<void>((resolve) => { releaseFirstUpload = resolve; });
+  let uploadCount = 0;
+  const state = setup({
+    onUploadStarted: () => {
+      uploadCount += 1;
+      if (uploadCount === 1) beginFirstUpload();
+    },
+    waitForUpload: firstUploadGate,
+  });
+  const input = {
+    ownerUserId,
+    contextType: StorageContextType.USER_PROFILE,
+    contextId: ownerUserId,
+    mimeType: "image/png",
+    content,
+  };
+
+  const first = state.service.replaceFileContent(input);
+  await firstUploadStarted;
+  const second = state.service.replaceFileContent(input);
+  await Promise.resolve();
+  assert.equal(uploadCount, 1);
+
+  releaseFirstUpload();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.equal(uploadCount, 2);
+  assert.notEqual(firstResult.file.id, secondResult.file.id);
+  assert.equal(state.active?.id, secondResult.file.id);
+  const firstCompletionIndex = state.calls.indexOf("status:COMPLETED");
+  const secondFindIndex = state.calls.lastIndexOf("find");
+  assert.ok(firstCompletionIndex < secondFindIndex);
 });
 
 test("storage rejects a declared MIME that does not match the bytes before persistence", async () => {
