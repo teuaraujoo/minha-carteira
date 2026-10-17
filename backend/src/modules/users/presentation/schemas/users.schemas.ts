@@ -6,6 +6,7 @@ export const createUserSchema = z
     username: z
       .string({ error: "Nome de usuário deve ser uma string." })
       .trim()
+      .toLowerCase()
       .min(5, "Nome de usuário é obrigatório."),
     name: z
       .string({ error: "Nome deve ser uma string." })

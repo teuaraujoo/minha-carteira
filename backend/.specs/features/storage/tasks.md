@@ -63,9 +63,8 @@ verificada novamente em STR-05.
 
 **Status:** Em andamento
 **blocked:** true
-**blockedReason:** A migration `create-storage` depende de `users`, mas não há
-migration `create-users` no histórico; a validação de constraints também depende
-de um PostgreSQL de teste configurado.
+**blockedReason:** A validação das migrations, constraints e repository ainda
+depende de um PostgreSQL de teste configurado.
 **blockedAt:** 2026-10-17
 
 **Depende de:** STR-01 e aprovação do schema.
@@ -73,7 +72,7 @@ de um PostgreSQL de teste configurado.
 - adicionar enums e modelo `StoredFile` ao schema;
 - criar relação com `User`;
 - adicionar índices de storage, proprietário e status;
-- preparar migration `create-storage` após `create-users`;
+- manter `create-storage` após `create-users` na ordem cronológica das pastas;
 - revisar os índices de storage, proprietário e status, sem índice por contexto.
 
 **Testes:** integração do repository e constraints no PostgreSQL de teste.
@@ -175,7 +174,6 @@ nenhum consumidor importa infraestrutura de R2 ou storage de `shared`.
 
 ## Bloqueios antes da conclusão
 
-- criar ou integrar a migration `create-users` antes de aplicar `create-storage`;
 - configurar PostgreSQL de teste para verificar repository e constraints;
 - aprovar uma dependência para decodificação completa das imagens;
 - aprovar coordenação entre processos sem índice único por contexto;
