@@ -1,5 +1,5 @@
 import z from "zod";
-import { ALLOWED_IMAGE_TYPES, MAX_PROFILE_IMAGE_SIZE } from "../../../../shared/application/storage/constants/image.constants.js";
+import { ALLOWED_IMAGE_TYPES, MAX_PROFILE_IMAGE_SIZE } from "../../../storage/application/constants/image.constants.js";
 
 export const createUserSchema = z
   .object({
@@ -30,11 +30,10 @@ export const createUserSchema = z
 
 
 export const uploadProfileImageSchema = z.object({
-  userId: z.string().uuid(),
   image: z.object({
     content: z.instanceof(Buffer),
     contentType: z.string().refine((value) => ALLOWED_IMAGE_TYPES.has(value), "Tipo de imagem não permitido."),
-    size: z.number().int().positive().max(MAX_PROFILE_IMAGE_SIZE, "Imagem excede o limite de 5 MiB."),
+    size: z.number().int().positive().max(MAX_PROFILE_IMAGE_SIZE, "Imagem excede o limite de 10 MiB."),
   }).strict().refine((image) => image.content.length === image.size, "Tamanho da imagem inválido."),
 }).strict();
 

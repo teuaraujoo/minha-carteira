@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
 import multer from "multer";
-import { ALLOWED_IMAGE_TYPES, MAX_PROFILE_IMAGE_SIZE } from "../../../../shared/application/storage/constants/image.constants.js";
+import { ALLOWED_IMAGE_TYPES, MAX_PROFILE_IMAGE_SIZE } from "../../../storage/application/constants/image.constants.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 
 const upload = multer({
@@ -30,7 +30,7 @@ export const profileImageUpload: RequestHandler = (request, response, next) => {
             next(new AppError({
                 status: oversized ? 413 : 400,
                 code: ErrorCode.VALIDATION_ERROR,
-                message: oversized ? "Imagem excede o limite de 5 MiB." : "Arquivo de imagem inválido.",
+                message: oversized ? "Imagem excede o limite de 10 MiB." : "Arquivo de imagem inválido.",
                 cause: error,
             }));
             return;

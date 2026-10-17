@@ -27,7 +27,7 @@ function bindRequestId(baseLogger: AppLogger, requestId: string): AppLogger {
   };
 }
 
-export class LogContext {
+export class LogContext implements AppLogger {
   private readonly storage = new AsyncLocalStorage<RequestLogStore>();
 
   constructor(private readonly baseLogger: AppLogger) {}
@@ -36,6 +36,13 @@ export class LogContext {
     const store = this.storage.getStore();
     return store?.active ? store.logger : this.baseLogger;
   }
+
+  debug(input: LogInput): void { this.logger().debug(input); }
+  info(input: LogInput): void { this.logger().info(input); }
+  warn(input: LogInput): void { this.logger().warn(input); }
+  error(input: LogInput): void { this.logger().error(input); }
+  fatal(input: LogInput): void { this.logger().fatal(input); }
+  close(): Promise<void> { return this.baseLogger.close(); }
 
   runWithRequest<T>(requestId: string, callback: (deactivate: () => void) => T): T {
     const store: RequestLogStore = {

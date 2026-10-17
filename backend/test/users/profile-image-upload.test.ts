@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import type { NextFunction, Request, Response } from "express";
-import type { IStorageProvider } from "../../src/shared/domain/interfaces/storage.interface.js";
-import { noopLoggerAccessor } from "../../src/shared/application/logging/app-logger.js";
+import type { StorageOperations, StoredFileInput, StoredFileOutput } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
+import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
 import { AppError } from "../../src/shared/presentation/http/app-error.js";
 import type { IUsersRepository } from "../../src/modules/users/domain/interfaces/users-repository.interface.js";
 import { UserService } from "../../src/modules/users/application/services/users.service.js";
 import { UserController } from "../../src/modules/users/presentation/controllers/users.controller.js";
+import { StoredFileValidationError } from "../../src/modules/storage/domain/validation/file-validation.js";
 import { profileImageUpload } from "../../src/modules/users/presentation/middlewares/image-upload.middleware.js";
 import { uploadProfileImageSchema } from "../../src/modules/users/presentation/schemas/users.schemas.js";
 
@@ -70,7 +71,7 @@ test("Multer rejects unsupported MIME and extra files with public validation err
 
 test("Multer maps file size and malformed multipart input to expected errors", async () => {
   const oversized = await runUpload(multipartBody([
-    { name: "profileImage", contentType: "image/png", content: Buffer.alloc(5 * 1024 * 1024 + 1) },
+    { name: "profileImage", contentType: "image/png", content: Buffer.alloc(10 * 1024 * 1024 + 1) },
   ]));
   assert.ok(oversized.error instanceof AppError);
   assert.equal(oversized.error.status, 413);
@@ -89,45 +90,91 @@ test("Multer maps file size and malformed multipart input to expected errors", a
 });
 
 test("schema accepts only normalized binary images within the approved types and size", () => {
-  const valid = { profileId, image: { content: Buffer.from([1, 2, 3]), contentType: "image/png", size: 3 } };
+  const valid = { image: { content: Buffer.from([1, 2, 3]), contentType: "image/png", size: 3 } };
   assert.equal(uploadProfileImageSchema.safeParse(valid).success, true);
   for (const image of [
     { ...valid.image, contentType: "text/plain" },
     { ...valid.image, size: 2 },
     { ...valid.image, content: "AQID" },
-    { content: Buffer.alloc(5 * 1024 * 1024 + 1), contentType: "image/png", size: 5 * 1024 * 1024 + 1 },
+    { content: Buffer.alloc(10 * 1024 * 1024 + 1), contentType: "image/png", size: 10 * 1024 * 1024 + 1 },
   ]) {
-    assert.equal(uploadProfileImageSchema.safeParse({ profileId, image }).success, false);
+    assert.equal(uploadProfileImageSchema.safeParse({ image }).success, false);
   }
 });
 
-test("controller normalizes req.file and service uploads to a stable profile key", async () => {
-  const calls: Array<{ key: string; body: Buffer; contentType: string }> = [];
-  const storageProvider: IStorageProvider = { async upload(key, body, contentType) { calls.push({ key, body, contentType }); }, async getPresignedUrl() { return "unused"; } };
-  const controller = new UserController(new UserService({} as IUsersRepository, storageProvider, noopLoggerAccessor));
+test("controller normalizes req.file and delegates profile replacement to storage", async () => {
+  const calls: StoredFileInput[] = [];
+  const storageProvider: StorageOperations = {
+    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
+    async replaceFileContent(input): Promise<StoredFileOutput> {
+      calls.push(input);
+      return { file: {} as never, url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") };
+    },
+  };
+  const repository = { findActiveUser: async () => ({ id: profileId }) } as unknown as IUsersRepository;
+  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
   const sent: unknown[] = [];
   const response = {
     status(status: number) { assert.equal(status, 200); return this; },
     json(body: unknown) { sent.push(body); return this; },
   } as unknown as Response;
   const request = {
-    body: { profileId },
+    auth: { userId: profileId, sessionId: "session-id" },
+    body: { userId: "123e4567-e89b-42d3-a456-426614174001" },
     file: { buffer: Buffer.from([1, 2, 3]), mimetype: "image/png", size: 3 },
-  } as Request;
+  } as unknown as Request;
   await controller.uploadProfileImage(request, response);
-  assert.deepEqual(sent, [{ data: { key: `users/${profileId}/profile-image` } }]);
-  assert.deepEqual(calls, [{ key: `users/${profileId}/profile-image`, body: Buffer.from([1, 2, 3]), contentType: "image/png" }]);
+  assert.deepEqual(sent, [{ data: { url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") } }]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.ownerUserId, profileId);
+  assert.equal(calls[0]?.contextId, profileId);
+  assert.deepEqual(calls[0]?.content, Buffer.from([1, 2, 3]));
 });
 
-test("controller rejects missing files and invalid profile IDs before storage", async () => {
-  let uploads = 0;
-  const storageProvider: IStorageProvider = { async upload() { uploads++; }, async getPresignedUrl() { return "unused"; } };
-  const controller = new UserController(new UserService({} as IUsersRepository, storageProvider, noopLoggerAccessor));
+test("controller rejects missing files and invalid image data before storage", async () => {
+  let replacements = 0;
+  const storageProvider: StorageOperations = { async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; }, async replaceFileContent() { replacements++; throw new Error("Não deveria ser chamado."); } };
+  const repository = { findActiveUser: async () => ({ id: profileId }) } as unknown as IUsersRepository;
+  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
   for (const request of [
-    { body: { profileId } },
-    { body: { profileId: "../outside" }, file: { buffer: Buffer.from([1]), mimetype: "image/png", size: 1 } },
+    { body: { userId: profileId }, file: { buffer: Buffer.from([1]), mimetype: "image/png", size: 1 } },
+    { auth: { userId: profileId, sessionId: "session-id" }, body: { userId: "../outside" }, file: { buffer: Buffer.from([1]), mimetype: "text/plain", size: 1 } },
   ]) {
-    await assert.rejects(controller.uploadProfileImage(request as Request, {} as Response), AppError);
+    await assert.rejects(controller.uploadProfileImage(request as unknown as Request, {} as Response), AppError);
   }
-  assert.equal(uploads, 0);
+  assert.equal(replacements, 0);
+});
+
+test("controller rejects requests without the authenticated context", async () => {
+  const storageProvider: StorageOperations = {
+    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
+    async replaceFileContent() { throw new Error("Não deveria ser chamado."); },
+  };
+  const repository = { findActiveUser: async () => ({ id: profileId }) } as unknown as IUsersRepository;
+  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+
+  await assert.rejects(controller.uploadProfileImage({
+    body: { userId: profileId },
+    file: { buffer: Buffer.from([1, 2, 3]), mimetype: "image/png", size: 3 },
+  } as unknown as Request, {} as Response), (error: unknown) => error instanceof AppError && error.status === 401);
+});
+
+test("controller maps storage file validation failures to HTTP validation errors", async () => {
+  const storageProvider: StorageOperations = {
+    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
+    async replaceFileContent() { throw new StoredFileValidationError("O conteúdo do arquivo está corrompido."); },
+  };
+  const repository = { findActiveUser: async () => ({ id: profileId }) } as unknown as IUsersRepository;
+  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+  const request = {
+    auth: { userId: profileId, sessionId: "session-id" },
+    file: { buffer: Buffer.from([1, 2, 3]), mimetype: "image/png", size: 3 },
+  } as unknown as Request;
+
+  await assert.rejects(controller.uploadProfileImage(request, {} as Response), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.status, 400);
+    assert.equal(error.message, "O conteúdo do arquivo está corrompido.");
+    return true;
+  });
 });

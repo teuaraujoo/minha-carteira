@@ -11,4 +11,5 @@ export interface ImageInput {
 
 export interface UploadProfileImageResult {
     url: string;
+    expiresAt?: Date;
 }

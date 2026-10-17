@@ -6,7 +6,7 @@ import { createApp } from "../../src/app/app.js";
 import { UserService } from "../../src/modules/users/application/services/users.service.js";
 import type { IUsersRepository } from "../../src/modules/users/domain/interfaces/users-repository.interface.js";
 import type { AppLogger, LogInput } from "../../src/shared/application/logging/app-logger.js";
-import type { IStorageProvider } from "../../src/shared/domain/interfaces/storage.interface.js";
+import type { StorageOperations } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
 import { LogContext } from "../../src/shared/infrastructure/logging/log-context.js";
 import { createRequestLoggingMiddleware } from "../../src/shared/presentation/middlewares/request-logging-middleware.js";
 
@@ -32,9 +32,11 @@ test("UserService logs the confirmed upload with request context and approved fi
   const logContext = new LogContext(logger);
   let confirmUpload: (() => void) | undefined;
   const uploaded = new Promise<void>((resolve) => { confirmUpload = resolve; });
-  const storageProvider: IStorageProvider = {
-    upload: async () => uploaded,
+  const storageProvider: StorageOperations = {
+    upload: async () => undefined,
+    delete: async () => undefined,
     getPresignedUrl: async () => "https://storage.example/profile.png",
+    replaceFileContent: async () => { await uploaded; return { file: {} as never, url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") }; },
   };
   const service = new UserService(repository({ id: userId }), storageProvider, logContext);
 
@@ -43,7 +45,7 @@ test("UserService logs the confirmed upload with request context and approved fi
     await Promise.resolve();
     assert.deepEqual(logger.logs, []);
     confirmUpload?.();
-    assert.deepEqual(await result, { url: "https://storage.example/profile.png" });
+    assert.deepEqual(await result, { url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") });
   });
 
   assert.equal(logger.logs.length, 1);
@@ -62,9 +64,11 @@ test("UserService logs the confirmed upload with request context and approved fi
 test("HTTP middleware and service share the same contextual requestId", async () => {
   const logger = new CapturingLogger();
   const logContext = new LogContext(logger);
-  const storageProvider: IStorageProvider = {
+  const storageProvider: StorageOperations = {
     upload: async () => undefined,
+    delete: async () => undefined,
     getPresignedUrl: async () => "unused",
+    replaceFileContent: async () => ({ file: {} as never, url: "unused", expiresAt: new Date() }),
   };
   const service = new UserService(repository({ id: userId }), storageProvider, logContext);
   const request = { method: "POST", baseUrl: "", route: { path: "/users/:id/image" } } as unknown as Request;
@@ -86,24 +90,28 @@ test("HTTP middleware and service share the same contextual requestId", async ()
 
 test("UserService does not log upload success when the user is absent", async () => {
   const logger = new CapturingLogger();
-  let uploads = 0;
-  const storageProvider: IStorageProvider = {
-    upload: async () => { uploads++; },
+  let replacements = 0;
+  const storageProvider: StorageOperations = {
+    upload: async () => undefined,
+    delete: async () => undefined,
     getPresignedUrl: async () => "unused",
+    replaceFileContent: async () => { replacements++; return { file: {} as never, url: "unused", expiresAt: new Date() }; },
   };
   const service = new UserService(repository(null), storageProvider, new LogContext(logger));
 
   await assert.rejects(service.uploadProfileImage(input), { message: "Usuário não encontrado." });
-  assert.equal(uploads, 0);
+  assert.equal(replacements, 0);
   assert.deepEqual(logger.logs, []);
 });
 
 test("UserService propagates upload failures without a success log", async () => {
   const logger = new CapturingLogger();
   const failure = new Error("Falha de armazenamento");
-  const storageProvider: IStorageProvider = {
-    upload: async () => { throw failure; },
+  const storageProvider: StorageOperations = {
+    upload: async () => undefined,
+    delete: async () => undefined,
     getPresignedUrl: async () => "unused",
+    replaceFileContent: async () => { throw failure; },
   };
   const service = new UserService(repository({ id: userId }), storageProvider, new LogContext(logger));
 

@@ -1,8 +1,13 @@
 import type { Request, Response } from "express";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import { sendSuccess } from "../../../../shared/presentation/http/success-response.js";
+import { StoredFileValidationError } from "../../../storage/domain/validation/file-validation.js";
 import type { UserService } from "../../application/services/users.service.js";
 import { uploadProfileImageSchema } from "../schemas/users.schemas.js";
+
+type AuthenticatedRequest = Request & {
+    auth?: { userId: string; sessionId: string };
+};
 
 export class UserController {
     constructor(
@@ -10,12 +15,16 @@ export class UserController {
     ) { }
 
     async uploadProfileImage(request: Request, response: Response): Promise<void> {
+        const userId = (request as AuthenticatedRequest).auth?.userId;
+        if (!userId) {
+            throw new AppError({ status: 401, code: ErrorCode.UNAUTHORIZED, message: "Autenticação obrigatória." });
+        }
+
         if (!request.file) {
             throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Imagem de perfil obrigatória." });
         }
 
         const parsed = uploadProfileImageSchema.safeParse({
-            ...request.body,
             image: {
                 content: request.file.buffer,
                 contentType: request.file.mimetype,
@@ -26,7 +35,14 @@ export class UserController {
             throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Dados da imagem de perfil inválidos.", cause: parsed.error });
         }
 
-        const result = await this.userService.uploadProfileImage(parsed.data);
-        sendSuccess(response, result);
+        try {
+            const result = await this.userService.uploadProfileImage({ userId, ...parsed.data });
+            sendSuccess(response, result);
+        } catch (error) {
+            if (error instanceof StoredFileValidationError) {
+                throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: error.message, cause: error });
+            }
+            throw error;
+        }
     };
 }
