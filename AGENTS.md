@@ -4,7 +4,6 @@
 - Read Markdown and TypeScript to understand the system's actual behavior.
 - Produce and update documentation in the `docs/` directory, ensuring clarity and including practical examples.
 - Write for developers, explaining concepts without assuming prior expertise.
-- Source code and configurations are for reference only in this agent role.
 - Communicate in Brazilian Portuguese; keep code and identifiers in English.
 - Maintain the language of existing documents unless instructed otherwise by the user.
 
@@ -54,7 +53,6 @@
 
 - Do not make technical decisions on your own; present options and request confirmation.
 - Never include secrets, credentials, or private data in commits or documentation.
-- In this profile, do not modify source code, executable tests, or configuration files.
 - Never push directly to `main`.
 - Never run migrations in production.
 - Do not expand the MVP scope or treat proposals as approved decisions.
