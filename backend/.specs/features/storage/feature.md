@@ -9,18 +9,16 @@ precisam associar uma imagem a um contexto.
 
 ## Situação atual e migração necessária
 
-Hoje, `backend/src/shared/infrastructure/integrations/aws/s3.service.ts`
-exporta `R2Client`, mas a mesma classe configura o client do SDK compatível
-com S3, faz upload e gera URL assinada. O caminho `aws/s3` sugere um serviço AWS
-S3, enquanto o provider usado é Cloudflare R2. `UserService` consome diretamente
-`IStorageProvider` do módulo compartilhado e monta a chave da foto de perfil
-fora de `storage`. Ainda não há integração com um módulo de storage implementado.
+O código inicial reunia a configuração do client compatível com S3 e as
+operações do Cloudflare R2 em `shared`. A implementação em andamento já criou
+um módulo `storage` com client, adapter R2, repository, serviço de aplicação,
+validação e chave opaca. `users` começou a consumir `StorageOperations`; ainda
+faltam testes, composição da aplicação, remoção de todos os resquícios legados
+e validações completas desta spec.
 
-A implementação desta spec deve separar a configuração do client das operações
-de storage, nomear os componentes próprios da aplicação como R2 e transferir
-ambos para `storage/infrastructure`. O SDK pode continuar expondo tipos e
-comandos com nome `S3`, pois essa é a API compatível usada para acessar o R2.
-Não se trata de trocar o provider nem de adicionar AWS S3.
+Os componentes próprios do projeto usam nomenclatura R2. O SDK pode continuar
+expondo tipos e comandos com nome `S3`, pois essa é a API compatível usada para
+acessar o R2. Não se trata de trocar o provider nem de adicionar AWS S3.
 
 ## Resultado esperado
 
@@ -199,9 +197,10 @@ corrompido DEVEM ser rejeitados antes do upload para o R2.
 - a spec de `storage` será executada antes das specs dependentes de upload de
   imagem de perfil;
 - os registros podem ser criados em migration própria após usuários.
-- Imagens com tamanho máximo de 10mb
-- Tipos mime permitidos: image/png, image/jpg, image/webp, application/pdf
-- uso obrigatorio de checksum
+- Imagens com tamanho máximo de 10 MiB.
+- Tipos MIME aceitos no fluxo de perfil: `image/png`, `image/jpeg` e
+  `image/webp`; PDF permanece reservado para fluxo futuro com validação própria.
+- Uso obrigatório de checksum SHA-256.
 - `storageKey` possui limite de 512 caracteres;
 - `mimeType` possui limite de 100 caracteres;
 - `originalName` possui limite de 255 caracteres;
@@ -216,3 +215,13 @@ corrompido DEVEM ser rejeitados antes do upload para o R2.
 ## Backlog
 
 - estratégia operacional da rotina futura de limpeza de registros `FAILED`.
+
+## Bloqueios de implementação
+
+- STR-04 ainda exige decodificação completa dos pixels. A implementação atual
+  valida assinaturas e estrutura parcial dos contêineres; a dependência
+  necessária aguarda aprovação.
+- A substituição precisa de coordenação entre processos para garantir no máximo
+  um arquivo ativo por contexto. Não há índice único por contexto aprovado.
+- A migration `create-storage` depende da migration `create-users`, ausente no
+  histórico atual.

@@ -174,7 +174,7 @@ usuário e o frontend deve solicitar uma nova representação quando ela expirar
 Cloudflare R2 pertencem ao módulo `storage`. A definição normativa está em
 `backend/.specs/features/storage/design.md`.
 
-O módulo `users` consome somente `StorageGateway` para substituir a foto de
+O módulo `users` consome somente `StorageOperations` para substituir a foto de
 perfil. Antes da chamada, `users` consulta o próprio repository, verifica se o
 usuário autenticado existe e está ativo e define `ownerUserId`, `contextId` e
 `USER_PROFILE`. Ele entrega esses dados e o arquivo ao contrato genérico de
@@ -218,7 +218,7 @@ da imagem.
    cliente não envia IDs de proprietário ou contexto.
 3. **Use case:** define `contextType=USER_PROFILE`, `contextId=userId` e
    `ownerUserId=userId`, usando somente o ID autenticado.
-4. **Módulos:** chama `StorageGateway.replaceForContext`; `storage` não consulta
+4. **Módulos:** chama `StorageOperations.replaceFileContent`; `storage` não consulta
    o módulo de usuários.
 5. **Persistência:** `storage` remove a imagem de perfil anterior, apaga seu
    objeto no R2, armazena o novo objeto e salva `StoredFile` com os identificadores

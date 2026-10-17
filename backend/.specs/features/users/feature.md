@@ -145,7 +145,7 @@ log.
 - `PasswordHasher` para cadastro;
 - `IdGenerator` e `ClockProvider`;
 - Prisma e PostgreSQL para persistência;
-- `StorageGateway`, contrato público do módulo `storage`;
+- `StorageOperations`, contrato público do módulo `storage`;
 - `AppLogger` com mensagens em português;
 - contratos HTTP compartilhados já implementados.
 

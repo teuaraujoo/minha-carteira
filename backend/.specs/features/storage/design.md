@@ -44,7 +44,7 @@ gera URL assinada com `GetObjectCommand`. Essa mistura deve ser desfeita:
 3. O `Composition Root` conecta client, serviço e caso de uso. Domínio e
    aplicação não importam `S3Client`, comandos do SDK nem variáveis de ambiente.
 4. `users` deixa de importar `IStorageProvider` e utilitários de storage do
-   `shared`. Seu caso de uso passa a chamar apenas `StorageGateway`.
+   `shared`. Seu caso de uso chama o contrato público `StorageOperations`.
 
 O nome `S3Client` e os nomes dos comandos permanecem apenas como detalhes da
 biblioteca de compatibilidade; nomes de serviços, pastas e adapters próprios do
@@ -70,7 +70,7 @@ e as regras genéricas de armazenamento; não consulta o módulo proprietário.
 ## Entidade `StoredFile`
 
 ```typescript
-interface StoredFile {
+interface StoredFileProperties {
   id: string;
   ownerUserId: string;
   contextType: StorageContextType;
@@ -79,12 +79,19 @@ interface StoredFile {
   storageKey: string;
   originalName: string | null;
   mimeType: string;
-  size: number;
+  sizeInBytes: number;
   checksum: string;
   status: StorageStatus;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
+}
+
+class StoredFile {
+  constructor(properties: StoredFileProperties);
+  startUpload(at: Date): void;
+  complete(at: Date): void;
+  fail(at: Date): void;
 }
 
 enum StorageContextType {
@@ -136,38 +143,44 @@ posterior; uma rotina futura fará a remoção definitiva.
 
 ```typescript
 interface StoredFileInput {
-  buffer: Uint8Array;
-  originalName: string;
+  ownerUserId: string;
+  contextType: StorageContextType;
+  contextId: string;
+  originalName?: string | null;
   mimeType: string;
-  size: number;
+  content: Buffer;
 }
 
-interface StorageGateway {
-  replaceForContext(input: {
-    ownerUserId: string;
-    contextType: StorageContextType;
-    contextId: string;
-    file: StoredFileInput;
-  }): Promise<StoredFileOutput>;
+interface StorageOperations {
+  upload(key: string, content: Buffer, mimeType: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  getPresignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
+  replaceFileContent(input: StoredFileInput): Promise<StoredFileOutput>;
 }
 
 interface StoredFileRepository {
-  save(file: StoredFile): Promise<void>;
+  create(file: StoredFile): Promise<StoredFile>;
   findActiveByContext(
     contextType: StorageContextType,
     contextId: string,
   ): Promise<StoredFile | null>;
+  updateStatus(id: string, status: StorageStatus): Promise<StoredFile>;
   deleteById(id: string): Promise<void>;
+  markFailed(id: string): Promise<void>;
 }
 
-interface FileStorageProvider {
-  upload(input: StorageUploadInput): Promise<StorageUploadOutput>;
-  delete(storageKey: string): Promise<void>;
+interface ObjectStorageProvider {
+  upload(key: string, body: Buffer, contentType: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  getPresignedUrl(key: string, expiresInSeconds: number): Promise<string>;
 }
 ```
 
-`StorageGateway` é a porta genérica consumida por `users`. O caso de uso de
-`users` verifica o usuário ativo, a autorização e os IDs antes de chamá-la.
+`StorageOperations` é o contrato público consumido por `users` e implementado
+por `StorageService`. Ele expõe upload, exclusão, URL pré-assinada e
+`replaceFileContent`. `StorageService` usa `ObjectStorageProvider`, implementado
+pelo adapter R2, para executar as operações externas. O caso de uso de `users`
+verifica o usuário ativo, a autorização e os IDs antes de chamar o contrato.
 `storage` recebe esses dados como entrada interna confiável, mas continua
 validando presença, formato e invariantes de armazenamento. Ele não possui
 `UsersStorageGateway` nem lógica específica de usuário ativo. As assinaturas
@@ -200,16 +213,15 @@ original nunca é suficiente para aprovar um arquivo.
 
 ## Caso de uso — substituir imagem por contexto
 
-`ReplaceImageForContext` recebe um arquivo e um contexto já autorizado pelo
+`StorageService.replaceFileContent` recebe um arquivo e um contexto já autorizado pelo
 módulo consumidor. Ele não valida se o proprietário é usuário, grupo ou outra
 entidade. Sua responsabilidade é substituir integralmente o recurso de imagem:
 
 1. **Input:** recebe `ownerUserId`, `contextType`, `contextId` e o arquivo
    validado pelo módulo consumidor.
 2. **Validação:** verifica os invariantes genéricos do arquivo e a presença dos
-   identificadores internos. Quando necessário, compara o identificador do
-   contexto recebido com o identificador persistido para evitar atualização de
-   outro recurso.
+   identificadores internos. A autorização e a validação do recurso de destino
+   pertencem ao módulo consumidor.
 3. **Consulta:** procura a imagem existente para o par `contextType` e
    `contextId`.
 4. **Remoção:** se existir uma imagem, remove o objeto do R2 e o registro no
@@ -220,11 +232,11 @@ entidade. Sua responsabilidade é substituir integralmente o recurso de imagem:
    ou objetos órfãos.
 7. **Resposta:** retorna a representação pública aprovada da nova imagem.
 
-A interface atual `IStorageProvider` de `shared` não é o contrato definitivo:
-ela recebe `Buffer`, retorna `unknown` no upload e oferece URL assinada sem
-definir o retorno público de `storage`. A interface final deve refletir as
-operações realmente aprovadas para o fluxo. A exclusão segue a substituição
-total, e a URL de leitura é pré-assinada por 30 minutos quando necessária.
+O contrato `ObjectStorageProvider` é interno à infraestrutura e representa as
+operações do R2. `StorageOperations` é o contrato público usado por `users`; ele
+expõe upload, exclusão e URL pré-assinada, além de `replaceFileContent`, que
+coordena validação, persistência, substituição e URL temporária. `StorageService`
+delega as operações de objeto ao adapter R2.
 
 ## Fluxo — substituir imagem de perfil
 
@@ -233,9 +245,9 @@ total, e a URL de leitura é pré-assinada por 30 minutos quando necessária.
    autenticado; sua apresentação valida presença, tamanho e tipo do arquivo.
    `storage` valida somente os invariantes genéricos do arquivo e do storage.
 3. **Use case:** `users` define `USER_PROFILE`, `ownerUserId` e `contextId`
-   iguais ao ID autenticado e chama `StorageGateway.replaceForContext`.
+   iguais ao ID autenticado e chama `StorageOperations.replaceFileContent`.
 4. **Módulos:** `storage` não consulta `users`; envia o objeto por
-   `FileStorageProvider` para Cloudflare R2.
+   `ObjectStorageProvider` para Cloudflare R2.
 5. **Persistência:** `storage` remove o objeto e o registro anteriores, envia a
    nova imagem e salva `StoredFile` com os IDs, contexto e `CLOUDFLARE_R2` recebidos
    de `users`.
@@ -281,12 +293,21 @@ configuração de `DATABASE_URL` pode ser feita depois da primeira versão do
   `storage`;
 - limitar memória e quantidade de uploads na borda HTTP.
 
+A implementação atual valida assinatura binária e algumas estruturas de
+contêiner, mas ainda não decodifica os pixels. Essa diferença não satisfaz
+STR-RF-008: STR-04 permanece bloqueada até que uma dependência de decodificação
+seja aprovada e a validação seja implementada.
+
 ## Falhas e consistência
 
 A remoção do objeto antigo, o upload do novo objeto e a gravação no PostgreSQL
 não compartilham uma transação. O registro da tentativa deve permanecer como
 `FAILED` quando houver falha, e os objetos ou registros órfãos serão limpos
 posteriormente. Uma rotina futura fará a remoção definitiva desses resíduos.
+Há uma falha ainda sem estratégia aprovada: se a exclusão do objeto antigo no
+R2 funcionar e a exclusão de seu registro no banco falhar, o registro antigo
+permanece `COMPLETED` sem objeto. Essa janela precisa de tratamento e teste antes
+de concluir STR-04.
 
 ## Restrições de schema confirmadas
 
@@ -297,8 +318,9 @@ posteriormente. Uma rotina futura fará a remoção definitiva desses resíduos.
 - `StorageStatus`, `StorageContextType` e `StorageProvider` são enums nativos do
   Prisma/PostgreSQL.
 
-Não há índice único por contexto. A unicidade lógica durante a substituição é
-garantida pelo caso de uso e pelo repository.
+Não há índice único por contexto. O lock atual existe apenas no processo e não
+garante unicidade entre réplicas; uma estratégia de coordenação compartilhada
+precisa ser aprovada e implementada antes de concluir STR-04.
 
 ## Backlog
 

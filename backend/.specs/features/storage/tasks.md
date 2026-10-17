@@ -1,5 +1,12 @@
 # Tarefas — módulo de storage
 
+## Como acompanhar o andamento
+
+Cada tarefa contém um campo `Status`, com os valores `Backlog`, `A fazer`,
+`Em andamento`, `Revisão` ou `Feito`. Um bloqueio é indicado separadamente por
+`blocked: true`, `blockedReason` e `blockedAt`. `Feito` só deve ser usado após
+verificação independente dos critérios e criação dos commits necessários.
+
 ## Ordem de execução
 
 Esta é a primeira spec de funcionalidade a executar na próxima etapa. A
@@ -8,6 +15,8 @@ domínio, persistência e integração completam a migração sem antecipar o re
 ao MVP financeiro.
 
 ### STR-00 — Extrair client e serviço do Cloudflare R2
+
+**Status:** Revisão
 
 **Depende de:** revisão dos consumidores atuais e da configuração de R2.
 
@@ -35,11 +44,13 @@ verificada novamente em STR-05.
 
 ### STR-01 — Definir domínio e contratos
 
+**Status:** Revisão
+
 **Depende de:** STR-00 e entidade `User`.
 
 - criar entidade `StoredFile` e enums confirmados;
 - definir invariantes e transições aprovadas;
-- criar `StorageGateway`, `StoredFileRepository` e `FileStorageProvider`;
+- criar `StorageOperations`, `StoredFileRepository` e `ObjectStorageProvider`;
 - impedir dependências de Multer, Prisma ou R2 na aplicação.
 
 **Testes:** criação, estados, propriedade e validações da entidade.
@@ -49,6 +60,13 @@ verificada novamente em STR-05.
 **Commit sugerido:** `feat(storage): define storage domain contracts`
 
 ### STR-02 — Preparar persistência Prisma
+
+**Status:** Em andamento
+**blocked:** true
+**blockedReason:** A migration `create-storage` depende de `users`, mas não há
+migration `create-users` no histórico; a validação de constraints também depende
+de um PostgreSQL de teste configurado.
+**blockedAt:** 2026-10-17
 
 **Depende de:** STR-01 e aprovação do schema.
 
@@ -66,9 +84,11 @@ verificada novamente em STR-05.
 
 ### STR-03 — Implementar adapter do Cloudflare R2
 
+**Status:** Revisão
+
 **Depende de:** STR-00, STR-01 e credenciais configuradas fora do repositório.
 
-- adaptar o serviço R2 extraído à porta `FileStorageProvider` aprovada;
+- adaptar o serviço R2 extraído à porta interna `ObjectStorageProvider`;
 - implementar upload e, conforme a política aprovada, exclusão;
 - gerar chave opaca e não previsível;
 - mapear falhas sem vazar detalhes internos;
@@ -82,9 +102,17 @@ verificada novamente em STR-05.
 
 ### STR-04 — Implementar armazenamento por contexto
 
+**Status:** Em andamento
+**blocked:** true
+**blockedReason:** A decodificação completa requer aprovação de uma dependência
+de imagem; a coordenação entre processos sem índice único por contexto ainda
+precisa de uma estratégia aprovada. Também falta definir a compensação se o
+objeto antigo for removido no R2 e a exclusão do registro antigo falhar no banco.
+**blockedAt:** 2026-10-17
+
 **Depende de:** STR-02 e STR-03.
 
-- implementar `StorageGateway.replaceForContext` sem conhecer o fluxo de perfil;
+- implementar `StorageOperations.replaceFileContent` sem conhecer o fluxo de perfil;
 - receber `ownerUserId`, `contextType` e `contextId` do caso de uso consumidor;
 - validar somente arquivo, contexto presente e invariantes de armazenamento;
 - validar presença, tamanho, MIME declarado, assinatura binária e decodificação;
@@ -105,9 +133,15 @@ status ou autorização do proprietário.
 
 ### STR-05 — Integrar módulos consumidores
 
+**Status:** Em andamento
+**blocked:** true
+**blockedReason:** O middleware de autenticação que fornece `request.auth` ainda
+não foi implementado, e a composição/rota de usuários ainda não existe.
+**blockedAt:** 2026-10-17
+
 **Depende de:** STR-04.
 
-- integrar os casos de uso consumidores ao `StorageGateway`;
+- integrar os casos de uso consumidores ao `StorageOperations`;
 - retirar de `users` o consumo direto de `IStorageProvider` e do gerador de
   chaves em `shared`; atualizar a composição das dependências;
 - manter Multer e os limites de arquivo na apresentação do módulo consumidor;
@@ -139,7 +173,13 @@ nenhum consumidor importa infraestrutura de R2 ou storage de `shared`.
 | STR-RF-007 | STR-00, STR-03 e STR-05 | client, serviço e imports |
 | STR-RF-008 | STR-01, STR-03 e STR-05 | validação e segurança do arquivo |
 
-## Bloqueios antes da implementação
+## Bloqueios antes da conclusão
 
-Não há bloqueios de schema pendentes para esta spec. A implementação deve usar
-os limites e enums confirmados no design e calcular o checksum com SHA-256.
+- criar ou integrar a migration `create-users` antes de aplicar `create-storage`;
+- configurar PostgreSQL de teste para verificar repository e constraints;
+- aprovar uma dependência para decodificação completa das imagens;
+- aprovar coordenação entre processos sem índice único por contexto;
+- definir compensação para falha ao excluir o registro anterior depois da
+  remoção do objeto no R2;
+- implementar o middleware de autenticação e a composição/rota de `users` que
+  fornecem `request.auth`.

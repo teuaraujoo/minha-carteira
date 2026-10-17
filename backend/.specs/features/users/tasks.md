@@ -89,14 +89,14 @@
 
 ### USR-05 — Integrar upload ao contexto autenticado
 
-**Depende de:** USR-04 e `StorageGateway` entregue por STR-04.
+**Depende de:** USR-04 e `StorageOperations` entregue por STR-04.
 
 - remover `userId` do schema controlado pelo cliente;
 - combinar arquivo do Multer com o contexto autenticado no controller;
 - preservar validações de MIME, tamanho e conteúdo;
 - consultar o próprio repository para confirmar que o usuário autenticado
   existe e está ativo antes de chamar `storage`;
-- chamar `StorageGateway` com contexto e propriedade derivados do usuário
+- chamar `StorageOperations` com contexto e propriedade derivados do usuário
   autenticado;
 - não acessar diretamente o repository de imagens ou o Cloudflare R2;
 - não aceitar `contextId` ou `ownerUserId` do cliente;
