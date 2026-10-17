@@ -7,6 +7,7 @@ export const LOG_MODULES = [
   "transactions",
   "recurring-transactions",
   "dashboard",
+  "users",
 ] as const;
 
 export type LogModule = (typeof LOG_MODULES)[number];
@@ -16,7 +17,8 @@ export type LogEvent =
   | "http.request.aborted"
   | "http.request.failed"
   | "server.started"
-  | "server.failed";
+  | "server.failed"
+  | "users.profile-image.uploaded";
 
 export interface ApprovedLogContext {
   operation?: string;
@@ -42,6 +44,7 @@ export interface LogInput {
   context?: ApprovedLogContext;
   http?: LogHttp;
   error?: unknown;
+  date?: Date;
 }
 
 export interface AppLogger {
