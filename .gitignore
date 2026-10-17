@@ -21,6 +21,7 @@ out/
 # production
 build/
 dist/
+backend/generated/prisma/
 
 # misc
 .DS_Store
