@@ -174,7 +174,7 @@ access token.
 
 ### T6: [AUTH-06] Implementar middleware autenticado
 
-**Status:** A fazer
+**Status:** Concluída
 **What:** Validar access token, sessão e usuário antes de preencher o contexto
 autenticado.
 **Where:** middleware e extensão tipada de `Express.Request`, com testes.
@@ -183,10 +183,10 @@ autenticado.
 
 **Done when:**
 
-- [ ] Middleware rejeita tokens ausentes, inválidos, expirados, de tipo errado,
+- [x] Middleware rejeita tokens ausentes, inválidos, expirados, de tipo errado,
       revogados e usuários inativos.
-- [ ] Em sucesso, define `request.auth.userId` e `sessionId` corretos.
-- [ ] Testes cobrem cada cenário e uma rota protegida de teste.
+- [x] Em sucesso, define `request.auth.userId` e `sessionId` corretos.
+- [x] Testes cobrem cada cenário e uma rota protegida de teste.
 
 **Tests:** unit e e2e
 **Gate:** full
