@@ -1,7 +1,7 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ObjectStorageProvider } from "../../../domain/interfaces/storage.interfaces.js";
-import { StorageProviderError } from "../../../domain/errors/storage-provider.error.js";
+import { AppError, ErrorCode } from "../../../../../shared/presentation/http/app-error.js";
 
 export class R2StorageService implements ObjectStorageProvider {
   constructor(
@@ -13,7 +13,7 @@ export class R2StorageService implements ObjectStorageProvider {
     try {
       await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
     } catch (error) {
-      throw new StorageProviderError("Não foi possível armazenar o arquivo no Cloudflare R2.", error);
+      throw new AppError({ status: 500, code: ErrorCode.INTERNAL_ERROR, message: "Não foi possível armazenar o arquivo no Cloudflare R2.", cause: error });
     }
   }
 
@@ -21,7 +21,7 @@ export class R2StorageService implements ObjectStorageProvider {
     try {
       await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
     } catch (error) {
-      throw new StorageProviderError("Não foi possível remover o arquivo do Cloudflare R2.", error);
+      throw new AppError({ status: 500, code: ErrorCode.INTERNAL_ERROR, message: "Não foi possível remover o arquivo do Cloudflare R2.", cause: error });
     }
   }
 
@@ -29,7 +29,7 @@ export class R2StorageService implements ObjectStorageProvider {
     try {
       return await getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: expiresInSeconds });
     } catch (error) {
-      throw new StorageProviderError("Não foi possível gerar a URL temporária do arquivo.", error);
+      throw new AppError({ status: 500, code: ErrorCode.INTERNAL_ERROR, message: "Não foi possível gerar a URL temporária do arquivo.", cause: error });
     }
   }
 }

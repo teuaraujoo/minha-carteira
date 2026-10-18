@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
 import type {
-  RefreshTokenRepository,
   RefreshTokensGateway,
 } from "../../src/modules/auth/application/contracts/auth.contracts.js";
+import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshToken, type RefreshTokenProps } from "../../src/modules/auth/domain/entities/auth.entities.js";
 import { RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
-import { PrismaRefreshTokenRepository, type PrismaRefreshTokensClient } from "../../src/modules/auth/infrastructure/repositories/prisma-refresh-token.repository.js";
-import { RefreshTokensGatewayAdapter } from "../../src/modules/auth/infrastructure/adapters/refresh-tokens-gateway.adapter.js";
+import { PrismaRefreshTokenRepository, type PrismaRefreshTokensClient } from "../../src/modules/auth/infrastructure/repositories/refresh-token.repository.js";
+import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
 
 const issuedAt = new Date("2026-01-01T00:00:00.000Z");
 const expiresAt = new Date("2026-01-06T00:00:00.000Z");
@@ -103,7 +103,7 @@ test("gateway público revoga sessões por desativação sem expor o repository"
     },
   } as Pick<RefreshTokenRepository, "revokeAllFromUser"> as RefreshTokenRepository;
   const clock: ClockProvider = { now: () => at };
-  const gateway: RefreshTokensGateway = new RefreshTokensGatewayAdapter(repository, clock);
+  const gateway: RefreshTokensGateway = new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
 
   await gateway.revokeAllFromUser("user-1");
   assert.deepEqual(call, {

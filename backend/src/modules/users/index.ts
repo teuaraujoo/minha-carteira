@@ -1,8 +1,4 @@
-export type {
-  AuthUser,
-  AuthUserCredentials,
-  UsersAuthGateway,
-} from "./application/contracts/users-auth.gateway.js";
-export type { UsersRegistrationGateway } from "./application/contracts/users-registration.gateway.js";
+export type { AuthUser, AuthUserCredentials } from "./domain/interfaces/users.interfaces.js";
+export type { IUsersRepository } from "./domain/interfaces/users-repository.interface.js";
+export type { UsersAuthGateway, UsersRegistrationGateway } from "./application/contracts/users.gateways.js";
 export type { RegisterUserInput, RegisterUserOutput } from "./application/dto/register-user.dto.js";
-export { UserIdentityConflictError } from "./domain/errors/user-identity-conflict.error.js";

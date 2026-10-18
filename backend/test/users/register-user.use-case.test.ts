@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { User } from "../../src/modules/users/domain/entities/users.entity.js";
-import { UserIdentityConflictError } from "../../src/modules/users/domain/errors/user-identity-conflict.error.js";
+import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 import type { RegisterUserInput } from "../../src/modules/users/application/dto/register-user.dto.js";
-import { RegisterUserUseCase } from "../../src/modules/users/application/use-cases/register-user.use-case.js";
+import { UserService } from "../../src/modules/users/application/services/users.service.js";
+import type { StorageOperations } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
 import { createUsersRepositoryDouble } from "./users-repository.double.js";
 
 const createdAt = new Date("2026-05-10T12:00:00.000Z");
+const storage = { upload: async () => undefined, delete: async () => undefined, getPresignedUrl: async () => "", replaceFileContent: async () => ({ file: {} as never, url: "", expiresAt: createdAt }) } satisfies StorageOperations;
+function service(repository: ReturnType<typeof createUsersRepositoryDouble>, passwordHasher: { hash(password: string): Promise<string>; compare(password: string, hash: string): Promise<boolean> }, id = "generated-user-id") {
+  return new UserService(repository, storage, { debug() { }, info() { }, warn() { }, error() { }, fatal() { }, async close() { } }, passwordHasher, { generate: () => id }, { now: () => new Date(createdAt.getTime()) });
+}
 const validInput: RegisterUserInput = {
   username: " NewUser ",
   name: " New User ",
@@ -34,7 +39,7 @@ function existingUser(overrides: Partial<{
 test("registers a normalized active USER and returns no password hash", async () => {
   let hashedPassword: string | undefined;
   let savedUser: User | undefined;
-  const useCase = new RegisterUserUseCase(
+  const userService = service(
     createUsersRepositoryDouble({
       async findByEmail(email) {
         assert.equal(email, "new@example.com");
@@ -55,11 +60,10 @@ test("registers a normalized active USER and returns no password hash", async ()
       },
       async compare() { return false; },
     },
-    { generate: () => "generated-user-id" },
-    { now: () => new Date(createdAt.getTime()) },
+    "generated-user-id",
   );
 
-  const result = await useCase.execute(validInput);
+  const result = await userService.registerUser(validInput);
 
   assert.equal(hashedPassword, validInput.password);
   assert.equal(savedUser?.id, "generated-user-id");
@@ -80,7 +84,7 @@ test("rejects normalized duplicate email or username before hashing", async () =
   for (const duplicate of ["email", "username"] as const) {
     let hashCalls = 0;
     let saveCalls = 0;
-    const useCase = new RegisterUserUseCase(
+    const userService = service(
       createUsersRepositoryDouble({
         findByEmail: async (email) => duplicate === "email" && email === "new@example.com"
           ? existingUser({ email: "new@example.com" })
@@ -94,46 +98,38 @@ test("rejects normalized duplicate email or username before hashing", async () =
         async hash() { hashCalls++; return "unused-hash"; },
         async compare() { return false; },
       },
-      { generate: () => "unused-id" },
-      { now: () => new Date(createdAt.getTime()) },
+      "unused-id",
     );
 
-    await assert.rejects(useCase.execute(validInput), (error: unknown) => {
-      assert.ok(error instanceof UserIdentityConflictError);
-      assert.equal(error.field, duplicate);
-      return true;
-    });
+    await assert.rejects(userService.registerUser(validInput), (error: unknown) => error instanceof AppError && error.status === 409 && error.code === ErrorCode.CONFLICT);
     assert.equal(hashCalls, 0);
     assert.equal(saveCalls, 0);
   }
 });
 
 test("surfaces a persistence identity conflict to protect against registration races", async () => {
-  const conflict = new UserIdentityConflictError("username");
-  const useCase = new RegisterUserUseCase(
-    createUsersRepositoryDouble({ save: async () => { throw conflict; } }),
+  const conflict = new AppError({ status: 409, code: ErrorCode.CONFLICT, message: "Conflito persistido." });
+  const userService = service(createUsersRepositoryDouble({ save: async () => { throw conflict; } }),
     { async hash() { return "bcrypt-hash"; }, async compare() { return false; } },
-    { generate: () => "generated-user-id" },
-    { now: () => new Date(createdAt.getTime()) },
+    "generated-user-id",
   );
 
-  await assert.rejects(useCase.execute(validInput), error => error === conflict);
+  await assert.rejects(userService.registerUser(validInput), error => error === conflict);
 });
 
 test("allows distinct users to share the same phone number", async () => {
   let saveCalls = 0;
-  const useCase = new RegisterUserUseCase(
+  const userService = service(
     createUsersRepositoryDouble({
       findByEmail: async () => null,
       findByUsername: async () => null,
       save: async () => { saveCalls++; },
     }),
     { async hash() { return "bcrypt-hash"; }, async compare() { return false; } },
-    { generate: () => "another-user-id" },
-    { now: () => new Date(createdAt.getTime()) },
+    "another-user-id",
   );
 
-  const result = await useCase.execute({
+  const result = await userService.registerUser({
     ...validInput,
     username: "another-user",
     email: "another@example.com",
@@ -145,14 +141,13 @@ test("allows distinct users to share the same phone number", async () => {
 
 test("does not persist when the password hasher returns an empty hash", async () => {
   let saveCalls = 0;
-  const useCase = new RegisterUserUseCase(
+  const userService = service(
     createUsersRepositoryDouble({ save: async () => { saveCalls++; } }),
     { async hash() { return ""; }, async compare() { return false; } },
-    { generate: () => "generated-user-id" },
-    { now: () => new Date(createdAt.getTime()) },
+    "generated-user-id",
   );
 
-  await assert.rejects(useCase.execute(validInput), {
+  await assert.rejects(userService.registerUser(validInput), {
     message: "O hash da senha é obrigatório.",
   });
   assert.equal(saveCalls, 0);

@@ -1,6 +1,3 @@
-import type { RefreshToken } from "../../domain/entities/auth.entities.js";
-import type { RefreshTokenRevokeReason } from "../../domain/enums/auth.enums.js";
-
 export interface TokenSubject {
   userId: string;
   sessionId: string;
@@ -25,17 +22,13 @@ export interface TokenHasher {
   matches(token: string, expectedHash: string): Promise<boolean>;
 }
 
-export interface RefreshTokenRepository {
-  save(refreshToken: RefreshToken): Promise<void>;
-  findActiveById(id: string, at: Date): Promise<RefreshToken | null>;
-  registerUse(id: string, lastUsedAt: Date): Promise<void>;
-  revoke(id: string, revokedAt: Date, reason: RefreshTokenRevokeReason): Promise<void>;
-  revokeAllFromUser(userId: string, revokedAt: Date, reason: RefreshTokenRevokeReason): Promise<void>;
-}
-
 export interface RefreshTokensGateway {
   revokeAllFromUser(userId: string): Promise<void>;
 }
+
+export interface LogoutSessionInput { sessionId: string | null; }
+export interface RefreshSessionInput { refreshToken: string; }
+export interface RefreshSessionOutput { accessToken: string; }
 
 export interface AuthenticatedContext {
   userId: string;

@@ -1,15 +1,15 @@
 import { RefreshTokenRevokeReason as PrismaRefreshTokenRevokeReason } from "../../../../../generated/prisma/enums.js";
 import type { PrismaClient } from "../../../../../generated/prisma/client.js";
-import type { RefreshTokenRepository } from "../../application/contracts/auth.contracts.js";
 import { RefreshToken, type RefreshTokenProps } from "../../domain/entities/auth.entities.js";
 import { RefreshTokenRevokeReason } from "../../domain/enums/auth.enums.js";
+import type { RefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
 
 export type PrismaRefreshTokensClient = Pick<PrismaClient, "refreshToken">;
 
-interface RefreshTokenRecord extends RefreshTokenProps {}
+interface RefreshTokenRecord extends RefreshTokenProps { }
 
 export class PrismaRefreshTokenRepository implements RefreshTokenRepository {
-  constructor(private readonly prisma: PrismaRefreshTokensClient) {}
+  constructor(private readonly prisma: PrismaRefreshTokensClient) { }
 
   async save(refreshToken: RefreshToken): Promise<void> {
     await this.prisma.refreshToken.create({

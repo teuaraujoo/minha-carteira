@@ -1,16 +1,10 @@
 import { createHash } from "node:crypto";
+import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 export const MAX_STORED_FILE_SIZE = 10 * 1024 * 1024;
 export const PROFILE_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
-export class StoredFileValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "StoredFileValidationError";
-  }
-}
-
-function invalidFile(message: string): StoredFileValidationError {
-  return new StoredFileValidationError(message);
+function invalidFile(message: string): AppError {
+  return new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message });
 }
 
 function detectMimeType(content: Buffer): string | null {

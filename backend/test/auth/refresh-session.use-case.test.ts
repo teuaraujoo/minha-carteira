@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { RefreshSessionUseCase } from "../../src/modules/auth/application/use-cases/refresh-session.use-case.js";
+import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
 import type {
   JwtProvider,
-  RefreshTokenRepository,
   TokenHasher,
   VerifiedToken,
 } from "../../src/modules/auth/application/contracts/auth.contracts.js";
+import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshToken, type RefreshTokenProps } from "../../src/modules/auth/domain/entities/auth.entities.js";
 import type { UsersAuthGateway } from "../../src/modules/users/index.js";
 import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/users.enums.js";
@@ -98,7 +98,7 @@ function setup(options: {
   };
   const clock: ClockProvider = { now: () => now };
   return {
-    useCase: new RefreshSessionUseCase({ jwtProvider, refreshTokenRepository, usersAuthGateway, tokenHasher, clock }),
+    service: new AuthService(refreshTokenRepository, clock, tokenHasher, { hash: async () => "", compare: async () => false }, usersAuthGateway, jwtProvider, { generate: () => "session-1" }),
     calls,
     get registeredUse() { return registeredUse; },
   };
@@ -111,7 +111,7 @@ function isUnauthorized(error: unknown): boolean {
 
 test("emite access token, registra uso e mantém refresh sem rotação", async () => {
   const fixture = setup();
-  const result = await fixture.useCase.execute({ refreshToken: rawRefreshToken });
+  const result = await fixture.service.refresh({ refreshToken: rawRefreshToken });
 
   assert.deepEqual(result, { accessToken: "new-access-token" });
   assert.deepEqual(fixture.calls, ["verifyRefreshToken", "findActiveById", "matches", "findActiveUserById", "signAccessToken", "registerUse"]);
@@ -120,22 +120,24 @@ test("emite access token, registra uso e mantém refresh sem rotação", async (
 });
 
 test("rejeita sessão ausente, dono divergente, hash divergente e usuário inativo", async () => {
-  await assert.rejects(setup({ currentSession: null }).useCase.execute({ refreshToken: rawRefreshToken }), isUnauthorized);
-  await assert.rejects(setup({ currentSession: session({ userId: "user-2" }) }).useCase.execute({ refreshToken: rawRefreshToken }), isUnauthorized);
-  await assert.rejects(setup({ hashMatches: false }).useCase.execute({ refreshToken: rawRefreshToken }), isUnauthorized);
-  await assert.rejects(setup({ activeUser: null }).useCase.execute({ refreshToken: rawRefreshToken }), isUnauthorized);
-  await assert.rejects(setup({ activeUser: { id: "user-1", status: "INACTIVE" } }).useCase.execute({ refreshToken: rawRefreshToken }), isUnauthorized);
+  await assert.rejects(setup({ currentSession: null }).service.refresh({ refreshToken: rawRefreshToken }), isUnauthorized);
+  await assert.rejects(setup({ currentSession: session({ userId: "user-2" }) }).service.refresh({ refreshToken: rawRefreshToken }), isUnauthorized);
+  await assert.rejects(setup({ hashMatches: false }).service.refresh({ refreshToken: rawRefreshToken }), isUnauthorized);
+  await assert.rejects(setup({ activeUser: null }).service.refresh({ refreshToken: rawRefreshToken }), isUnauthorized);
+  await assert.rejects(setup({ activeUser: { id: "user-1", status: "INACTIVE" } }).service.refresh({ refreshToken: rawRefreshToken }), isUnauthorized);
 });
 
 test("rejeita token de tipo divergente e entrada vazia", async () => {
-  await assert.rejects(setup({ verified: { ...verifiedRefresh, type: "access" } }).useCase.execute({ refreshToken: rawRefreshToken }), isUnauthorized);
-  await assert.rejects(setup().useCase.execute({ refreshToken: " " }), isUnauthorized);
+  await assert.rejects(setup({ verified: { ...verifiedRefresh, type: "access" } }).service.refresh({ refreshToken: rawRefreshToken }), isUnauthorized);
+  await assert.rejects(setup().service.refresh({ refreshToken: " " }), isUnauthorized);
 });
 
 test("traduz token expirado ou inválido para erro genérico de autenticação", async () => {
-  await assert.rejects(setup({ verifyError: new AppError({
-    status: 401, code: ErrorCode.UNAUTHORIZED, message: "Token inválido ou expirado.",
-  }) }).useCase.execute({ refreshToken: rawRefreshToken }), isUnauthorized);
+  await assert.rejects(setup({
+    verifyError: new AppError({
+      status: 401, code: ErrorCode.UNAUTHORIZED, message: "Token inválido ou expirado.",
+    })
+  }).service.refresh({ refreshToken: rawRefreshToken }), isUnauthorized);
 });
 
 test("hasheia tokens e compara hashes com formato validado", async () => {

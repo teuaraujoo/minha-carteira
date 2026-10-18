@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LogoutSessionUseCase } from "../../src/modules/auth/application/use-cases/logout-session.use-case.js";
-import type { RefreshTokenRepository } from "../../src/modules/auth/application/contracts/auth.contracts.js";
+import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
+import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
 
@@ -25,7 +25,7 @@ function setup() {
   } as RefreshTokenRepository;
   const clock: ClockProvider = { now: () => revokedAt };
   return {
-    useCase: new LogoutSessionUseCase({ refreshTokenRepository: repository, clock }),
+    service: new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }),
     calls,
     alreadyRevoked,
     get effectiveRevocations() { return effectiveRevocations; },
@@ -34,7 +34,7 @@ function setup() {
 
 test("revoga a sessão atual com motivo LOGOUT e data do clock", async () => {
   const fixture = setup();
-  await fixture.useCase.execute({ sessionId: "session-1" });
+  await fixture.service.logout({ sessionId: "session-1" });
 
   assert.deepEqual(fixture.calls, [{
     id: "session-1", at: revokedAt, reason: RefreshTokenRevokeReason.LOGOUT,
@@ -45,10 +45,10 @@ test("revoga a sessão atual com motivo LOGOUT e data do clock", async () => {
 
 test("logout repetido e sessão ausente permanecem idempotentes", async () => {
   const fixture = setup();
-  await fixture.useCase.execute({ sessionId: "session-1" });
-  await fixture.useCase.execute({ sessionId: "session-1" });
-  await fixture.useCase.execute({ sessionId: null });
-  await fixture.useCase.execute({ sessionId: " " });
+  await fixture.service.logout({ sessionId: "session-1" });
+  await fixture.service.logout({ sessionId: "session-1" });
+  await fixture.service.logout({ sessionId: null });
+  await fixture.service.logout({ sessionId: " " });
 
   assert.equal(fixture.calls.length, 2);
   assert.equal(fixture.effectiveRevocations, 1);
@@ -59,10 +59,7 @@ test("propaga falhas de persistência para que a camada HTTP não confirme falso
   const repository = {
     async revoke() { throw expectedError; },
   } as Pick<RefreshTokenRepository, "revoke"> as RefreshTokenRepository;
-  const useCase = new LogoutSessionUseCase({
-    refreshTokenRepository: repository,
-    clock: { now: () => revokedAt },
-  });
+  const service = new AuthService(repository, { now: () => revokedAt }, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
 
-  await assert.rejects(useCase.execute({ sessionId: "session-1" }), error => error === expectedError);
+  await assert.rejects(service.logout({ sessionId: "session-1" }), error => error === expectedError);
 });

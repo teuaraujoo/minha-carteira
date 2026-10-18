@@ -1,11 +1,9 @@
 import { User } from "../../domain/entities/users.entity.js";
 import { UserCapabilities, UserRoles, UserStatus } from "../../domain/enums/users.enums.js";
-import { UserIdentityConflictError } from "../../domain/errors/user-identity-conflict.error.js";
-import type {
-  IUsersRepository,
-  PaginatedResult,
-  PaginationInput,
-} from "../../domain/interfaces/users-repository.interface.js";
+import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
+import type { IUsersRepository } from "../../domain/interfaces/users-repository.interface.js";
+import { createPaginationMeta } from "../../../../shared/presentation/http/pagination.js";
+import type { PaginationInput, PaginationMeta } from "../../../../shared/application/contracts/pagination.contract.js";
 import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client.js";
 
 interface UserRecord {
@@ -26,7 +24,7 @@ interface UserRecord {
 export type PrismaUsersClient = Pick<PrismaClient, "user">;
 
 export class PrismaUsersRepository implements IUsersRepository {
-  constructor(private readonly prisma: PrismaUsersClient) {}
+  constructor(private readonly prisma: PrismaUsersClient) { }
 
   async findById(id: string): Promise<User | null> {
     return this.toDomain(await this.prisma.user.findUnique({ where: { id } }) as UserRecord | null);
@@ -71,7 +69,7 @@ export class PrismaUsersRepository implements IUsersRepository {
       });
     } catch (error) {
       const conflictField = this.identityConflictField(error);
-      if (conflictField) throw new UserIdentityConflictError(conflictField);
+      if (conflictField) throw new AppError({ status: 409, code: ErrorCode.CONFLICT, message: "E-mail ou nome de usuário já está em uso.", cause: error });
       throw error;
     }
   }
@@ -80,7 +78,7 @@ export class PrismaUsersRepository implements IUsersRepository {
     await this.prisma.user.delete({ where: { id } });
   }
 
-  async findInactiveBefore(date: Date, pagination: PaginationInput): Promise<PaginatedResult<User>> {
+  async findInactiveBefore(date: Date, pagination: PaginationInput): Promise<{ items: User[]; pagination: PaginationMeta }> {
     const where = { status: UserStatus.INACTIVE, inactivatedAt: { lt: date } };
     const [records, total] = await Promise.all([
       this.prisma.user.findMany({ where, skip: pagination.offset, take: pagination.pageSize, orderBy: { inactivatedAt: "asc" } }),
@@ -88,12 +86,7 @@ export class PrismaUsersRepository implements IUsersRepository {
     ]);
     return {
       items: records.map(record => this.toDomain(record as UserRecord)).filter((user): user is User => user !== null),
-      pagination: {
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-        total,
-        totalPages: Math.ceil(total / pagination.pageSize),
-      },
+      pagination: createPaginationMeta(pagination, total),
     };
   }
 

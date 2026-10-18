@@ -3,8 +3,8 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import type { NextFunction, Request, Response } from "express";
 import { createApp } from "../../src/app/app.js";
-import { UserService } from "../../src/modules/users/application/services/users.service.js";
-import { UserNotFoundError } from "../../src/modules/users/domain/errors/user-not-found.error.js";
+import { createUserService } from "../users/user-service.test-support.js";
+import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 import { User } from "../../src/modules/users/domain/entities/users.entity.js";
 import type { AppLogger, LogInput } from "../../src/shared/application/logging/app-logger.js";
 import type { StorageOperations } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
@@ -22,7 +22,7 @@ class CapturingLogger implements AppLogger {
   warn(input: LogInput): void { this.logs.push({ level: "warn", input }); }
   error(input: LogInput): void { this.logs.push({ level: "error", input }); }
   fatal(input: LogInput): void { this.logs.push({ level: "fatal", input }); }
-  async close(): Promise<void> {}
+  async close(): Promise<void> { }
 }
 
 function repository(profile: User | null) {
@@ -52,7 +52,7 @@ test("UserService logs the confirmed upload with request context and approved fi
     getPresignedUrl: async () => "https://storage.example/profile.png",
     replaceFileContent: async () => { await uploaded; return { file: {} as never, url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") }; },
   };
-  const service = new UserService(repository(createProfile()), storageProvider, logContext);
+  const service = createUserService(repository(createProfile()), storageProvider, logContext);
 
   await logContext.runWithRequest("internal-request-id", async () => {
     const result = service.uploadProfileImage(input);
@@ -84,7 +84,7 @@ test("HTTP middleware and service share the same contextual requestId", async ()
     getPresignedUrl: async () => "unused",
     replaceFileContent: async () => ({ file: {} as never, url: "unused", expiresAt: new Date() }),
   };
-  const service = new UserService(repository(createProfile()), storageProvider, logContext);
+  const service = createUserService(repository(createProfile()), storageProvider, logContext);
   const request = { method: "POST", baseUrl: "", route: { path: "/users/:id/image" } } as unknown as Request;
   const response = Object.assign(new EventEmitter(), { locals: {}, statusCode: 200 }) as unknown as Response;
   let upload: Promise<unknown> | undefined;
@@ -111,9 +111,9 @@ test("UserService does not log upload success when the user is absent", async ()
     getPresignedUrl: async () => "unused",
     replaceFileContent: async () => { replacements++; return { file: {} as never, url: "unused", expiresAt: new Date() }; },
   };
-  const service = new UserService(repository(null), storageProvider, new LogContext(logger));
+  const service = createUserService(repository(null), storageProvider, new LogContext(logger));
 
-  await assert.rejects(service.uploadProfileImage(input), UserNotFoundError);
+  await assert.rejects(service.uploadProfileImage(input), (error) => error instanceof AppError && error.status === 404 && error.code === ErrorCode.NOT_FOUND);
   assert.equal(replacements, 0);
   assert.deepEqual(logger.logs, []);
 });
@@ -127,7 +127,7 @@ test("UserService propagates upload failures without a success log", async () =>
     getPresignedUrl: async () => "unused",
     replaceFileContent: async () => { throw failure; },
   };
-  const service = new UserService(repository(createProfile()), storageProvider, new LogContext(logger));
+  const service = createUserService(repository(createProfile()), storageProvider, new LogContext(logger));
 
   await assert.rejects(service.uploadProfileImage(input), (error) => error === failure);
   assert.deepEqual(logger.logs, []);

@@ -2,7 +2,8 @@ import type { Request, RequestHandler } from "express";
 import type { ClockProvider } from "../../../../shared/application/clock-provider.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import type { UsersAuthGateway } from "../../../users/index.js";
-import type { JwtProvider, RefreshTokenRepository } from "../../application/contracts/auth.contracts.js";
+import type { JwtProvider } from "../../application/contracts/auth.contracts.js";
+import type { RefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
 
 export type AccessTokenResolver = (request: Request) => string | undefined;
 

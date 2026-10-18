@@ -1,22 +1,5 @@
 import type { User } from "../entities/users.entity.js";
-
-export interface PaginationInput {
-  page: number;
-  pageSize: number;
-  offset: number;
-}
-
-export interface PaginationMetadata {
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-}
-
-export interface PaginatedResult<T> {
-  items: T[];
-  pagination: PaginationMetadata;
-}
+import type { PaginationInput, PaginationMeta } from "../../../../shared/application/contracts/pagination.contract.js";
 
 export interface IUsersRepository {
   findById(id: string): Promise<User | null>;
@@ -29,5 +12,5 @@ export interface IUsersRepository {
   findInactiveBefore(
     date: Date,
     pagination: PaginationInput,
-  ): Promise<PaginatedResult<User>>;
+  ): Promise<{ items: User[]; pagination: PaginationMeta }>;
 }

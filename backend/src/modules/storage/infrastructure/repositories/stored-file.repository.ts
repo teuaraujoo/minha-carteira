@@ -2,7 +2,7 @@ import prisma from "../../../../shared/infrastructure/database/prisma-client.js"
 import { StorageContextType as PrismaStorageContextType, StorageStatus as PrismaStorageStatus } from "../../../../../generated/prisma/enums.js";
 import { StorageContextType, StorageProvider, StorageStatus } from "../../domain/enums/storage.enums.js";
 import type { IStoredFileRepository } from "../../domain/interfaces/storage-repository.interface.js";
-import { StoredFile } from "../../domain/interfaces/storage.interfaces.js";
+import { StoredFile } from "../../domain/entities/stored-file.entity.js";
 
 function mapStoredFile(record: {
   id: string;
@@ -38,22 +38,24 @@ export class PrismaStoredFileRepository implements IStoredFileRepository {
   }
 
   async create(file: StoredFile): Promise<StoredFile> {
-    const record = await prisma.storedFile.create({ data: {
-      id: file.id,
-      ownerUserId: file.ownerUserId,
-      contextType: PrismaStorageContextType[file.contextType],
-      contextId: file.contextId,
-      storageProvider: "CLOUDFLARE_R2",
-      storageKey: file.storageKey,
-      originalName: file.originalName,
-      mimeType: file.mimeType,
-      sizeInBytes: file.sizeInBytes,
-      checksum: file.checksum,
-      status: PrismaStorageStatus[file.status],
-      createdAt: file.createdAt,
-      updatedAt: file.updatedAt,
-      deletedAt: file.deletedAt,
-    } });
+    const record = await prisma.storedFile.create({
+      data: {
+        id: file.id,
+        ownerUserId: file.ownerUserId,
+        contextType: PrismaStorageContextType[file.contextType],
+        contextId: file.contextId,
+        storageProvider: "CLOUDFLARE_R2",
+        storageKey: file.storageKey,
+        originalName: file.originalName,
+        mimeType: file.mimeType,
+        sizeInBytes: file.sizeInBytes,
+        checksum: file.checksum,
+        status: PrismaStorageStatus[file.status],
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
+        deletedAt: file.deletedAt,
+      }
+    });
     return mapStoredFile(record);
   }
 

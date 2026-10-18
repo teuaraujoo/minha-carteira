@@ -4,13 +4,11 @@ import test from "node:test";
 import type { NextFunction, Request, Response } from "express";
 import type { StorageOperations, StoredFileInput, StoredFileOutput } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
 import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
-import { AppError } from "../../src/shared/presentation/http/app-error.js";
 import { User } from "../../src/modules/users/domain/entities/users.entity.js";
 import { createUsersRepositoryDouble } from "./users-repository.double.js";
-import { UserService } from "../../src/modules/users/application/services/users.service.js";
-import { UserNotFoundError } from "../../src/modules/users/domain/errors/user-not-found.error.js";
+import { createUserService } from "./user-service.test-support.js";
+import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 import { UserController } from "../../src/modules/users/presentation/controllers/users.controller.js";
-import { StoredFileValidationError } from "../../src/modules/storage/domain/validation/file-validation.js";
 import { profileImageUpload } from "../../src/modules/users/presentation/middlewares/image-upload.middleware.js";
 import { uploadProfileImageSchema } from "../../src/modules/users/presentation/schemas/users.schemas.js";
 
@@ -119,14 +117,14 @@ test("schema accepts only normalized binary images within the approved types and
 test("controller normalizes req.file and delegates profile replacement to storage", async () => {
   const calls: StoredFileInput[] = [];
   const storageProvider: StorageOperations = {
-    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
+    async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
     async replaceFileContent(input): Promise<StoredFileOutput> {
       calls.push(input);
       return { file: {} as never, url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") };
     },
   };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => createProfile() });
-  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+  const controller = new UserController(createUserService(repository, storageProvider, noopLogger));
   const sent: unknown[] = [];
   const response = {
     status(status: number) { assert.equal(status, 200); return this; },
@@ -147,9 +145,9 @@ test("controller normalizes req.file and delegates profile replacement to storag
 
 test("controller rejects missing files and invalid image data before storage", async () => {
   let replacements = 0;
-  const storageProvider: StorageOperations = { async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; }, async replaceFileContent() { replacements++; throw new Error("Não deveria ser chamado."); } };
+  const storageProvider: StorageOperations = { async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; }, async replaceFileContent() { replacements++; throw new Error("Não deveria ser chamado."); } };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => createProfile() });
-  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+  const controller = new UserController(createUserService(repository, storageProvider, noopLogger));
   for (const request of [
     { body: { userId: profileId }, file: { buffer: Buffer.from([1]), mimetype: "image/png", size: 1 } },
     { auth: { userId: profileId, sessionId: "session-id" }, body: { userId: "../outside" }, file: { buffer: Buffer.from([1]), mimetype: "text/plain", size: 1 } },
@@ -161,11 +159,11 @@ test("controller rejects missing files and invalid image data before storage", a
 
 test("controller rejects requests without the authenticated context", async () => {
   const storageProvider: StorageOperations = {
-    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
+    async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
     async replaceFileContent() { throw new Error("Não deveria ser chamado."); },
   };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => createProfile() });
-  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+  const controller = new UserController(createUserService(repository, storageProvider, noopLogger));
 
   await assert.rejects(controller.uploadProfileImage({
     body: { userId: profileId },
@@ -175,11 +173,11 @@ test("controller rejects requests without the authenticated context", async () =
 
 test("controller maps storage file validation failures to HTTP validation errors", async () => {
   const storageProvider: StorageOperations = {
-    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
-    async replaceFileContent() { throw new StoredFileValidationError("O conteúdo do arquivo está corrompido."); },
+    async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
+    async replaceFileContent() { throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "O conteúdo do arquivo está corrompido." }); },
   };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => createProfile() });
-  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+  const controller = new UserController(createUserService(repository, storageProvider, noopLogger));
   const request = {
     auth: { userId: profileId, sessionId: "session-id" },
     file: { buffer: Buffer.from([1, 2, 3]), mimetype: "image/png", size: 3 },
@@ -195,11 +193,11 @@ test("controller maps storage file validation failures to HTTP validation errors
 
 test("controller maps missing users to an HTTP not-found error", async () => {
   const storageProvider: StorageOperations = {
-    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
+    async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
     async replaceFileContent() { throw new Error("Não deveria ser chamado."); },
   };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => null });
-  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+  const controller = new UserController(createUserService(repository, storageProvider, noopLogger));
 
   await assert.rejects(controller.uploadProfileImage({
     auth: { userId: profileId, sessionId: "session-id" },
@@ -209,7 +207,7 @@ test("controller maps missing users to an HTTP not-found error", async () => {
     assert.equal(error.status, 404);
     assert.equal(error.code, "NOT_FOUND");
     assert.equal(error.message, "Usuário não encontrado.");
-    assert.ok(error.cause instanceof UserNotFoundError);
+    assert.ok(error instanceof AppError && error.code === ErrorCode.NOT_FOUND);
     return true;
   });
 });

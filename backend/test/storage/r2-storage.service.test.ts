@@ -3,7 +3,7 @@ import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } fro
 import test from "node:test";
 import { createR2Client } from "../../src/modules/storage/infrastructure/providers/cloudflare-r2/r2-client.js";
 import { R2StorageService } from "../../src/modules/storage/infrastructure/providers/cloudflare-r2/r2-storage.service.js";
-import { StorageProviderError } from "../../src/modules/storage/domain/errors/storage-provider.error.js";
+import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 
 test("R2 client is configured from explicit configuration and returns the bucket", () => {
   const configured = createR2Client({
@@ -57,7 +57,7 @@ test("R2 adapter maps provider failures to a safe Portuguese error", async () =>
   const storage = new R2StorageService(client, "minha-carteira-test");
 
   await assert.rejects(storage.upload("profile/opaque-key", Buffer.from("conteudo"), "image/png"), (error: unknown) => {
-    assert.ok(error instanceof StorageProviderError);
+    assert.ok(error instanceof AppError && error.status === 500 && error.code === ErrorCode.INTERNAL_ERROR);
     assert.equal(error.message, "Não foi possível armazenar o arquivo no Cloudflare R2.");
     assert.equal(error.message.includes("Detalhe interno"), false);
     return true;

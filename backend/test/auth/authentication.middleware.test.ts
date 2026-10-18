@@ -5,9 +5,9 @@ import type { Request, Response, NextFunction } from "express";
 import { createAuthenticationMiddleware } from "../../src/modules/auth/presentation/middlewares/authentication.middleware.js";
 import type {
   JwtProvider,
-  RefreshTokenRepository,
   VerifiedToken,
 } from "../../src/modules/auth/application/contracts/auth.contracts.js";
+import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshToken, type RefreshTokenProps } from "../../src/modules/auth/domain/entities/auth.entities.js";
 import type { UsersAuthGateway } from "../../src/modules/users/index.js";
 import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/users.enums.js";

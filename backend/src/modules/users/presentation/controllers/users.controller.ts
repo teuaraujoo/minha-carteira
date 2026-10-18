@@ -1,52 +1,40 @@
 import type { Request, Response } from "express";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import { sendSuccess } from "../../../../shared/presentation/http/success-response.js";
-import { StoredFileValidationError } from "../../../storage/domain/validation/file-validation.js";
 import type { UserService } from "../../application/services/users.service.js";
-import { UserNotFoundError } from "../../domain/errors/user-not-found.error.js";
 import { uploadProfileImageSchema } from "../schemas/users.schemas.js";
 
 type AuthenticatedRequest = Request & {
-    auth?: { userId: string; sessionId: string };
+  auth?: { userId: string; sessionId: string };
 };
 
 export class UserController {
-    constructor(
-        private readonly userService: UserService,
-    ) { }
+  constructor(
+    private readonly userService: UserService,
+  ) { }
 
-    async uploadProfileImage(request: Request, response: Response): Promise<void> {
-        const userId = (request as AuthenticatedRequest).auth?.userId;
-        if (!userId) {
-            throw new AppError({ status: 401, code: ErrorCode.UNAUTHORIZED, message: "Autenticação obrigatória." });
-        }
+  async uploadProfileImage(request: Request, response: Response): Promise<void> {
+    const userId = (request as AuthenticatedRequest).auth?.userId;
+    if (!userId) {
+      throw new AppError({ status: 401, code: ErrorCode.UNAUTHORIZED, message: "Autenticação obrigatória." });
+    }
 
-        if (!request.file) {
-            throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Imagem de perfil obrigatória." });
-        }
+    if (!request.file) {
+      throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Imagem de perfil obrigatória." });
+    }
 
-        const parsed = uploadProfileImageSchema.safeParse({
-            image: {
-                content: request.file.buffer,
-                contentType: request.file.mimetype,
-                size: request.file.size,
-            },
-        });
-        if (!parsed.success) {
-            throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Dados da imagem de perfil inválidos.", cause: parsed.error });
-        }
+    const parsed = uploadProfileImageSchema.safeParse({
+      image: {
+        content: request.file.buffer,
+        contentType: request.file.mimetype,
+        size: request.file.size,
+      },
+    });
+    if (!parsed.success) {
+      throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Dados da imagem de perfil inválidos.", cause: parsed.error });
+    }
 
-        try {
-            const result = await this.userService.uploadProfileImage({ userId, ...parsed.data });
-            sendSuccess(response, result);
-        } catch (error) {
-            if (error instanceof UserNotFoundError) {
-                throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: error.message, cause: error });
-            }
-            if (error instanceof StoredFileValidationError) {
-                throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: error.message, cause: error });
-            }
-            throw error;
-        }
-    };
+    const result = await this.userService.uploadProfileImage({ userId, ...parsed.data });
+    sendSuccess(response, result);
+  };
 }

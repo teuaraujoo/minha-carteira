@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { StoredFile, type StorageOperations, type StoredFileInput, type StoredFileOutput, type ObjectStorageProvider } from "../../domain/interfaces/storage.interfaces.js";
+import { StoredFile } from "../../domain/entities/stored-file.entity.js";
+import type { StorageOperations, StoredFileInput, StoredFileOutput, ObjectStorageProvider } from "../../domain/interfaces/storage.interfaces.js";
 import { StorageProvider, StorageStatus } from "../../domain/enums/storage.enums.js";
-import { StoredFileValidationError, validateStoredFile } from "../../domain/validation/file-validation.js";
+import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
+import { validateStoredFile } from "../../domain/validation/file-validation.js";
 import { buildStorageKey } from "../utils/storage.utils.js";
 import type { IStoredFileRepository } from "../../domain/interfaces/storage-repository.interface.js";
 
@@ -13,7 +15,7 @@ export class StorageService implements StorageOperations {
     private readonly repository: IStoredFileRepository,
     private readonly objectStorage: ObjectStorageProvider,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) { }
 
   upload(key: string, body: Buffer, contentType: string): Promise<void> {
     return this.objectStorage.upload(key, body, contentType);
@@ -46,10 +48,10 @@ export class StorageService implements StorageOperations {
 
   private async replaceWithLock(input: StoredFileInput): Promise<StoredFileOutput> {
     if (!input.ownerUserId.trim() || !input.contextId.trim()) {
-      throw new StoredFileValidationError("O proprietário e o contexto do arquivo são obrigatórios.");
+      throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "O proprietário e o contexto do arquivo são obrigatórios." });
     }
     if (input.originalName && input.originalName.length > 255) {
-      throw new StoredFileValidationError("O nome original do arquivo excede 255 caracteres.");
+      throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "O nome original do arquivo excede 255 caracteres." });
     }
     const validation = validateStoredFile(input.content, input.mimeType);
     const previous = await this.repository.findActiveByContext(input.contextType, input.contextId);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { User } from "../../src/modules/users/domain/entities/users.entity.js";
 import { UserCapabilities, UserRoles, UserStatus } from "../../src/modules/users/domain/enums/users.enums.js";
-import { UserIdentityConflictError } from "../../src/modules/users/domain/errors/user-identity-conflict.error.js";
+import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 import type { PrismaUsersClient } from "../../src/modules/users/infrastructure/repositories/users.repository.js";
 import { PrismaUsersRepository } from "../../src/modules/users/infrastructure/repositories/users.repository.js";
 
@@ -151,7 +151,7 @@ test("repository persiste estado completo e traduz conflito único de identidade
   };
   await assert.rejects(
     new PrismaUsersRepository(conflictFake.prisma).save(user),
-    (error: unknown) => error instanceof UserIdentityConflictError && error.field === "email",
+    (error: unknown) => error instanceof AppError && error.status === 409 && error.code === ErrorCode.CONFLICT,
   );
 });
 

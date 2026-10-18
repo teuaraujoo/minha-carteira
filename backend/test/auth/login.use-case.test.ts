@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LoginUseCase } from "../../src/modules/auth/application/use-cases/login.use-case.js";
+import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
 import { mapLoginOutput } from "../../src/modules/auth/application/dto/login.dto.js";
-import { InvalidCredentialsError } from "../../src/modules/auth/application/errors/invalid-credentials.error.js";
+import { AppError } from "../../src/shared/presentation/http/app-error.js";
 import type {
   JwtProvider,
-  RefreshTokenRepository,
   TokenHasher,
   TokenSubject,
 } from "../../src/modules/auth/application/contracts/auth.contracts.js";
+import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { REFRESH_TOKEN_TTL_MS, type RefreshToken } from "../../src/modules/auth/domain/entities/auth.entities.js";
 import type { AuthUser, AuthUserCredentials, UsersAuthGateway } from "../../src/modules/users/index.js";
 import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/users.enums.js";
@@ -94,10 +94,7 @@ function setup(options: {
   };
   const clock: ClockProvider = { now: () => now };
   return {
-    useCase: new LoginUseCase({
-      usersAuthGateway, passwordHasher, idGenerator, jwtProvider,
-      tokenHasher, refreshTokenRepository, clock,
-    }),
+    service: new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersAuthGateway, jwtProvider, idGenerator),
     calls,
     savedSessions,
     get generatedIds() { return generatedIds; },
@@ -108,7 +105,7 @@ async function unauthorizedSnapshot(promise: Promise<unknown>): Promise<{ name: 
   try {
     await promise;
   } catch (error) {
-    assert.ok(error instanceof InvalidCredentialsError);
+    assert.ok(error instanceof AppError);
     return { name: error.name, message: error.message };
   }
   assert.fail("Era esperado que o login fosse rejeitado.");
@@ -116,7 +113,7 @@ async function unauthorizedSnapshot(promise: Promise<unknown>): Promise<{ name: 
 
 test("autentica por e-mail normalizado e preserva a senha sem trim", async () => {
   const fixture = setup();
-  const result = await fixture.useCase.execute({ identifier: "  ANA@EXAMPLE.COM  ", password: rawPassword });
+  const result = await fixture.service.login({ identifier: "  ANA@EXAMPLE.COM  ", password: rawPassword });
   const session = fixture.savedSessions[0];
 
   assert.equal(fixture.calls[0]?.method, "findCredentialsByIdentifier");
@@ -143,7 +140,7 @@ test("autentica por e-mail normalizado e preserva a senha sem trim", async () =>
 
 test("autentica por username normalizado sem interpretar @", async () => {
   const fixture = setup();
-  await fixture.useCase.execute({ identifier: "  MinhaConta  ", password: rawPassword });
+  await fixture.service.login({ identifier: "  MinhaConta  ", password: rawPassword });
   assert.equal(fixture.calls[0]?.input, "minhaconta");
 });
 
@@ -154,15 +151,15 @@ test("usuário ausente, senha incorreta e usuário inativo têm o mesmo erro pú
   const deactivatedDuringLogin = setup({ user: null });
 
   const errors = await Promise.all([
-    unauthorizedSnapshot(missingUser.useCase.execute({ identifier: "unknown", password: rawPassword })),
-    unauthorizedSnapshot(wrongPassword.useCase.execute({ identifier: "ana@example.com", password: rawPassword })),
-    unauthorizedSnapshot(inactiveUser.useCase.execute({ identifier: "ana@example.com", password: rawPassword })),
-    unauthorizedSnapshot(deactivatedDuringLogin.useCase.execute({ identifier: "ana@example.com", password: rawPassword })),
+    unauthorizedSnapshot(missingUser.service.login({ identifier: "unknown", password: rawPassword })),
+    unauthorizedSnapshot(wrongPassword.service.login({ identifier: "ana@example.com", password: rawPassword })),
+    unauthorizedSnapshot(inactiveUser.service.login({ identifier: "ana@example.com", password: rawPassword })),
+    unauthorizedSnapshot(deactivatedDuringLogin.service.login({ identifier: "ana@example.com", password: rawPassword })),
   ]);
 
   assert.deepEqual(errors, Array.from({ length: errors.length }, () => ({
-    name: "InvalidCredentialsError",
-    message: "Identificador ou senha inválidos.",
+    name: "AppError",
+    message: "E-mail, nome de usuário ou senha inválidos.",
   })));
   assert.equal(missingUser.savedSessions.length, 0);
   assert.equal(wrongPassword.savedSessions.length, 0);
@@ -173,11 +170,11 @@ test("usuário ausente, senha incorreta e usuário inativo têm o mesmo erro pú
 
 test("rejeita identificador vazio com a mesma resposta genérica", async () => {
   const fixture = setup();
-  const error = await unauthorizedSnapshot(fixture.useCase.execute({ identifier: " ", password: rawPassword }));
+  const error = await unauthorizedSnapshot(fixture.service.login({ identifier: " ", password: rawPassword }));
 
   assert.deepEqual(error, {
-    name: "InvalidCredentialsError",
-    message: "Identificador ou senha inválidos.",
+    name: "AppError",
+    message: "E-mail, nome de usuário ou senha inválidos.",
   });
   assert.equal(fixture.calls.length, 0);
 });

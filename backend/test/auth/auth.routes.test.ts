@@ -3,7 +3,8 @@ import test from "node:test";
 import type { AddressInfo } from "node:net";
 import type { AuthUser, RegisterUserInput, UsersAuthGateway, UsersRegistrationGateway } from "../../src/modules/users/index.js";
 import { UserStatus, UserRoles } from "../../src/modules/users/domain/enums/users.enums.js";
-import type { JwtProvider, RefreshTokenRepository, TokenHasher, VerifiedToken } from "../../src/modules/auth/application/contracts/auth.contracts.js";
+import type { JwtProvider, TokenHasher, VerifiedToken } from "../../src/modules/auth/application/contracts/auth.contracts.js";
+import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshToken, ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../src/modules/auth/domain/entities/auth.entities.js";
 import { createAuthRouter, type AuthRoutesDependencies } from "../../src/modules/auth/presentation/routes/auth.routes.js";
 import { AUTH_COOKIE_NAMES, AUTH_COOKIE_PATHS } from "../../src/modules/auth/presentation/security/auth-cookies.js";
@@ -84,9 +85,11 @@ function createDependencies(overrides: Partial<AuthRoutesDependencies> = {}): Au
     matches: async (token, hash) => token === "refresh-token" && hash === "hash",
   };
   return {
-    loginUseCase: { execute: async () => ({ user, accessToken: "access-token", refreshToken: "refresh-token" }) },
-    refreshSessionUseCase: { execute: async () => ({ accessToken: "access-refreshed" }) },
-    logoutSessionUseCase: { execute: async () => undefined },
+    authService: {
+      login: async () => ({ user, accessToken: "access-token", refreshToken: "refresh-token" }),
+      refresh: async () => ({ accessToken: "access-refreshed" }),
+      logout: async () => undefined,
+    },
     usersRegistrationGateway,
     jwtProvider,
     refreshTokenRepository,
@@ -238,7 +241,7 @@ test("/me retorna apenas contexto autenticado e logout limpa cookies", async () 
 
 test("logout inválido ainda limpa cookies sem revogar uma sessão desconhecida", async () => {
   let revokedSessionId: string | null | undefined;
-  const logoutSessionUseCase = { execute: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; } };
+  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; } };
   await withServer(async (baseUrl) => {
     const csrf = await issueCsrf(baseUrl);
     const response = await fetch(`${baseUrl}/logout`, {
@@ -254,7 +257,7 @@ test("logout inválido ainda limpa cookies sem revogar uma sessão desconhecida"
     const cookies = response.headers.get("set-cookie") ?? "";
     assert.ok(cookies.includes(`${AUTH_COOKIE_NAMES.access}=`));
     assert.ok(cookies.includes(`${AUTH_COOKIE_NAMES.refresh}=`));
-  }, { logoutSessionUseCase });
+  }, { authService });
 });
 
 test("logout usa refresh válido quando o access token expirou", async () => {
@@ -265,7 +268,7 @@ test("logout usa refresh válido quando o access token expirou", async () => {
     verifyAccessToken: async () => { throw new Error("Token expirado."); },
     verifyRefreshToken: async () => verified("refresh"),
   };
-  const logoutSessionUseCase = { execute: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; } };
+  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; } };
   await withServer(async (baseUrl) => {
     const csrf = await issueCsrf(baseUrl);
     const response = await fetch(`${baseUrl}/logout`, {
@@ -278,7 +281,7 @@ test("logout usa refresh válido quando o access token expirou", async () => {
     });
     assert.equal(response.status, 204);
     assert.equal(revokedSessionId, "session-1");
-  }, { jwtProvider, logoutSessionUseCase });
+  }, { jwtProvider, authService });
 });
 
 test("refresh e logout também bloqueiam operações sem CSRF", async () => {
@@ -298,8 +301,11 @@ test("refresh e logout também bloqueiam operações sem CSRF", async () => {
     assert.equal(refreshCalls, 0);
     assert.equal(logoutCalls, 0);
   }, {
-    refreshSessionUseCase: { execute: async () => { refreshCalls += 1; return { accessToken: "access" }; } },
-    logoutSessionUseCase: { execute: async () => { logoutCalls += 1; } },
+    authService: {
+      login: async () => { throw new Error("Não esperado."); },
+      refresh: async () => { refreshCalls += 1; return { accessToken: "access" }; },
+      logout: async () => { logoutCalls += 1; },
+    },
   });
 });
 

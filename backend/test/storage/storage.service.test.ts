@@ -4,7 +4,8 @@ import test from "node:test";
 import { StorageService } from "../../src/modules/storage/application/services/storage.service.js";
 import { StorageContextType, StorageProvider, StorageStatus } from "../../src/modules/storage/domain/enums/storage.enums.js";
 import type { IStoredFileRepository } from "../../src/modules/storage/domain/interfaces/storage-repository.interface.js";
-import { StoredFile, type ObjectStorageProvider } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
+import { StoredFile } from "../../src/modules/storage/domain/entities/stored-file.entity.js";
+import type { ObjectStorageProvider } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
 
 const ownerUserId = "123e4567-e89b-42d3-a456-426614174000";
 const content = createPngContainer();

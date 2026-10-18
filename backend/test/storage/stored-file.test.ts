@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { StorageProvider, StorageStatus, StorageContextType } from "../../src/modules/storage/domain/enums/storage.enums.js";
-import { StoredFile } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
+import { StoredFile } from "../../src/modules/storage/domain/entities/stored-file.entity.js";
 
 function storedFileProperties(status = StorageStatus.PROCESSING) {
   const createdAt = new Date("2026-10-17T10:00:00.000Z");

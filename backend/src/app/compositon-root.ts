@@ -2,15 +2,12 @@ import { randomUUID } from "node:crypto";
 import { BcryptPasswordHasher } from "../shared/infrastructure/security/bcrypt-password-hasher.js";
 import prisma from "../shared/infrastructure/database/prisma-client.js";
 import { PrismaUsersRepository } from "../modules/users/infrastructure/repositories/users.repository.js";
-import { RegisterUserUseCase } from "../modules/users/application/use-cases/register-user.use-case.js";
-import { UsersAuthGatewayAdapter } from "../modules/users/infrastructure/adapters/users-auth-gateway.adapter.js";
-import { UsersRegistrationGatewayAdapter } from "../modules/users/infrastructure/adapters/users-registration-gateway.adapter.js";
+import { UserService } from "../modules/users/application/services/users.service.js";
 import { JsonWebTokenProvider } from "../modules/auth/infrastructure/security/jsonwebtoken.provider.js";
 import { Sha256TokenHasher } from "../modules/auth/infrastructure/security/sha256-token.hasher.js";
-import { PrismaRefreshTokenRepository } from "../modules/auth/infrastructure/repositories/prisma-refresh-token.repository.js";
-import { LoginUseCase } from "../modules/auth/application/use-cases/login.use-case.js";
-import { RefreshSessionUseCase } from "../modules/auth/application/use-cases/refresh-session.use-case.js";
-import { LogoutSessionUseCase } from "../modules/auth/application/use-cases/logout-session.use-case.js";
+import { PrismaRefreshTokenRepository } from "../modules/auth/infrastructure/repositories/refresh-token.repository.js";
+import { AuthService } from "../modules/auth/application/services/auth.service.js";
+import { StorageService, PrismaStoredFileRepository, createR2Client, R2StorageService } from "../modules/storage/index.js";
 import { createAuthRouter } from "../modules/auth/presentation/routes/auth.routes.js";
 import { createPinoAppLogger } from "../shared/infrastructure/logging/pino-app-logger.js";
 import { createApp } from "./app.js";
@@ -21,34 +18,25 @@ export function createCompositionRoot() {
   const idGenerator = { generate: () => randomUUID() };
   const passwordHasher = new BcryptPasswordHasher(Number(process.env.BCRYPT_SALT_ROUNDS ?? 12));
   const usersRepository = new PrismaUsersRepository(prisma);
-  const usersAuthGateway = new UsersAuthGatewayAdapter(usersRepository, clock);
-  const registerUserUseCase = new RegisterUserUseCase(usersRepository, passwordHasher, idGenerator, clock);
+  const r2 = createR2Client({
+    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ?? "",
+    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ID ?? "",
+    endpoint: process.env.CLOUDFLARE_R2_ENDPOINT ?? "",
+    bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME ?? "",
+  });
+  const storageService = new StorageService(new PrismaStoredFileRepository(), new R2StorageService(r2.client, r2.bucket));
+  const usersService = new UserService(usersRepository, storageService, logger, passwordHasher, idGenerator, clock);
   const refreshTokenRepository = new PrismaRefreshTokenRepository(prisma);
   const jwtProvider = new JsonWebTokenProvider(process.env.JWT_SECRET);
   const tokenHasher = new Sha256TokenHasher();
   const allowedOrigins = configuredOrigins();
+  const authService = new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersService, jwtProvider, idGenerator);
   const authRouter = createAuthRouter({
-    loginUseCase: new LoginUseCase({
-      usersAuthGateway,
-      passwordHasher,
-      idGenerator,
-      jwtProvider,
-      tokenHasher,
-      refreshTokenRepository,
-      clock,
-    }),
-    refreshSessionUseCase: new RefreshSessionUseCase({
-      jwtProvider,
-      refreshTokenRepository,
-      usersAuthGateway,
-      tokenHasher,
-      clock,
-    }),
-    logoutSessionUseCase: new LogoutSessionUseCase({ refreshTokenRepository, clock }),
-    usersRegistrationGateway: new UsersRegistrationGatewayAdapter(registerUserUseCase),
+    authService,
+    usersRegistrationGateway: usersService,
     jwtProvider,
     refreshTokenRepository,
-    usersAuthGateway,
+    usersAuthGateway: usersService,
     clock,
     allowedOrigins,
     tokenHasher,

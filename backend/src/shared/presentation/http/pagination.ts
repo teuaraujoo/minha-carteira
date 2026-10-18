@@ -1,17 +1,8 @@
 import { AppError, ErrorCode } from "./app-error.js";
+import type { PaginationInput } from "../../application/contracts/pagination.contract.js";
+import type { PaginationMeta } from "../../application/contracts/pagination.contract.js";
 
-export interface PaginationInput {
-  page: number;
-  pageSize: number;
-  offset: number;
-}
-
-export interface PaginationMeta {
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-}
+export type { PaginationInput, PaginationMeta } from "../../application/contracts/pagination.contract.js";
 
 const MAX_PAGE_SIZE = 100;
 
