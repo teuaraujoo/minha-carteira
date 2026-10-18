@@ -1,233 +1,331 @@
 # Tarefas — módulo de usuários
 
-## Ordem de execução
+## Execution Plan
 
-### USR-00 — Preparar contratos compartilhados
+As fases são executadas sequencialmente. As tarefas de cada fase também são
+executadas na ordem indicada. Dependências de módulos externos permanecem
+explícitas e não autorizam implementar decisões de produto ainda pendentes.
 
-**Depende de:** nenhuma.
+### Fase 1 — Fundação de usuários
 
-- definir `PasswordHasher` na aplicação compartilhada;
-- implementar o adapter bcrypt na infraestrutura compartilhada;
-- substituir no serviço existente a dependência de `AppError` da apresentação
-  por erro de domínio ou aplicação;
-- manter o mapeamento para HTTP exclusivamente na borda.
-
-**Testes:** hash, comparação e mapeamento de erro da aplicação.
-
-**Gate:** aplicação não importa arquivos de `shared/presentation`.
-
-**Commit sugerido:** `refactor(shared): define application security contracts`
-
-### USR-01 — Alinhar entidade e tipos de domínio
-
-**Depende de:** USR-00.
-
-- corrigir `inactivetedAt` para `inactivatedAt`;
-- incluir `id` no estado efetivamente preservado pela entidade;
-- tornar `inactivatedAt` anulável;
-- tipar `role` com `UserRoles` e manter capabilities como enum;
-- garantir role `USER` na criação pública;
-- tipar e testar os comportamentos do ciclo de vida;
-- evitar dependência direta de relógio global nos testes.
-
-**Testes:** testes unitários da entidade.
-
-**Gate:** TypeScript sem erros e testes da entidade aprovados.
-
-**Commit sugerido:** `refactor(users): align user domain entity`
-
-### USR-02 — Redesenhar o repository
-
-**Depende de:** USR-01.
-
-- substituir `Promise<any>` por entidades e resultados explícitos;
-- remover métodos sem parâmetros e corrigir `cpdateUser`;
-- manter somente operações de persistência;
-- definir paginação de usuários inativos;
-- atualizar doubles e consumidores existentes.
-
-**Testes:** contract tests ou doubles tipados do repository.
-
-**Gate:** busca por `Promise<any>` no contrato sem resultados.
-
-**Commit sugerido:** `refactor(users): type repository contract`
-
-### USR-03 — Implementar cadastro público
-
-**Depende de:** USR-00, USR-01 e USR-02.
-
-- criar DTOs, mapper e caso de uso;
-- remover o `trim` da senha no schema HTTP;
-- validar unicidade de e-mail e nome de usuário;
-- aplicar a unicidade sem diferenciar maiúsculas e minúsculas;
-- permitir que usuários diferentes compartilhem o mesmo telefone;
-- usar `PasswordHasher`, `IdGenerator` e `ClockProvider`;
-- criar usuário ativo sem aceitar campos internos do cliente;
-- rejeitar `role` e `capabilities` enviados pelo cliente;
-- retornar o envelope de sucesso sem `passwordHash`.
-
-**Testes:** sucesso, campos inválidos, duplicidade e hash obrigatório.
-
-**Gate:** testes unitários e de apresentação do cadastro aprovados.
-
-**Commit sugerido:** `feat(users): implement public registration`
-
-### USR-04 — Implementar perfil autenticado
-
-**Depende de:** USR-02 e middleware de autenticação disponível.
-
-- criar consulta e atualização do próprio perfil;
-- obter `userId` somente de `request.auth`;
-- rejeitar campos internos;
-- mapear respostas seguras.
-
-**Testes:** sucesso, usuário inexistente/inativo e tentativa de IDOR.
-
-**Gate:** nenhum endpoint próprio aceita `userId` controlado pelo cliente.
-
-**Commit sugerido:** `feat(users): add authenticated profile flows`
-
-### USR-05 — Integrar upload ao contexto autenticado
-
-**Depende de:** USR-04 e `StorageOperations` entregue por STR-04.
-
-- remover `userId` do schema controlado pelo cliente;
-- combinar arquivo do Multer com o contexto autenticado no controller;
-- preservar validações de MIME, tamanho e conteúdo;
-- consultar o próprio repository para confirmar que o usuário autenticado
-  existe e está ativo antes de chamar `storage`;
-- chamar `StorageOperations` com contexto e propriedade derivados do usuário
-  autenticado;
-- não acessar diretamente o repository de imagens ou o Cloudflare R2;
-- não aceitar `contextId` ou `ownerUserId` do cliente;
-- manter logs em português e sem dados sensíveis.
-
-**Testes:** arquivo ausente, tipo inválido, tamanho inválido, usuário inativo e
-sucesso.
-
-**Gate:** teste prova que outro `userId` não pode ser escolhido pelo cliente.
-
-**Commit sugerido:** `fix(users): secure profile image ownership`
-
-### USR-06 — Implementar ciclo de vida
-
-**Depende de:** USR-01, USR-02 e `RefreshTokensGateway` entregue por AUTH-03.
-
-- implementar desativação e reativação como casos de uso;
-- revogar sessões ao desativar;
-- registrar datas corretamente;
-- definir o chamador autorizado da reativação antes de expor rota.
-
-**Testes:** idempotência, transições válidas e revogação de sessões.
-
-**Gate:** usuário inativo não mantém sessão utilizável.
-
-**Commit sugerido:** `feat(users): implement user lifecycle`
-
-### USR-07 — Implementar limpeza de inativos
-
-**Depende de:** USR-06 e aprovação do mecanismo de agendamento.
-
-- consultar usuários inativos além da data de corte;
-- processar em lotes;
-- coordenar dependências por contratos públicos;
-- remover em cascata sessões, resets e imagens;
-- impedir exclusão enquanto houver identidade de mensageria vinculada;
-- aplicar a política aprovada aos dados financeiros que não usam cascata;
-- excluir de forma transacional;
-- registrar contagens sem dados pessoais.
-
-**Testes:** data limite, paginação, falha parcial e usuário reativado.
-
-**Gate:** nenhum usuário com 30 dias ou menos de inatividade é excluído.
-
-**Commit sugerido:** `feat(users): purge expired inactive users`
-
-### USR-08 — Implementar persistência Prisma
-
-**Depende de:** USR-01 e USR-02; alteração de schema exige aprovação.
-
-- mapear entidade e registro de banco;
-- normalizar e-mail e nome de usuário para letras minúsculas;
-- adicionar constraints únicas para os valores normalizados;
-- adicionar constraints `CHECK` para rejeitar e-mail ou username não
-  normalizados;
-- não adicionar constraint única para telefone;
-- mapear `status`, capabilities e timestamps;
-- mapear `role` e atribuir `USER` por padrão;
-- preparar a migration `create-users`, sem executá-la em produção;
-- deixar o modelo `StoredFile` para a migration própria do módulo `storage`.
-
-**Testes:** integração do repository contra PostgreSQL de teste.
-
-**Gate:** migration revisada e repository passa os cenários de integração.
-
-**Commit sugerido:** `feat(users): add prisma persistence`
-
-### USR-09 — Expor contratos públicos
-
-**Depende de:** USR-02 e USR-03.
-
-- implementar `UsersAuthGateway`;
-- expor o caso de uso de cadastro para o controller público de `auth`;
-- fornecer credenciais somente ao módulo `auth`;
-- permitir busca ativa por ID e troca de hash;
-- impedir acesso direto ao repository por outro módulo.
-
-**Testes:** adapters públicos, usuário ativo e ausência de hash em saídas HTTP.
-
-**Gate:** `auth` compila usando apenas contratos públicos; `storage` não depende
-de contratos de `users` para validar existência ou status.
-
-**Commit sugerido:** `feat(users): expose public module gateways`
-
-### USR-10 — Atualizar documentação após implementação
-
-**Depende de:** USR-03 a USR-09.
-
-- reconciliar o novo cadastro com a documentação geral;
-- documentar rotas realmente implementadas;
-- registrar decisões pendentes resolvidas;
-- não marcar como funcional o que não foi validado.
-
-**Testes:** revisão manual de links, nomes e exemplos.
-
-**Gate:** documentação e código descrevem o mesmo comportamento.
-
-**Commit sugerido:** `docs(users): document user module behavior`
-
-## Matriz de cobertura
-
-| Requisito | Tarefas | Evidência esperada |
-| --- | --- | --- |
-| USR-RF-001, USR-RF-002 | USR-00 a USR-03, USR-08 | unidade e integração |
-| USR-RF-003, USR-RF-004 | USR-04 | testes HTTP e de aplicação |
-| USR-RF-005, USR-RF-006 | USR-06, USR-07 | domínio e integração |
-| USR-RF-007 | USR-05 | controller e caso de uso |
-| USR-RF-008 | USR-01, USR-09 | domínio e gateway público |
-| USR-RF-009 | USR-03, USR-04, USR-09 | presenters e HTTP |
-
-## Comandos de verificação
-
-Os scripts disponíveis no `package.json` devem ser conferidos no momento da
-execução. Atualmente não existem scripts `test`, `lint` ou `typecheck`. Sem
-alterar scripts, os comandos conhecidos são:
-
-```powershell
-node node_modules/typescript/bin/tsc --noEmit
-node --import tsx --test test/users/**/*.test.ts
+```text
+T1 → T2 → T3
 ```
 
-O segundo comando deve ser ajustado aos arquivos realmente criados, pois o
-comportamento de glob pode variar no PowerShell.
+### Fase 2 — Cadastro e contratos públicos
 
-## Bloqueios antes das tarefas afetadas
+```text
+T1 → T4
+T2 → T4
+T3 → T4 → T6
+T2 → T5
+T3 → T5
+T3 → T6
+T4 → T6
+```
 
-- aprovar a regra final de formato de `phone` antes de fechar USR-03;
-- definir a regra de `@` no username antes de USR-08;
-- aprovar campos editáveis antes de fechar USR-04;
-- decidir o fluxo autorizado de reativação antes de expor sua rota;
-- criar e revisar a migration antes de USR-08;
-- escolher o mecanismo de agendamento antes de USR-07;
-- definir retenção e recuperação dos dados financeiros antes de USR-07, pois a
-  operação é destrutiva.
+`T5` (persistência Prisma) não autoriza configurar a URL do banco nem executar
+migrations. A migration fica preparada em código para validação posterior,
+quando a configuração do PostgreSQL estiver disponível.
+
+### Fase 3 — Funcionalidades autenticadas de usuários
+
+```text
+T3 → T7 → T8
+T2 → T9
+T3 → T9
+T9 → T10
+T9 → T11
+```
+
+Esta fase começa depois da implementação de `auth` e dos contratos que ela
+fornece. `T9` permanece bloqueada até aprovação do mecanismo de agendamento e
+da política de retenção dos dados financeiros.
+
+### Fase 4 — Documentação
+
+```text
+T4 → T11
+T5 → T11
+T6 → T11
+T7 → T11
+T8 → T11
+T10 → T11
+```
+
+## Task Breakdown
+
+### T1: [USR-00] Preparar contratos compartilhados
+
+**Status:** A fazer
+**What:** Definir `PasswordHasher`, adapter bcrypt e remover dependência de
+`AppError` de apresentação do serviço compartilhado.
+**Where:** contratos e infraestrutura compartilhados, além do serviço que hoje
+depende de `shared/presentation`.
+**Depends on:** Nenhuma.
+**Requirement:** USR-RF-001.
+
+**Done when:**
+
+- [ ] Hash e comparação de senha são cobertos por testes.
+- [ ] Serviço de aplicação não importa `shared/presentation`.
+- [ ] Erros são mapeados para HTTP somente na borda.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `refactor(shared): define application security contracts`
+
+### T2: [USR-01] Alinhar entidade e tipos de domínio
+
+**Status:** A fazer
+**What:** Corrigir a entidade `User`, seus enums e comportamentos de domínio.
+**Where:** entidade, enums e testes de domínio de `users`.
+**Depends on:** T1.
+**Requirement:** USR-RF-005, USR-RF-008.
+
+**Done when:**
+
+- [ ] `inactivatedAt` substitui a grafia incorreta e aceita `null`.
+- [ ] O estado preserva `id`, `role`, capabilities e timestamps tipados.
+- [ ] Cadastro de domínio atribui `USER`; ciclo de vida e capabilities são
+      testados com relógio determinístico.
+- [ ] A verificação TypeScript e os testes da entidade passam.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `refactor(users): align user domain entity`
+
+### T3: [USR-02] Tipar o contrato do repository
+
+**Status:** A fazer
+**What:** Substituir respostas `any` e restringir o repository a operações de
+persistência.
+**Where:** contrato do repository, doubles e consumidores diretamente afetados.
+**Depends on:** T2.
+**Requirement:** USR-RF-001, USR-RF-005.
+
+**Done when:**
+
+- [ ] O contrato não contém `Promise<any>`, métodos sem parâmetros ou
+      `cpdateUser`.
+- [ ] Operações de persistência retornam entidades/resultados explícitos.
+- [ ] A consulta paginada de inativos possui entrada e saída tipadas.
+- [ ] Testes de contrato ou doubles tipados passam.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `refactor(users): type repository contract`
+
+### T4: [USR-03] Implementar cadastro público
+
+**Status:** A fazer
+**What:** Criar DTOs, mapper e caso de uso para cadastro seguro de usuário.
+**Where:** aplicação e apresentação de `users`, incluindo testes.
+**Depends on:** T1, T2, T3.
+**Requirement:** USR-RF-001, USR-RF-002, USR-RF-008, USR-RF-009.
+
+**Done when:**
+
+- [ ] O schema não aplica `trim` à senha e rejeita `role` e `capabilities`
+      enviados pelo cliente.
+- [ ] O caso de uso normaliza e verifica unicidade de e-mail e username,
+      protege-se contra duplicidade na persistência e permite telefone
+      compartilhado.
+- [ ] O cadastro usa `PasswordHasher`, `IdGenerator` e `ClockProvider`, cria
+      usuário ativo com role `USER` e não devolve `passwordHash`.
+- [ ] Testes cobrem sucesso, entrada inválida, duplicidade e hash obrigatório.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(users): implement public registration`
+
+### T5: [USR-08] Implementar persistência Prisma
+
+**Status:** A fazer
+**What:** Mapear entidade e repository de usuários para o modelo Prisma e
+preparar a migration.
+**Where:** schema/modelo Prisma, repository e testes de persistência de `users`.
+**Depends on:** T2, T3.
+**Requirement:** USR-RF-001, USR-RF-002, USR-RF-005, USR-RF-008.
+
+**Done when:**
+
+- [ ] E-mail e username são normalizados, possuem unicidade e checks para
+      impedir persistência não normalizada.
+- [ ] Telefone não é único; status, role, capabilities e timestamps são
+      mapeados.
+- [ ] A migration `create-users` está revisada em código e precede a migration
+      de `storage`.
+- [ ] Testes de repository são preparados sem exigir conexão real enquanto a
+      URL do PostgreSQL não estiver configurada.
+- [ ] Nenhuma migration é executada nesta tarefa.
+
+**Tests:** integration
+**Gate:** full
+**Commit:** `feat(users): add prisma persistence`
+
+### T6: [USR-09] Expor contratos públicos para auth
+
+**Status:** A fazer
+**What:** Implementar `UsersAuthGateway` e expor o caso de uso de cadastro sem
+expor o repository de `users`.
+**Where:** contratos públicos e adapters de `users`, com testes.
+**Depends on:** T3, T4.
+**Requirement:** USR-RF-008, USR-RF-009.
+
+**Done when:**
+
+- [ ] `auth` consegue buscar credenciais por identificador, buscar usuário
+      ativo por ID e trocar hash usando apenas o gateway público.
+- [ ] Hash nunca aparece em DTO ou saída HTTP.
+- [ ] Nenhum outro módulo importa diretamente o repository de `users`.
+- [ ] Testes cobrem adapters e busca de usuário ativo.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(users): expose public module gateways`
+
+### T7: [USR-04] Implementar perfil autenticado
+
+**Status:** Bloqueada por auth
+**What:** Consultar e atualizar o próprio perfil a partir do contexto autenticado.
+**Where:** aplicação e apresentação de `users`, incluindo testes.
+**Depends on:** T3 e middleware de autenticação da spec `auth`.
+**Requirement:** USR-RF-003, USR-RF-004, USR-RF-009.
+
+**Done when:**
+
+- [ ] O identificador vem exclusivamente de `request.auth`.
+- [ ] Campos internos são rejeitados; somente campos editáveis aprovados são
+      alterados.
+- [ ] Respostas seguras cobrem sucesso, usuário inexistente/inativo e tentativa
+      de IDOR.
+- [ ] A atualização só é concluída após definir os campos editáveis pendentes.
+
+**Tests:** unit e e2e
+**Gate:** full
+**Commit:** `feat(users): add authenticated profile flows`
+
+### T8: [USR-05] Integrar upload ao contexto autenticado
+
+**Status:** Bloqueada por T7 e STR-04
+**What:** Associar upload à identidade autenticada e integrar pelo contrato
+público de `storage`.
+**Where:** caso de uso e controller de imagem de perfil em `users`, incluindo
+testes.
+**Depends on:** T7 e `StorageOperations` de STR-04.
+**Requirement:** USR-RF-007, USR-RF-009.
+
+**Done when:**
+
+- [ ] Cliente não escolhe `userId`, `contextId` ou `ownerUserId`.
+- [ ] Usuário autenticado é confirmado como existente e ativo antes de chamar
+      `storage`.
+- [ ] Validações de arquivo e logs em português permanecem aplicadas, sem dados
+      sensíveis.
+- [ ] Testes cobrem arquivo ausente, tipo/tamanho inválido, usuário inativo e
+      sucesso associado ao próprio usuário.
+
+**Tests:** unit e e2e
+**Gate:** full
+**Commit:** `fix(users): secure profile image ownership`
+
+### T9: [USR-06] Implementar ciclo de vida do usuário
+
+**Status:** Bloqueada por auth e pela definição do chamador de reativação
+**What:** Implementar desativação e reativação como casos de uso.
+**Where:** casos de uso de ciclo de vida de `users`, com testes.
+**Depends on:** T2, T3 e `RefreshTokensGateway` de auth.
+**Requirement:** USR-RF-005.
+
+**Done when:**
+
+- [ ] Desativação registra datas e revoga sessões por contrato público.
+- [ ] Reativação só é exposta após definir o chamador autorizado.
+- [ ] Testes cobrem idempotência, transições e revogação de sessões.
+
+**Tests:** unit
+**Gate:** full
+**Commit:** `feat(users): implement user lifecycle`
+
+### T10: [USR-07] Implementar limpeza de inativos
+
+**Status:** Bloqueada por decisões de produto e agendamento
+**What:** Excluir em lotes usuários inativos elegíveis, coordenando dependências
+por contratos públicos.
+**Where:** caso de uso interno de limpeza e testes de `users`.
+**Depends on:** T9.
+**Requirement:** USR-RF-006.
+
+**Done when:**
+
+- [ ] A consulta seleciona somente usuários inativos há mais de 30 dias e
+      processa lotes.
+- [ ] Exclusão respeita cascatas de sessões, resets e imagens e bloqueia
+      identidade de mensageria ainda vinculada.
+- [ ] A política para dados financeiros e o mecanismo de agendamento estão
+      aprovados antes de implementar exclusão destrutiva.
+- [ ] Testes cobrem data limite, paginação, falha parcial e usuário reativado.
+
+**Tests:** integration
+**Gate:** full
+**Commit:** `feat(users): purge expired inactive users`
+
+### T11: [USR-10] Atualizar documentação após implementação
+
+**Status:** A fazer
+**What:** Reconciliar documentação geral com o comportamento efetivamente
+implementado.
+**Where:** documentação geral e referências de `users` realmente afetadas.
+**Depends on:** T4, T5, T6, T7, T8, T9 e T10.
+**Requirement:** USR-RF-001 a USR-RF-009.
+
+**Done when:**
+
+- [ ] Rotas, exemplos e decisões documentadas correspondem ao código validado.
+- [ ] Pendências não implementadas permanecem identificadas como pendentes.
+- [ ] Links e nomes são revisados manualmente.
+
+**Tests:** none
+**Gate:** build
+**Commit:** `docs(users): document user module behavior`
+
+## Test Coverage Matrix
+
+> Proveniência: `AGENTS.md`, scripts e testes existentes em `backend`. Não há
+> scripts `test`, `lint` ou `typecheck` configurados no `package.json`.
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+| --- | --- | --- | --- | --- |
+| Domain, services e use cases | unit | Cobrir requisitos e casos de borda da tarefa | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
+| Apresentação HTTP | e2e | Cobrir rota feliz, erros documentados e IDOR | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
+| Prisma repository | integration | Consultas, mapeamentos e erros de persistência | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
+| Entidade, schemas e configuração | unit | Validar regras e transformações documentadas | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
+
+Testes de integração que dependem de PostgreSQL ficam preparados, mas não serão
+executados até a configuração do banco de teste estar disponível.
+
+## Gate Check Commands
+
+> Comandos identificados no projeto. Executar a partir de `backend/`.
+
+| Gate Level | When to Use | Command |
+| --- | --- | --- |
+| Quick | Tarefas com testes unitários | `node --import tsx --test test/users/*.test.ts` |
+| Full | Tarefas HTTP ou de integração | `node --import tsx --test test/users/*.test.ts` e testes de integração quando o banco de teste estiver configurado |
+| Build | Fechamento de fase ou tarefa sem testes | `node node_modules/typescript/bin/tsc --noEmit` |
+
+Os scripts disponíveis devem ser conferidos antes da execução. Não há gate de
+lint configurado. O glob deve ser ajustado aos arquivos realmente criados e
+validado no PowerShell.
+
+## Pending Decisions and Blockers
+
+- Aprovar o formato final de `phone` antes de fechar a validação de cadastro.
+- Definir se `username` pode conter `@` antes de fechar a identificação por
+  username ou e-mail.
+- Aprovar campos editáveis antes de concluir T7.
+- Definir quem pode reativar usuários antes de expor essa rota em T9.
+- Aprovar mecanismo de agendamento, retenção dos dados financeiros e política
+  da identidade de mensageria antes da limpeza destrutiva em T10.
+- A URL do PostgreSQL será configurada depois; não executar migrations agora.
