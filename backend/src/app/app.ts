@@ -13,14 +13,18 @@ import {
   terminateStartedResponse,
 } from "../shared/presentation/middlewares/error-middleware.js";
 import { createRequestLoggingMiddleware } from "../shared/presentation/middlewares/request-logging-middleware.js";
+import type { Router } from "express";
 
 export interface CreateAppOptions {
   logger?: AppLogger;
+  authRouter?: Router;
+  allowedOrigins?: readonly string[];
 }
 
 export const createApp = (options: CreateAppOptions = {}) => {
   const app = express();
   const logContext = new LogContext(options.logger ?? noopLogger);
+  const allowedOrigins = new Set(options.allowedOrigins ?? configuredOrigins());
 
   app.use(createRequestLoggingMiddleware(logContext));
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
@@ -29,10 +33,12 @@ export const createApp = (options: CreateAppOptions = {}) => {
   app.use(compression());
   app.use(
     cors({
-      origin: process.env.FRONTEND_URL,
+      origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
       credentials: true,
     }),
   );
+
+  if (options.authRouter) app.use("/api/v1/auth", options.authRouter);
 
   app.get("/", (_request, response) => {
     response.status(200).send("Hello, World!");
@@ -49,3 +55,8 @@ export const createApp = (options: CreateAppOptions = {}) => {
 
   return app;
 };
+
+function configuredOrigins(): string[] {
+  const value = process.env.FRONTEND_ORIGINS ?? process.env.FRONTEND_URL ?? "";
+  return value.split(",").map((origin) => origin.trim()).filter(Boolean);
+}

@@ -138,15 +138,20 @@ comparação futura sem interferir no comportamento atual.
 
 ## Critérios de aceitação
 
-- [ ] Login funciona com e-mail ou nome de usuário no mesmo campo.
-- [ ] Respostas de erro não revelam se o identificador existe.
-- [ ] Usuário ausente, senha incorreta e usuário inativo são indistinguíveis no
+- [x] Login funciona com e-mail ou nome de usuário no mesmo campo.
+- [x] Respostas de erro não revelam se o identificador existe.
+- [x] Usuário ausente, senha incorreta e usuário inativo são indistinguíveis no
   login.
-- [ ] Access e refresh tokens ficam somente em cookies `HttpOnly`.
-- [ ] Refresh válido emite novo access token sem trocar o refresh token.
-- [ ] Logout revoga a sessão e limpa os cookies.
-- [ ] Middleware adiciona `request.auth.userId` após validação completa.
-- [ ] Token de refresh não é aceito como token de acesso.
+- [x] Access e refresh tokens ficam somente em cookies `HttpOnly`.
+- [x] Refresh válido emite novo access token sem trocar o refresh token.
+- [x] Logout revoga a sessão e limpa os cookies.
+- [x] Middleware adiciona `request.auth.userId` após validação completa.
+- [x] Token de refresh não é aceito como token de acesso.
+- [x] Rotas mutáveis de auth exigem `Origin` permitido e token double-submit
+  válido em cookie e `X-CSRF-Token`.
+- [x] Cadastro não inicia sessão automaticamente.
+- [x] Logout usa access ou refresh válido para localizar a sessão e sempre limpa
+  cookies, mesmo sem credenciais válidas.
 - [ ] Solicitação de reset produz resposta indistinguível para e-mail ausente.
 - [ ] Falha do Resend não muda status, código ou mensagem da solicitação.
 - [ ] O e-mail do Resend contém link com token, sem código numérico.
@@ -159,7 +164,7 @@ comparação futura sem interferir no comportamento atual.
 - [ ] Redefinição válida revoga todas as sessões e não autentica
   automaticamente.
 - [ ] Token, senha, cookies e conteúdo do e-mail não aparecem em logs.
-- [ ] `auth` não acessa diretamente o repository de `users`.
+- [x] `auth` não acessa diretamente o repository de `users`.
 
 ## Dependências
 
@@ -183,8 +188,12 @@ comparação futura sem interferir no comportamento atual.
 - tokens são enviados por cookies;
 - cookies usam `SameSite=None; Secure` e a proteção CSRF deve ser explícita;
 - cookies de autenticação usam `__Secure-mc_access` e `__Secure-mc_refresh`;
-- operações mutáveis validam token CSRF sincronizador no header e `Origin` na
-  allowlist;
+- operações mutáveis usam double-submit cookie para CSRF e validam `Origin`
+  exato na allowlist;
+- access e CSRF usam cookie com `Path=/api/v1`; refresh usa
+  `Path=/api/v1/auth`;
+- origens permitidas são configuradas por `FRONTEND_ORIGINS` (ou, para uma
+  origem, `FRONTEND_URL`);
 - refresh token não é rotacionado nesta versão;
 - access token expira em 15 minutos;
 - refresh token expira em cinco dias;
@@ -210,7 +219,6 @@ comparação futura sem interferir no comportamento atual.
 ## Decisões pendentes
 
 - duração do reset token e dos demais desafios;
-- atributos `Path` dos cookies;
 - domínio e remetente verificados no Resend;
 - URL pública do frontend usada no link;
 - limites e janela de proteção contra abuso;

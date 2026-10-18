@@ -288,7 +288,8 @@ do PostgreSQL. Nenhum tipo do Prisma pode aparecer na assinatura da aplicação.
 - ambos devem usar `HttpOnly`, `Secure` e `SameSite=None`;
 - operações mutáveis exigem `Origin` exato na allowlist e o header
   `X-CSRF-Token` idêntico ao valor do cookie `__Secure-mc_csrf`; comparar os
-  valores em tempo constante;
+  valores em tempo constante. O mecanismo é double-submit cookie, sem token
+  sincronizador persistido no servidor;
 - `GET /api/v1/auth/csrf` gera token aleatório, define cookie
   `__Secure-mc_csrf` e retorna o token no corpo para uso no header;
 - o cookie CSRF também usa `Secure` e `SameSite=None`; não deve aparecer em
@@ -298,11 +299,21 @@ do PostgreSQL. Nenhum tipo do Prisma pode aparecer na assinatura da aplicação.
 - `Path` deve ser o menor possível, especialmente para o refresh;
 - logout deve expirar ambos os cookies com os mesmos atributos usados ao
   criá-los;
-- valores não aparecem em resposta JSON nem em logs.
+- access/refresh tokens não aparecem em resposta JSON nem em logs; o token CSRF
+  aparece somente no corpo da resposta de emissão e não deve aparecer em logs.
 
-Os atributos `Path` e a duração dos desafios permanecem pendentes. O reset de
-senha não deve ser implementado até que suas políticas sejam definidas. O
-access token expira em 15 minutos e o refresh token em cinco dias.
+Implementação atual: access e CSRF usam `Path=/api/v1`; refresh usa
+`Path=/api/v1/auth`, reduzindo o envio do refresh token às rotas de autenticação.
+O cookie CSRF é de sessão do navegador, sem `Max-Age`; o token aleatório é
+retornado em `GET /api/v1/auth/csrf`, armazenado no cookie HttpOnly e enviado
+novamente pelo frontend em `X-CSRF-Token`. Essa comparação cookie/header é o
+padrão double-submit; a defesa também exige `Origin` exato na allowlist. O
+backend compara header e cookie em tempo constante. A allowlist é lida de
+`FRONTEND_ORIGINS`, com origens separadas
+por vírgula; `FRONTEND_URL` é aceita como fallback de origem única. Sem origem
+configurada, operações CSRF são negadas. O reset de senha não deve ser
+implementado até que suas políticas sejam definidas. O access token expira em
+15 minutos e o refresh token em cinco dias.
 
 ## Fluxos
 
@@ -404,7 +415,7 @@ conteúdo integral não devem aparecer em logs.
 | POST | `/api/v1/auth/register` | Não | Cadastra usuário — 201 |
 | POST | `/api/v1/auth/login` | Não | Inicia sessão — 200 |
 | POST | `/api/v1/auth/refresh` | Refresh cookie | Renova access — 204 |
-| POST | `/api/v1/auth/logout` | Sessão | Revoga e limpa cookies — 204 |
+| POST | `/api/v1/auth/logout` | CSRF; access ou refresh válido opcional | Revoga a sessão válida, limpa cookies — 204 |
 | GET | `/api/v1/auth/me` | Access cookie | Retorna contexto da sessão — 200 |
 | GET | `/api/v1/auth/csrf` | Não | Define cookie e retorna token CSRF — 200 |
 | POST | `/api/v1/auth/password-reset` | Não | Solicita link — 202 |
@@ -413,6 +424,12 @@ conteúdo integral não devem aparecer em logs.
 O controller de `/auth/register` pertence à apresentação de `auth`, mas chama o
 caso de uso público do módulo `users`. `/auth/me` devolve somente `userId` e
 `sessionId`; o perfil completo é obtido em `/users/me`.
+
+O cadastro não autentica automaticamente. O logout tenta validar o access token
+e, em seguida, o refresh token com hash persistido para identificar a sessão; se
+ambos estiverem ausentes ou inválidos, ainda limpa os cookies e responde 204,
+sem tentar revogar uma sessão desconhecida. A resposta de `GET /csrf` usa
+`Cache-Control: no-store, private` e `Pragma: no-cache`.
 
 ## Erros esperados
 

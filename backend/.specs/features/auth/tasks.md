@@ -29,9 +29,10 @@ T6 → T12
 T7 → T12
 ```
 
-T4–T7 consomem o contrato público de `users` implementado em USR-09.
-`T12` permanece bloqueada até definir o nome dos cookies, a estratégia CSRF e
-a regra para usernames contendo `@`.
+T4–T7 consomem o contrato público de `users` implementado em USR-09. A
+identificação usa `@` para classificar e-mail; usernames rejeitam esse caractere.
+T12 usa cookies definidos e double-submit cookie combinado com validação de
+`Origin`, conforme `design.md`.
 
 ### Fase 3 — Recuperação de senha
 
@@ -134,7 +135,7 @@ Integração PostgreSQL e migration permanecem pendentes até a configuração d
 
 ### T4: [AUTH-04] Implementar caso de uso de login
 
-**Status:** Bloqueada pela regra de username com `@`
+**Status:** Concluída
 **What:** Validar credenciais e criar sessão usando `UsersAuthGateway`.
 **Where:** caso de uso e testes de `auth`.
 **Depends on:** T2, T3 e contrato USR-09.
@@ -142,12 +143,13 @@ Integração PostgreSQL e migration permanecem pendentes até a configuração d
 
 **Done when:**
 
-- [ ] Entrada preserva a senha sem `trim` e normaliza somente o identificador.
-- [ ] E-mail e username encontram credenciais pelo contrato público de `users`.
-- [ ] Usuário ausente, senha incorreta e usuário inativo geram o mesmo erro
+- [x] Entrada preserva a senha sem `trim` e normaliza somente o identificador.
+- [x] E-mail e username encontram credenciais pelo contrato público de `users`.
+- [x] Identificador com `@` é tratado como e-mail; sem `@`, como username.
+- [x] Usuário ausente, senha incorreta e usuário inativo geram o mesmo erro
       público.
-- [ ] Sessão guarda hash do refresh token e saída não contém tokens ou hash.
-- [ ] Testes cobrem sucesso e erros indistinguíveis.
+- [x] Sessão guarda hash do refresh token e saída pública não contém tokens ou hash.
+- [x] Testes cobrem sucesso e erros indistinguíveis.
 
 **Tests:** unit
 **Gate:** quick
@@ -194,7 +196,7 @@ autenticado.
 
 ### T7: [AUTH-07] Implementar logout
 
-**Status:** Concluída em aplicação; HTTP pendente em T12
+**Status:** Concluída
 **What:** Revogar a sessão atual de forma idempotente e remover cookies.
 **Where:** caso de uso e testes de `auth`.
 **Depends on:** T3, T6.
@@ -204,10 +206,9 @@ autenticado.
 
 - [x] Sessão ativa recebe motivo `LOGOUT` e data de revogação.
 - [x] Sessão inválida ou já revogada continua permitindo limpeza dos cookies.
-- [ ] Resposta é 204 e refresh posterior é rejeitado.
+- [x] Resposta é 204, cookies são limpos e refresh posterior é rejeitado.
 
-A resposta HTTP 204 e a limpeza dos cookies dependem da integração de rotas
-definida para T12; o caso de uso não controla cookies.
+O caso de uso não controla cookies; essa responsabilidade pertence à rota HTTP.
 
 **Tests:** unit
 **Gate:** quick
@@ -297,7 +298,7 @@ desafio e sessões.
 
 ### T12: [AUTH-12A] Compor rotas centrais de autenticação
 
-**Status:** Bloqueada por cookie, CSRF e regra de username com `@`
+**Status:** Concluída
 **What:** Compor rotas de cadastro, login, refresh, logout e contexto de sessão,
 com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
 **Where:** apresentação e composition root de `auth`, com testes HTTP.
@@ -306,12 +307,16 @@ com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
 
 **Done when:**
 
-- [ ] Rotas centrais seguem contratos HTTP existentes e não retornam tokens.
-- [ ] Cookies HttpOnly usam configuração segura e atributos idênticos ao limpar.
-- [ ] `Origin` e mecanismo CSRF são validados nas requisições mutáveis.
-- [ ] `/auth/register` delega cadastro ao caso de uso público de `users`.
-- [ ] `/auth/me` retorna somente `userId` e `sessionId`.
-- [ ] Testes HTTP cobrem fluxos, atributos de cookies e CSRF.
+- [x] Rotas centrais seguem contratos HTTP existentes e não retornam tokens.
+- [x] Cookies HttpOnly usam configuração segura e atributos idênticos ao limpar.
+- [x] Cookies usam `__Secure-mc_access`, `__Secure-mc_refresh`,
+      `SameSite=None` e `Secure`.
+- [x] `/auth/csrf` emite `__Secure-mc_csrf` e retorna o token para o cliente.
+- [x] `Origin` na allowlist e `X-CSRF-Token` correspondente ao cookie são
+      validados nas requisições mutáveis.
+- [x] `/auth/register` delega cadastro ao caso de uso público de `users`.
+- [x] `/auth/me` retorna somente `userId` e `sessionId`.
+- [x] Testes HTTP cobrem fluxos, atributos de cookies e CSRF.
 
 **Tests:** e2e
 **Gate:** full
@@ -420,10 +425,8 @@ Testes de integração PostgreSQL ficam adiados até a configuração de
 
 ## Pending Decisions and Blockers
 
-- Definir se username pode conter `@`; isso afeta resolução inequívoca de
-  `identifier` em login.
-- Definir nomes de cookies, `Path` e origens permitidas.
-- Escolher implementação concreta de CSRF para `SameSite=None; Secure`.
+- Configurar `FRONTEND_ORIGINS` (origens separadas por vírgula) em cada
+  ambiente; `FRONTEND_URL` permanece como compatibilidade para uma única origem.
 - Definir duração e política da senha no reset; até lá, T8–T11 e T13 ficam
   bloqueadas conforme decisão do usuário.
 - Autorizar instalação do SDK `resend` antes de T9.
@@ -431,4 +434,6 @@ Testes de integração PostgreSQL ficam adiados até a configuração de
 - Definir limite contra abuso, política de retry de e-mail e retenção de
   metadata antes de disponibilizar reset.
 - Configurar `DATABASE_URL` para validar migrations e integração PostgreSQL.
+- Validar rotas autenticadas contra PostgreSQL após configurar o banco local;
+  os testes atuais usam portas locais e dependências simuladas.
 - T16 permanece em backlog até aprovação do mecanismo de agendamento.
