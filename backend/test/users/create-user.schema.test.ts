@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createUserSchema } from "../../src/modules/users/presentation/schemas/users.schemas.js";
+import { createUserSchema, updateUserProfileSchema } from "../../src/modules/users/presentation/schemas/users.schemas.js";
 
 test("parses and normalizes the public create-user input", () => {
   const result = createUserSchema.parse({
@@ -54,6 +54,9 @@ test("rejects missing, empty, and invalid public fields", () => {
       .success,
     false,
   );
+  for (const phone of ["5585999999999", "+558599999999", "+55859999999999", "+5585888888888"]) {
+    assert.equal(createUserSchema.safeParse({ ...validInput, phone }).success, false);
+  }
   assert.equal(
     createUserSchema.safeParse({ ...validInput, username: "user@domain" })
       .success,
@@ -77,6 +80,23 @@ test("rejects missing, empty, and invalid public fields", () => {
   if (!emptyNameResult.success) {
     assert.equal(emptyNameResult.error.issues[0]?.message, "Nome é obrigatório.");
   }
+});
+
+test("accepts the approved Brazilian mobile phone format", () => {
+  const result = createUserSchema.safeParse({
+    username: "teco1",
+    name: "Teco User",
+    email: "teco@example.com",
+    phone: "+5579988887777",
+    password: "password",
+  });
+
+  assert.equal(result.success, true);
+});
+
+test("profile update accepts only the approved Brazilian mobile phone format", () => {
+  assert.equal(updateUserProfileSchema.safeParse({ phone: "+5579988887777" }).success, true);
+  assert.equal(updateUserProfileSchema.safeParse({ phone: "+557998888777" }).success, false);
 });
 
 test("rejects administrative and persistence fields from the public input", () => {

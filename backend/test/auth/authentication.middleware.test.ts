@@ -78,6 +78,8 @@ function setup(options: {
     },
     async findActivePasswordResetRecipient() { return null; },
     async findActivePasswordResetRecipientById() { return null; },
+    async findInactiveAccountReactivationRecipient() { return null; },
+    async reactivateUserById() { return false; },
     async changePasswordHash() { throw new Error("Não esperado."); },
   };
   const clock: ClockProvider = { now: () => now };

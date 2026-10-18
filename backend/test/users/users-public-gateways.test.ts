@@ -15,6 +15,8 @@ test("UserService implementa os gateways públicos de auth e cadastro", () => {
   assert.equal(typeof authGateway.findCredentialsByIdentifier, "function");
   assert.equal(typeof authGateway.findActiveUserById, "function");
   assert.equal(typeof authGateway.changePasswordHash, "function");
+  assert.equal(typeof authGateway.findInactiveAccountReactivationRecipient, "function");
+  assert.equal(typeof authGateway.reactivateUserById, "function");
   assert.equal(typeof registrationGateway.registerUser, "function");
 });
 
@@ -39,4 +41,22 @@ test("gateways de autenticação retornam somente os dados necessários", async 
   assert.equal(active && "passwordHash" in active, false);
   assert.deepEqual(recipient, { id: "user-1", email: "ana@example.com" });
   assert.deepEqual(recipientById, { id: "user-1", email: "ana@example.com" });
+});
+
+test("gateway de reativação retorna somente usuários inativos", async () => {
+  const inactiveUser = {
+    id: "user-inactive", email: "inativo@example.com", isActive: () => false,
+  };
+  const activeUser = {
+    id: "user-active", email: "ativo@example.com", isActive: () => true,
+  };
+  const service = createUserService(createUsersRepositoryDouble({
+    findByEmail: async (email) => (email === inactiveUser.email ? inactiveUser : activeUser) as never,
+  }), storage);
+
+  assert.deepEqual(await service.findInactiveAccountReactivationRecipient(" INATIVO@EXAMPLE.COM "), {
+    id: inactiveUser.id,
+    email: inactiveUser.email,
+  });
+  assert.equal(await service.findInactiveAccountReactivationRecipient("ativo@example.com"), null);
 });

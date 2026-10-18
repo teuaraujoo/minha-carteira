@@ -19,10 +19,15 @@ export type LogEvent =
   | "server.started"
   | "server.failed"
   | "users.profile-image.uploaded"
+  | "users.account.deactivated"
+  | "users.account.reactivated"
   | "auth.password-reset.requested"
   | "auth.password-reset.email-failed"
   | "auth.password-reset.completed"
-  | "auth.password-reset.notification-failed";
+  | "auth.password-reset.notification-failed"
+  | "auth.account-reactivation.requested"
+  | "auth.account-reactivation.email-failed"
+  | "auth.account-reactivation.completed";
 
 export interface ApprovedLogContext {
   operation?: string;

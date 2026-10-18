@@ -39,6 +39,7 @@ enum PasswordResetRequestStatus {
 
 enum ChallengePurpose {
   PASSWORD_RESET
+  ACCOUNT_REACTIVATION
   EMAIL_VERIFICATION
   MESSAGING_IDENTITY_VERIFICATION
 }

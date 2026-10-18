@@ -22,7 +22,7 @@ export const createUserSchema = z
     phone: z
       .string({ error: "Telefone deve ser uma string." })
       .trim()
-      .min(11, "Telefone é obrigatório."),
+      .regex(/^\+55\d{2}9\d{8}$/, "Telefone deve seguir o formato de celular brasileiro +55, DDD e número com 9 dígitos."),
     password: z
       .string({ error: "Senha deve ser uma string." })
       .min(8, "Senha é obrigatória.")
@@ -40,7 +40,7 @@ export const uploadProfileImageSchema = z.object({
 
 export const updateUserProfileSchema = z.object({
   name: z.string({ error: "Nome deve ser uma string." }).trim().min(5, "Nome deve possuir pelo menos 5 caracteres.").optional(),
-  phone: z.string({ error: "Telefone deve ser uma string." }).trim().min(11, "Telefone deve possuir pelo menos 11 caracteres.").optional(),
+  phone: z.string({ error: "Telefone deve ser uma string." }).trim().regex(/^\+55\d{2}9\d{8}$/, "Telefone deve seguir o formato de celular brasileiro +55, DDD e número com 9 dígitos.").optional(),
 }).strict().refine((input) => input.name !== undefined || input.phone !== undefined, "Informe ao menos um campo para atualizar.");
 
 export type CreateUserRequestDto = z.infer<typeof createUserSchema>;

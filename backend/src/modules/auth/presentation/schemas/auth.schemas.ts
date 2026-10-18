@@ -28,4 +28,14 @@ export const confirmPasswordResetSchema = z.object({
   path: ["passwordConfirmation"],
 });
 
+export const requestAccountReactivationSchema = z.object({
+  email: z.string({ error: "E-mail deve ser um texto." }).trim().email("E-mail inválido.").toLowerCase(),
+  metadata: requestMetadataSchema,
+}).strict();
+
+export const confirmAccountReactivationSchema = z.object({
+  token: z.string({ error: "Token deve ser um texto." }).trim().min(1, "Token é obrigatório."),
+  metadata: requestMetadataSchema,
+}).strict();
+
 export type LoginRequestDto = z.infer<typeof loginSchema>;

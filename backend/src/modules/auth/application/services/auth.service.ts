@@ -1,8 +1,11 @@
 import type { IdGenerator } from './../../../../shared/application/id-generator.js';
 import type { JwtProvider, TokenHasher, LogoutSessionInput, RefreshSessionInput, RefreshSessionOutput } from '../contracts/auth.contracts.js';
 import type { RefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
+import type { AccountSessionCoordinator } from "../contracts/account-session-coordinator.js";
 import {
   Challenge,
+  ACCOUNT_REACTIVATION_MAX_ATTEMPTS,
+  ACCOUNT_REACTIVATION_TOKEN_TTL_MS,
   PASSWORD_RESET_MAX_ATTEMPTS,
   PASSWORD_RESET_TOKEN_TTL_MS,
   PasswordResetRequest,
@@ -19,6 +22,7 @@ import type { UsersAuthGateway } from "../../../users/index.js";
 import type { PasswordHasher } from "../../../../shared/application/security/password-hasher.js";
 import type { AppLogger } from "../../../../shared/application/logging/app-logger.js";
 import type { EmailProvider, PasswordResetRateLimiter, TokenGenerator } from "../contracts/auth.contracts.js";
+import type { ChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
 import type { PasswordResetUnitOfWork } from "../contracts/password-reset-unit-of-work.js";
 import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, PasswordResetRequestStatus } from "../../domain/enums/auth.enums.js";
 
@@ -34,8 +38,9 @@ export interface ConfirmPasswordResetInput {
   metadata: RequestMetadata;
 }
 
-export interface PasswordResetDependencies {
+export interface AuthEmailDependencies {
   unitOfWork: PasswordResetUnitOfWork;
+  challengeRepository: ChallengeRepository;
   emailProvider: EmailProvider;
   tokenGenerator: TokenGenerator;
   rateLimiter: PasswordResetRateLimiter;
@@ -54,11 +59,12 @@ export class AuthService {
     private readonly usersAuthGateway: UsersAuthGateway,
     private readonly jwtProvider: JwtProvider,
     private idGenerator: IdGenerator,
-    private readonly passwordReset?: PasswordResetDependencies,
+    private readonly accountSessionCoordinator: AccountSessionCoordinator,
+    private readonly emailFlows?: AuthEmailDependencies,
   ) { }
 
   async requestPasswordReset(input: RequestPasswordResetInput): Promise<void> {
-    const dependencies = this.requirePasswordReset();
+    const dependencies = this.requireEmailFlows();
     const normalizedEmail = input.email.trim().toLowerCase();
     const now = this.clock.now();
     const metadata = snapshotMetadata(input.metadata);
@@ -140,7 +146,7 @@ export class AuthService {
   }
 
   async confirmPasswordReset(input: ConfirmPasswordResetInput): Promise<void> {
-    const dependencies = this.requirePasswordReset();
+    const dependencies = this.requireEmailFlows();
     if (input.password !== input.passwordConfirmation || input.password.length < 8) {
       throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "A senha e a confirmação devem corresponder e possuir pelo menos 8 caracteres." });
     }
@@ -209,11 +215,123 @@ export class AuthService {
     }
   }
 
-  private requirePasswordReset(): PasswordResetDependencies {
-    if (!this.passwordReset) {
-      throw new AppError({ status: 500, code: ErrorCode.INTERNAL_ERROR, message: "A recuperação de senha não está configurada." });
+  async requestAccountReactivation(input: RequestPasswordResetInput): Promise<void> {
+    const dependencies = this.requireEmailFlows();
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const now = this.clock.now();
+    const metadata = snapshotMetadata(input.metadata);
+    if (!dependencies.rateLimiter.consume(normalizedEmail, metadata.ipAddress ?? "desconhecido", now)) return;
+
+    const recipient = await this.usersAuthGateway.findInactiveAccountReactivationRecipient(normalizedEmail);
+    if (!recipient) return;
+
+    const challengeId = this.idGenerator.generate();
+    const secret = dependencies.tokenGenerator.generate();
+    const secretHash = await this.tokenHasher.hash(secret);
+    const expiresAt = new Date(now.getTime() + ACCOUNT_REACTIVATION_TOKEN_TTL_MS);
+    const challenge = new Challenge({
+      id: challengeId,
+      purpose: ChallengePurpose.ACCOUNT_REACTIVATION,
+      subjectType: ChallengeSubjectType.USER,
+      subjectId: recipient.id,
+      secretHash,
+      status: ChallengeStatus.REQUESTED,
+      attempts: 0,
+      maxAttempts: ACCOUNT_REACTIVATION_MAX_ATTEMPTS,
+      metadata: { issued: metadata, consumed: null },
+      expiresAt,
+      consumedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await dependencies.challengeRepository.save(challenge);
+
+    const reactivationUrl = new URL("/reactivate-account", dependencies.frontendUrl);
+    reactivationUrl.searchParams.set("token", `${challengeId}.${secret}`);
+    try {
+      await dependencies.emailProvider.sendAccountReactivation({ email: recipient.email, reactivationUrl: reactivationUrl.toString() });
+      dependencies.logger.info({
+        event: "auth.account-reactivation.requested",
+        module: "auth",
+        message: "Solicitação de reativação registrada",
+        context: { operation: "requestAccountReactivation", userId: recipient.id },
+      });
+    } catch {
+      try {
+        await dependencies.challengeRepository.markFailed(challengeId, this.clock.now());
+      } catch {
+        dependencies.logger.error({
+          event: "auth.account-reactivation.email-failed",
+          module: "auth",
+          message: "Falha ao registrar a falha do envio de reativação",
+          context: { operation: "requestAccountReactivation", userId: recipient.id },
+        });
+        return;
+      }
+      dependencies.logger.warn({
+        event: "auth.account-reactivation.email-failed",
+        module: "auth",
+        message: "O serviço de e-mail não entregou o link de reativação",
+        context: { operation: "requestAccountReactivation", userId: recipient.id },
+      });
     }
-    return this.passwordReset;
+  }
+
+  async confirmAccountReactivation(input: { token: string; metadata: RequestMetadata }): Promise<void> {
+    const dependencies = this.requireEmailFlows();
+    const [challengeId, secret, ...extra] = input.token.split(".");
+    if (!challengeId || !secret || extra.length > 0) throw invalidAccountReactivationToken();
+
+    const now = this.clock.now();
+    const challenge = await dependencies.challengeRepository.findById(challengeId);
+    if (!challenge || challenge.purpose !== ChallengePurpose.ACCOUNT_REACTIVATION
+      || challenge.subjectType !== ChallengeSubjectType.USER || !challenge.isUsableAt(now)) {
+      throw invalidAccountReactivationToken();
+    }
+
+    if (!await this.tokenHasher.matches(secret, challenge.secretHash)) {
+      await dependencies.challengeRepository.registerInvalidAttemptForPurpose(
+        challenge.id,
+        ChallengePurpose.ACCOUNT_REACTIVATION,
+        ChallengeSubjectType.USER,
+        ACCOUNT_REACTIVATION_MAX_ATTEMPTS,
+        now,
+      );
+      throw invalidAccountReactivationToken();
+    }
+
+    const consumedMetadata: ChallengeMetadata = {
+      issued: challenge.metadata.issued,
+      consumed: snapshotMetadata(input.metadata),
+    };
+    if (!await dependencies.challengeRepository.completeIfUsableForPurpose(
+      challenge.id,
+      ChallengePurpose.ACCOUNT_REACTIVATION,
+      ChallengeSubjectType.USER,
+      ACCOUNT_REACTIVATION_MAX_ATTEMPTS,
+      consumedMetadata,
+      now,
+    )) {
+      throw invalidAccountReactivationToken();
+    }
+
+    if (!await this.usersAuthGateway.reactivateUserById(challenge.subjectId)) {
+      throw invalidAccountReactivationToken();
+    }
+
+    dependencies.logger.info({
+      event: "auth.account-reactivation.completed",
+      module: "auth",
+      message: "Conta reativada pelo link de confirmação; o usuário deverá entrar novamente",
+      context: { operation: "confirmAccountReactivation", userId: challenge.subjectId },
+    });
+  }
+
+  private requireEmailFlows(): AuthEmailDependencies {
+    if (!this.emailFlows) {
+      throw new AppError({ status: 500, code: ErrorCode.INTERNAL_ERROR, message: "Os fluxos de e-mail de autenticação não estão configurados." });
+    }
+    return this.emailFlows;
   }
 
   async login(input: LoginInput): Promise<LoginSessionResult> {
@@ -261,7 +379,9 @@ export class AuthService {
       createdAt: now,
       updatedAt: now,
     });
-    await this.refreshTokenRepository.save(session);
+    if (!await this.accountSessionCoordinator.createSessionIfAccountActive(session)) {
+      throw invalidCredentials();
+    }
 
     return { user, accessToken, refreshToken };
   }
@@ -304,13 +424,6 @@ export class AuthService {
     return { accessToken };
   }
 
-  async revokeAllFromUser(userId: string): Promise<void> {
-    await this.refreshTokenRepository.revokeAllFromUser(
-      userId,
-      this.clock.now(),
-      RefreshTokenRevokeReason.USER_DEACTIVATED,
-    );
-  }
 }
 
 function unauthorized(): AppError {
@@ -334,6 +447,14 @@ function invalidResetToken(): AppError {
     status: 400,
     code: ErrorCode.VALIDATION_ERROR,
     message: "Token de recuperação inválido ou expirado.",
+  });
+}
+
+function invalidAccountReactivationToken(): AppError {
+  return new AppError({
+    status: 400,
+    code: ErrorCode.VALIDATION_ERROR,
+    message: "Link de reativação inválido ou expirado.",
   });
 }
 

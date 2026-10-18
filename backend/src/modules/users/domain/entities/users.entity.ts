@@ -50,7 +50,7 @@ export class User {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.userEmail)) {
       throw new TypeError("E-mail inválido.");
     }
-    this.userPhone = User.normalizeRequired(props.phone, "Telefone");
+    this.userPhone = User.normalizeBrazilianMobilePhone(props.phone);
     this.userRole = User.validateRole(props.role);
     this.userPasswordHash = User.normalizeRequired(props.passwordHash, "Hash da senha");
     this.userCapabilities = User.validateCapabilities(props.capabilities);
@@ -219,7 +219,7 @@ export class User {
 
   updateProfile(input: { name?: string; phone?: string }, at: Date = new Date()): void {
     const name = input.name === undefined ? this.userName : User.normalizeRequired(input.name, "Nome");
-    const phone = input.phone === undefined ? this.userPhone : User.normalizeRequired(input.phone, "Telefone");
+    const phone = input.phone === undefined ? this.userPhone : User.normalizeBrazilianMobilePhone(input.phone);
     if (name === this.userName && phone === this.userPhone) return;
 
     this.validateMutationDate(at);
@@ -247,6 +247,14 @@ export class User {
       throw new TypeError(`${field} é obrigatório.`);
     }
     return value.trim();
+  }
+
+  private static normalizeBrazilianMobilePhone(value: string): string {
+    const phone = User.normalizeRequired(value, "Telefone");
+    if (!/^\+55\d{2}9\d{8}$/.test(phone)) {
+      throw new TypeError("Telefone deve seguir o formato de celular brasileiro +55, DDD e número com 9 dígitos.");
+    }
+    return phone;
   }
 
   private static copyValidDate(value: Date, field: string): Date {

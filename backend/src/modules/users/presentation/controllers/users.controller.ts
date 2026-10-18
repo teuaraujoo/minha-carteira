@@ -52,6 +52,22 @@ export class UserController {
     const result = await this.userService.uploadProfileImage({ userId, ...parsed.data });
     sendSuccess(response, result);
   };
+
+  async deactivateMyAccount(request: Request, response: Response): Promise<void> {
+    const userId = requireUserId(request);
+    await this.userService.deactivateMyAccount(userId);
+    sendNoContent(response);
+  }
+
+  async reactivateUserAsAdmin(request: Request, response: Response): Promise<void> {
+    const actorUserId = requireUserId(request);
+    const targetUserId = request.params.userId;
+    if (typeof targetUserId !== "string" || !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(targetUserId)) {
+      throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "ID do usuário inválido." });
+    }
+    await this.userService.reactivateUserAsAdmin(actorUserId, targetUserId);
+    sendNoContent(response);
+  }
 }
 
 function requireUserId(request: Request): string {

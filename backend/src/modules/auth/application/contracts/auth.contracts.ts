@@ -22,10 +22,6 @@ export interface TokenHasher {
   matches(token: string, expectedHash: string): Promise<boolean>;
 }
 
-export interface RefreshTokensGateway {
-  revokeAllFromUser(userId: string): Promise<void>;
-}
-
 export interface LogoutSessionInput { sessionId: string | null; }
 export interface RefreshSessionInput { refreshToken: string; }
 export interface RefreshSessionOutput { accessToken: string; }
@@ -48,9 +44,15 @@ export interface PasswordChangedEmail {
   email: string;
 }
 
+export interface AccountReactivationEmail {
+  email: string;
+  reactivationUrl: string;
+}
+
 export interface EmailProvider {
   sendPasswordReset(input: PasswordResetEmail): Promise<void>;
   sendPasswordChanged(input: PasswordChangedEmail): Promise<void>;
+  sendAccountReactivation(input: AccountReactivationEmail): Promise<void>;
 }
 
 export interface PasswordResetRateLimiter {

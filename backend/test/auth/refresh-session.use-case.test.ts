@@ -13,6 +13,7 @@ import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/user
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 import { Sha256TokenHasher } from "../../src/modules/auth/infrastructure/security/sha256-token.hasher.js";
+import { accountSessionCoordinatorDouble } from "./account-session-coordinator.double.js";
 
 const now = new Date("2026-01-02T00:00:00.000Z");
 const rawRefreshToken = "signed-refresh-token";
@@ -87,6 +88,8 @@ function setup(options: {
     },
     async findActivePasswordResetRecipient() { return null; },
     async findActivePasswordResetRecipientById() { return null; },
+    async findInactiveAccountReactivationRecipient() { return null; },
+    async reactivateUserById() { return false; },
     async changePasswordHash() { throw new Error("Não esperado."); },
   };
   const tokenHasher: TokenHasher = {
@@ -100,7 +103,7 @@ function setup(options: {
   };
   const clock: ClockProvider = { now: () => now };
   return {
-    service: new AuthService(refreshTokenRepository, clock, tokenHasher, { hash: async () => "", compare: async () => false }, usersAuthGateway, jwtProvider, { generate: () => "session-1" }),
+    service: new AuthService(refreshTokenRepository, clock, tokenHasher, { hash: async () => "", compare: async () => false }, usersAuthGateway, jwtProvider, { generate: () => "session-1" }, accountSessionCoordinatorDouble),
     calls,
     get registeredUse() { return registeredUse; },
   };

@@ -9,13 +9,13 @@ import type { AuthService } from "../../application/services/auth.service.js";
 import { createAuthenticationMiddleware } from "../middlewares/authentication.middleware.js";
 import { createCsrfToken, createCsrfValidationMiddleware, createOriginValidationMiddleware } from "../middlewares/csrf.middleware.js";
 import { createUserSchema } from "../../../users/presentation/schemas/users.schemas.js";
-import { confirmPasswordResetSchema, loginSchema, requestPasswordResetSchema } from "../schemas/auth.schemas.js";
+import { confirmAccountReactivationSchema, confirmPasswordResetSchema, loginSchema, requestAccountReactivationSchema, requestPasswordResetSchema } from "../schemas/auth.schemas.js";
 import { AUTH_COOKIE_NAMES, CSRF_COOKIE_OPTIONS, clearAuthenticationCookies, setAuthenticationCookies } from "../security/auth-cookies.js";
 import type { AuthenticationMiddlewareDependencies } from "../middlewares/authentication.middleware.js";
 import type { UsersRegistrationGateway } from "../../../users/index.js";
 
 export interface AuthRoutesDependencies extends AuthenticationMiddlewareDependencies {
-  authService: Pick<AuthService, "login" | "refresh" | "logout" | "requestPasswordReset" | "confirmPasswordReset">;
+  authService: Pick<AuthService, "login" | "refresh" | "logout" | "requestPasswordReset" | "confirmPasswordReset" | "requestAccountReactivation" | "confirmAccountReactivation">;
   usersRegistrationGateway: UsersRegistrationGateway;
   allowedOrigins: readonly string[];
   tokenHasher: TokenHasher;
@@ -88,6 +88,26 @@ export function createAuthRouter(dependencies: AuthRoutesDependencies): Router {
       token: parsed.data.token,
       password: parsed.data.password,
       passwordConfirmation: parsed.data.passwordConfirmation,
+      metadata: buildRequestMetadata(parsed.data.metadata, request),
+    });
+    sendNoContent(response);
+  });
+
+  router.post("/account-reactivation", validateCsrf, async (request, response) => {
+    const parsed = requestAccountReactivationSchema.safeParse(request.body);
+    if (!parsed.success) throw validationError("Dados para solicitação de reativação inválidos.", parsed.error);
+    await dependencies.authService.requestAccountReactivation({
+      email: parsed.data.email,
+      metadata: buildRequestMetadata(parsed.data.metadata, request),
+    });
+    response.status(202).json({ data: { message: "Se houver uma conta inativa associada ao e-mail, você receberá um link para reativá-la." } });
+  });
+
+  router.post("/account-reactivation/confirm", validateCsrf, async (request, response) => {
+    const parsed = confirmAccountReactivationSchema.safeParse(request.body);
+    if (!parsed.success) throw validationError("Dados para confirmação de reativação inválidos.", parsed.error);
+    await dependencies.authService.confirmAccountReactivation({
+      token: parsed.data.token,
       metadata: buildRequestMetadata(parsed.data.metadata, request),
     });
     sendNoContent(response);

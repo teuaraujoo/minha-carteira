@@ -31,6 +31,8 @@ export function createUsersRouter(dependencies: UsersRoutesDependencies): Router
   router.get("/me", authenticate, (request, response) => controller.getMyProfile(request, response));
   router.patch("/me", authenticate, validateCsrf, (request, response) => controller.updateMyProfile(request, response));
   router.post("/me/profile-image", authenticate, validateCsrf, profileImageUpload, (request, response) => controller.uploadProfileImage(request, response));
+  router.post("/me/deactivate", authenticate, validateCsrf, (request, response) => controller.deactivateMyAccount(request, response));
+  router.post("/:userId/reactivate", authenticate, validateCsrf, (request, response) => controller.reactivateUserAsAdmin(request, response));
 
   return router;
 }

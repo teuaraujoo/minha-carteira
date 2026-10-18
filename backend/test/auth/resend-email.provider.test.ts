@@ -18,6 +18,16 @@ test("Resend envia link de recuperação com conteúdo em português", async () 
   assert.match(String(sent?.text), /challenge\.secret/);
 });
 
+test("Resend envia link de reativação com conteúdo em português", async () => {
+  let sent: Record<string, unknown> | undefined;
+  const provider = new ResendEmailProvider(createClient(async (input) => { sent = input; return { data: { id: "email-2" }, error: null }; }), "Minha Carteira <conta@example.com>");
+  await provider.sendAccountReactivation({ email: "teco@example.com", reactivationUrl: "https://carteira.example/reactivate-account?token=challenge.secret" });
+
+  assert.equal(sent?.to, "teco@example.com");
+  assert.match(String(sent?.subject), /Reativação da conta/);
+  assert.match(String(sent?.text), /challenge\.secret/);
+});
+
 test("Resend rejeita falhas sem propagar dados sensíveis do provedor", async () => {
   const provider = new ResendEmailProvider(createClient(async () => ({ data: null, error: { message: "erro com chave privada" } })), "conta@example.com");
   await assert.rejects(provider.sendPasswordReset({ email: "teco@example.com", resetUrl: "https://carteira.example/?token=segredo" }), (error: Error) => {

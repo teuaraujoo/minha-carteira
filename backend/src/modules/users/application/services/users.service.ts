@@ -9,7 +9,9 @@ import type { ClockProvider } from "../../../../shared/application/clock-provide
 import type { RegisterUserInput, RegisterUserOutput } from "../dto/register-user.dto.js";
 import { User } from "../../domain/entities/users.entity.js";
 import { mapRegisterUserOutput } from "../mappers/register-user.mapper.js";
-import type { AuthUser, AuthUserCredentials, PasswordResetRecipient } from "../../domain/interfaces/users.interfaces.js";
+import type { AccountReactivationRecipient, AuthUser, AuthUserCredentials, PasswordResetRecipient } from "../../domain/interfaces/users.interfaces.js";
+import type { AccountSessionCoordinator } from "../../../auth/index.js";
+import { UserRoles } from "../../domain/enums/users.enums.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 
 
@@ -21,7 +23,47 @@ export class UserService {
     private readonly passwordHasher: PasswordHasher,
     private readonly idGenerator: IdGenerator,
     private readonly clock: ClockProvider,
+    private readonly accountSessionCoordinator: AccountSessionCoordinator,
   ) { }
+
+  async deactivateMyAccount(userId: string): Promise<void> {
+    const deactivatedAt = this.clock.now();
+    if (!await this.accountSessionCoordinator.deactivateAccountAndRevokeSessions(userId, deactivatedAt)) {
+      throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado ou já inativo." });
+    }
+    this.logger.info({
+      event: "users.account.deactivated",
+      module: "users",
+      message: "Conta desativada e sessões revogadas",
+      context: { operation: "deactivateMyAccount", userId },
+    });
+  }
+
+  async reactivateUserById(userId: string): Promise<boolean> {
+    const result = await this.accountSessionCoordinator.reactivateAccountAndRevokeSessions(userId, this.clock.now());
+    if (!result.found) return false;
+
+    if (result.reactivated) {
+      this.logger.info({
+        event: "users.account.reactivated",
+        module: "users",
+        message: "Conta reativada; o usuário deverá entrar novamente",
+        context: { operation: "reactivateUserById", userId },
+      });
+    }
+    return true;
+  }
+
+  async reactivateUserAsAdmin(actorUserId: string, targetUserId: string): Promise<void> {
+    const actor = await this.userRepository.findActiveById(actorUserId);
+    if (!actor || actor.role !== UserRoles.ADMIN) {
+      throw new AppError({ status: 403, code: ErrorCode.FORBIDDEN, message: "Apenas um administrador pode reativar esta conta." });
+    }
+
+    if (!await this.reactivateUserById(targetUserId)) {
+      throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado." });
+    }
+  }
 
   async getMyProfile(userId: string): Promise<UserProfileOutput> {
     const user = await this.userRepository.findActiveById(userId);
@@ -124,6 +166,12 @@ export class UserService {
   async findActivePasswordResetRecipientById(userId: string): Promise<PasswordResetRecipient | null> {
     const user = await this.userRepository.findActiveById(userId);
     if (!user) return null;
+    return { id: user.id, email: user.email };
+  }
+
+  async findInactiveAccountReactivationRecipient(email: string): Promise<AccountReactivationRecipient | null> {
+    const user = await this.userRepository.findByEmail(email.trim().toLowerCase());
+    if (!user || user.isActive()) return null;
     return { id: user.id, email: user.email };
   }
 

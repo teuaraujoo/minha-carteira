@@ -65,6 +65,8 @@ function createDependencies(overrides: Partial<AuthRoutesDependencies> = {}): Au
     findActiveUserById: async () => user,
     findActivePasswordResetRecipient: async () => null,
     findActivePasswordResetRecipientById: async () => null,
+    findInactiveAccountReactivationRecipient: async () => null,
+    reactivateUserById: async () => false,
     changePasswordHash: async () => undefined,
   };
   const usersRegistrationGateway: UsersRegistrationGateway = {
@@ -93,6 +95,8 @@ function createDependencies(overrides: Partial<AuthRoutesDependencies> = {}): Au
       logout: async () => undefined,
       requestPasswordReset: async () => undefined,
       confirmPasswordReset: async () => undefined,
+      requestAccountReactivation: async () => undefined,
+      confirmAccountReactivation: async () => undefined,
     },
     usersRegistrationGateway,
     jwtProvider,
@@ -168,6 +172,8 @@ test("confirmação de reset valida os dados, responde 204 e não inicia sessão
   const authService = {
     ...defaults.authService,
     confirmPasswordReset: async (input: { token: string }) => { receivedToken = input.token; },
+    requestAccountReactivation: async () => undefined,
+    confirmAccountReactivation: async () => undefined,
   };
   await withServer(async (baseUrl) => {
     const csrf = await issueCsrf(baseUrl);
@@ -289,7 +295,7 @@ test("/me retorna apenas contexto autenticado e logout limpa cookies", async () 
 
 test("logout inválido ainda limpa cookies sem revogar uma sessão desconhecida", async () => {
   let revokedSessionId: string | null | undefined;
-  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; }, requestPasswordReset: async () => undefined, confirmPasswordReset: async () => undefined };
+  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; }, requestPasswordReset: async () => undefined, confirmPasswordReset: async () => undefined, requestAccountReactivation: async () => undefined, confirmAccountReactivation: async () => undefined };
   await withServer(async (baseUrl) => {
     const csrf = await issueCsrf(baseUrl);
     const response = await fetch(`${baseUrl}/logout`, {
@@ -316,7 +322,7 @@ test("logout usa refresh válido quando o access token expirou", async () => {
     verifyAccessToken: async () => { throw new Error("Token expirado."); },
     verifyRefreshToken: async () => verified("refresh"),
   };
-  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; }, requestPasswordReset: async () => undefined, confirmPasswordReset: async () => undefined };
+  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; }, requestPasswordReset: async () => undefined, confirmPasswordReset: async () => undefined, requestAccountReactivation: async () => undefined, confirmAccountReactivation: async () => undefined };
   await withServer(async (baseUrl) => {
     const csrf = await issueCsrf(baseUrl);
     const response = await fetch(`${baseUrl}/logout`, {
@@ -355,6 +361,8 @@ test("refresh e logout também bloqueiam operações sem CSRF", async () => {
       logout: async () => { logoutCalls += 1; },
       requestPasswordReset: async () => undefined,
       confirmPasswordReset: async () => undefined,
+      requestAccountReactivation: async () => undefined,
+      confirmAccountReactivation: async () => undefined,
     },
   });
 });

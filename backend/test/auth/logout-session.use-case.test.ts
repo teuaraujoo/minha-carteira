@@ -4,6 +4,7 @@ import { AuthService } from "../../src/modules/auth/application/services/auth.se
 import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
+import { accountSessionCoordinatorDouble } from "./account-session-coordinator.double.js";
 
 const revokedAt = new Date("2026-01-02T12:00:00.000Z");
 
@@ -25,7 +26,7 @@ function setup() {
   } as RefreshTokenRepository;
   const clock: ClockProvider = { now: () => revokedAt };
   return {
-    service: new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }),
+    service: new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, findInactiveAccountReactivationRecipient: async () => null, reactivateUserById: async () => false, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }, accountSessionCoordinatorDouble),
     calls,
     alreadyRevoked,
     get effectiveRevocations() { return effectiveRevocations; },
@@ -59,7 +60,7 @@ test("propaga falhas de persistência para que a camada HTTP não confirme falso
   const repository = {
     async revoke() { throw expectedError; },
   } as Pick<RefreshTokenRepository, "revoke"> as RefreshTokenRepository;
-  const service = new AuthService(repository, { now: () => revokedAt }, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
+  const service = new AuthService(repository, { now: () => revokedAt }, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, findInactiveAccountReactivationRecipient: async () => null, reactivateUserById: async () => false, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }, accountSessionCoordinatorDouble);
 
   await assert.rejects(service.logout({ sessionId: "session-1" }), error => error === expectedError);
 });

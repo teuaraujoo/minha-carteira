@@ -28,6 +28,17 @@ function makeChallenge(): Challenge {
   });
 }
 
+function makeAccountReactivationChallenge(): Challenge {
+  return new Challenge({
+    id: "challenge-id", purpose: ChallengePurpose.ACCOUNT_REACTIVATION,
+    subjectType: ChallengeSubjectType.USER, subjectId: "user-id",
+    secretHash: "hashed-secret", status: ChallengeStatus.REQUESTED, attempts: 0,
+    maxAttempts: 3, metadata: { issued: metadata, consumed: null },
+    expiresAt: new Date(at.getTime() + 15 * 60 * 1000), consumedAt: null,
+    createdAt: at, updatedAt: at,
+  });
+}
+
 test("repository persiste metadata como JSON e somente o hash do desafio", async () => {
   let requestData: Record<string, unknown> | undefined;
   let challengeData: Record<string, unknown> | undefined;
@@ -61,6 +72,60 @@ test("terceira tentativa inválida marca o desafio como FAILED por atualização
   assert.deepEqual(calls[0]?.where.attempts, { lt: 3 });
   assert.deepEqual(calls[0]?.data.attempts, { increment: 1 });
   assert.equal(calls[1]?.data.status, "FAILED");
+});
+
+test("tentativas inválidas de reativação limitam-se ao desafio USER correspondente", async () => {
+  const calls: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
+  const fake = {
+    challenge: {
+      updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => { calls.push({ where, data }); return { count: 1 }; },
+      findUnique: async () => ({ attempts: 3, maxAttempts: 3 }),
+    },
+  } as unknown as Pick<PrismaClient, "challenge">;
+  const repository = new PrismaChallengeRepository(fake);
+  const challenge = makeAccountReactivationChallenge();
+
+  await repository.registerInvalidAttemptForPurpose(
+    challenge.id,
+    ChallengePurpose.ACCOUNT_REACTIVATION,
+    ChallengeSubjectType.USER,
+    challenge.maxAttempts,
+    at,
+  );
+
+  assert.equal(calls[0]?.where.purpose, ChallengePurpose.ACCOUNT_REACTIVATION);
+  assert.equal(calls[0]?.where.subjectType, ChallengeSubjectType.USER);
+  assert.deepEqual(calls[0]?.where.attempts, { lt: 3 });
+});
+
+test("consumo condicional conclui o link de reativação uma única vez", async () => {
+  let updateWhere: Record<string, unknown> | undefined;
+  let updateData: Record<string, unknown> | undefined;
+  const fake = {
+    challenge: {
+      updateMany: async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        updateWhere = where;
+        updateData = data;
+        return { count: 1 };
+      },
+    },
+  } as unknown as Pick<PrismaClient, "challenge">;
+  const repository = new PrismaChallengeRepository(fake);
+  const challenge = makeAccountReactivationChallenge();
+  const result = await repository.completeIfUsableForPurpose(
+    challenge.id,
+    ChallengePurpose.ACCOUNT_REACTIVATION,
+    ChallengeSubjectType.USER,
+    challenge.maxAttempts,
+    { issued: metadata, consumed: metadata },
+    at,
+  );
+
+  assert.equal(result, true);
+  assert.equal(updateWhere?.purpose, ChallengePurpose.ACCOUNT_REACTIVATION);
+  assert.equal(updateWhere?.subjectType, ChallengeSubjectType.USER);
+  assert.equal(updateData?.status, ChallengeStatus.COMPLETED);
+  assert.equal(updateData?.consumedAt, at);
 });
 
 test("exclusão de solicitação remove desafios vinculados antes do registro pai", async () => {

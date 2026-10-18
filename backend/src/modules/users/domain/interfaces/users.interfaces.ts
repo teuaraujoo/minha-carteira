@@ -17,3 +17,8 @@ export interface PasswordResetRecipient {
   id: string;
   email: string;
 }
+
+export interface AccountReactivationRecipient {
+  id: string;
+  email: string;
+}

@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import type { EmailProvider, PasswordChangedEmail, PasswordResetEmail } from "../../application/contracts/auth.contracts.js";
+import type { AccountReactivationEmail, EmailProvider, PasswordChangedEmail, PasswordResetEmail } from "../../application/contracts/auth.contracts.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 
 export class ResendEmailProvider implements EmailProvider {
@@ -25,6 +25,15 @@ export class ResendEmailProvider implements EmailProvider {
       subject: "Senha alterada — Minha Carteira",
       text: "Sua senha foi alterada. Se você não reconhece esta alteração, entre em contato com o suporte.",
       html: "<p>Sua senha foi alterada.</p><p>Se você não reconhece esta alteração, entre em contato com o suporte.</p>",
+    });
+  }
+
+  async sendAccountReactivation(input: AccountReactivationEmail): Promise<void> {
+    await this.send({
+      to: input.email,
+      subject: "Reativação da conta — Minha Carteira",
+      text: `Para reativar sua conta, acesse: ${input.reactivationUrl}\n\nSe você não solicitou essa alteração, ignore esta mensagem.`,
+      html: `<p>Recebemos uma solicitação para reativar sua conta.</p><p><a href="${escapeHtml(input.reactivationUrl)}">Reativar conta</a></p><p>Se você não solicitou essa alteração, ignore esta mensagem.</p>`,
     });
   }
 

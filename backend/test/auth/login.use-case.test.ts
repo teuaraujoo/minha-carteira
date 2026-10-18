@@ -32,6 +32,7 @@ function setup(options: {
   credentials?: AuthUserCredentials | null;
   passwordMatches?: boolean;
   user?: AuthUser | null;
+  sessionAllowed?: boolean;
 } = {}) {
   const calls: Array<{ method: string; input?: unknown }> = [];
   const savedSessions: RefreshToken[] = [];
@@ -47,6 +48,8 @@ function setup(options: {
     },
     async findActivePasswordResetRecipient() { return null; },
     async findActivePasswordResetRecipientById() { return null; },
+    async findInactiveAccountReactivationRecipient() { return null; },
+    async reactivateUserById() { return false; },
     async changePasswordHash() { throw new Error("Não esperado."); },
   };
   const passwordHasher: PasswordHasher = {
@@ -85,10 +88,7 @@ function setup(options: {
     async matches() { throw new Error("Não esperado."); },
   };
   const refreshTokenRepository: RefreshTokenRepository = {
-    async save(session) {
-      calls.push({ method: "save" });
-      savedSessions.push(session);
-    },
+    async save(session) { savedSessions.push(session); },
     async findActiveById() { throw new Error("Não esperado."); },
     async registerUse() { throw new Error("Não esperado."); },
     async revoke() { throw new Error("Não esperado."); },
@@ -96,7 +96,16 @@ function setup(options: {
   };
   const clock: ClockProvider = { now: () => now };
   return {
-    service: new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersAuthGateway, jwtProvider, idGenerator),
+    service: new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersAuthGateway, jwtProvider, idGenerator, {
+      createSessionIfAccountActive: async (session) => {
+        calls.push({ method: "save" });
+        if (options.sessionAllowed === false) return false;
+        savedSessions.push(session);
+        return true;
+      },
+      deactivateAccountAndRevokeSessions: async () => true,
+      reactivateAccountAndRevokeSessions: async () => ({ found: true, reactivated: true }),
+    }),
     calls,
     savedSessions,
     get generatedIds() { return generatedIds; },
@@ -168,6 +177,15 @@ test("usuário ausente, senha incorreta e usuário inativo têm o mesmo erro pú
   assert.equal(inactiveUser.savedSessions.length, 0);
   assert.equal(deactivatedDuringLogin.savedSessions.length, 0);
   assert.equal(inactiveUser.calls.some(call => call.method === "compare"), true);
+});
+
+test("recusa criar sessão se a conta deixar de estar ativa ao persistir o login", async () => {
+  const fixture = setup({ sessionAllowed: false });
+  const error = await unauthorizedSnapshot(fixture.service.login({ identifier: "ana@example.com", password: rawPassword }));
+
+  assert.equal(error.message, "E-mail, nome de usuário ou senha inválidos.");
+  assert.equal(fixture.savedSessions.length, 0);
+  assert.equal(fixture.calls.some((call) => call.method === "save"), true);
 });
 
 test("rejeita identificador vazio com a mesma resposta genérica", async () => {

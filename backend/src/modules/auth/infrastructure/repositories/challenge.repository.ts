@@ -6,6 +6,7 @@ import {
   ChallengeSubjectType as PrismaChallengeSubjectType,
 } from "../../../../../generated/prisma/enums.js";
 import type { ChallengeMetadata } from "../../domain/entities/auth.entities.js";
+import { ChallengePurpose, ChallengeSubjectType } from "../../domain/enums/auth.enums.js";
 import type { ChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
 
 type PrismaChallengeClient = Pick<PrismaClient, "challenge">;
@@ -55,14 +56,30 @@ export class PrismaChallengeRepository implements ChallengeRepository {
   }
 
   async registerInvalidAttempt(id: string, attemptedAt: Date): Promise<boolean> {
+    return this.registerInvalidAttemptForPurpose(
+      id,
+      ChallengePurpose.PASSWORD_RESET,
+      ChallengeSubjectType.PASSWORD_RESET_REQUEST,
+      3,
+      attemptedAt,
+    );
+  }
+
+  async registerInvalidAttemptForPurpose(
+    id: string,
+    purpose: Challenge["purpose"],
+    subjectType: Challenge["subjectType"],
+    maxAttempts: number,
+    attemptedAt: Date,
+  ): Promise<boolean> {
     const result = await this.prisma.challenge.updateMany({
       where: {
         id,
-        purpose: PrismaChallengePurpose.PASSWORD_RESET,
-        subjectType: PrismaChallengeSubjectType.PASSWORD_RESET_REQUEST,
+        purpose: PrismaChallengePurpose[purpose],
+        subjectType: PrismaChallengeSubjectType[subjectType],
         status: PrismaChallengeStatus.REQUESTED,
         expiresAt: { gt: attemptedAt },
-        attempts: { lt: 3 },
+        attempts: { lt: maxAttempts },
       },
       data: { attempts: { increment: 1 }, updatedAt: attemptedAt },
     });
@@ -79,14 +96,32 @@ export class PrismaChallengeRepository implements ChallengeRepository {
   }
 
   async completeIfUsable(id: string, metadata: ChallengeMetadata, completedAt: Date): Promise<boolean> {
+    return this.completeIfUsableForPurpose(
+      id,
+      ChallengePurpose.PASSWORD_RESET,
+      ChallengeSubjectType.PASSWORD_RESET_REQUEST,
+      3,
+      metadata,
+      completedAt,
+    );
+  }
+
+  async completeIfUsableForPurpose(
+    id: string,
+    purpose: Challenge["purpose"],
+    subjectType: Challenge["subjectType"],
+    maxAttempts: number,
+    metadata: ChallengeMetadata,
+    completedAt: Date,
+  ): Promise<boolean> {
     const result = await this.prisma.challenge.updateMany({
       where: {
         id,
-        purpose: PrismaChallengePurpose.PASSWORD_RESET,
-        subjectType: PrismaChallengeSubjectType.PASSWORD_RESET_REQUEST,
+        purpose: PrismaChallengePurpose[purpose],
+        subjectType: PrismaChallengeSubjectType[subjectType],
         status: PrismaChallengeStatus.REQUESTED,
         expiresAt: { gt: completedAt },
-        attempts: { lt: 3 },
+        attempts: { lt: maxAttempts },
       },
       data: {
         status: PrismaChallengeStatus.COMPLETED,

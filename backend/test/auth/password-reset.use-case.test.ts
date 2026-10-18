@@ -48,6 +48,17 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
         challengeCompleted = true;
         return true;
       },
+      registerInvalidAttemptForPurpose: async (id, _purpose, _subjectType, maxAttempts) => {
+        if (challenge?.id !== id || challengeFailed || challengeCompleted) return false;
+        challengeAttempts += 1;
+        if (challengeAttempts >= maxAttempts) challengeFailed = true;
+        return true;
+      },
+      completeIfUsableForPurpose: async (id) => {
+        if (challenge?.id !== id || challengeFailed || challengeCompleted) return false;
+        challengeCompleted = true;
+        return true;
+      },
       markFailed: async (id) => { if (challenge?.id === id) challengeFailed = true; },
     },
     refreshTokens: {
@@ -62,6 +73,8 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
       findActiveUserById: async () => null,
       findActivePasswordResetRecipient: async () => recipient,
       findActivePasswordResetRecipientById: async (id) => id === recipient?.id ? recipient : null,
+      findInactiveAccountReactivationRecipient: async () => null,
+      reactivateUserById: async () => false,
       changePasswordHash: async (_id, hash) => { changedPasswordHash = hash; },
     },
   };
@@ -77,10 +90,17 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
     { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } },
     { generate: () => `generated-${++id}` },
     {
+      createSessionIfAccountActive: async () => true,
+      deactivateAccountAndRevokeSessions: async () => true,
+      reactivateAccountAndRevokeSessions: async () => ({ found: true, reactivated: true }),
+    },
+    {
       unitOfWork,
+      challengeRepository: transaction.challenges,
       emailProvider: {
         sendPasswordReset: async (input) => { if (options.failEmail) throw new Error("Falha do provedor."); emails.push(input.email); sentResetUrls.push(input.resetUrl); },
         sendPasswordChanged: async (input) => { emails.push(input.email); },
+        sendAccountReactivation: async (input) => { emails.push(input.email); sentResetUrls.push(input.reactivationUrl); },
       },
       tokenGenerator: { generate: () => "secret-token" },
       rateLimiter: new InMemoryPasswordResetRateLimiter(),

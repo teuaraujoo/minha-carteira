@@ -121,12 +121,24 @@ test("changes the password hash without exposing it in serialized output", () =>
 
 test("updates only approved profile fields and preserves the hash", () => {
   const user = createUser();
-  user.updateProfile({ name: "Nome Atualizado", phone: "+5585888888888" }, new Date("2026-01-02T00:00:00.000Z"));
+  user.updateProfile({ name: "Nome Atualizado", phone: "+5585998888888" }, new Date("2026-01-02T00:00:00.000Z"));
 
   assert.equal(user.name, "Nome Atualizado");
-  assert.equal(user.phone, "+5585888888888");
+  assert.equal(user.phone, "+5585998888888");
   assert.equal(user.passwordHash, "hash");
   assert.equal(user.updatedAt.toISOString(), "2026-01-02T00:00:00.000Z");
+});
+
+test("rejects phone numbers outside the approved Brazilian mobile format", () => {
+  assert.throws(() => createUser({ phone: "+558599999999" }), /Telefone deve seguir o formato de celular brasileiro/);
+  assert.throws(() => createUser({ phone: "+5585888888888" }), /Telefone deve seguir o formato de celular brasileiro/);
+
+  const user = createUser();
+  assert.throws(
+    () => user.updateProfile({ phone: "5585888888888" }, new Date("2026-01-02T00:00:00.000Z")),
+    /Telefone deve seguir o formato de celular brasileiro/,
+  );
+  assert.equal(user.phone, "+5585999999999");
 });
 
 test("rejects invalid fields, enums, dates, lifecycle timestamps, and capabilities", () => {

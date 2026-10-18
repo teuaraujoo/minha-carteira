@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
-import type {
-  RefreshTokensGateway,
-} from "../../src/modules/auth/application/contracts/auth.contracts.js";
 import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshToken, type RefreshTokenProps } from "../../src/modules/auth/domain/entities/auth.entities.js";
 import { RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import { PrismaRefreshTokenRepository, type PrismaRefreshTokensClient } from "../../src/modules/auth/infrastructure/repositories/refresh-token.repository.js";
-import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
 
 const issuedAt = new Date("2026-01-01T00:00:00.000Z");
 const expiresAt = new Date("2026-01-06T00:00:00.000Z");
@@ -79,7 +74,6 @@ test("persiste somente hash da credencial e consulta somente sessão ativa", asy
   });
   assert.equal(await repository.findActiveById("session-1", expiresAt), null);
 });
-
 test("registra uso e revoga sessão individual ou todas as sessões com motivo tipado", async () => {
   const fake = createPrismaFake([record(), record({ id: "session-2" })]);
   const repository = new PrismaRefreshTokenRepository(fake.prisma);
@@ -92,22 +86,4 @@ test("registra uso e revoga sessão individual ou todas as sessões com motivo t
   assert.equal(fake.rows[0]?.lastUsedAt?.getTime(), usedAt.getTime());
   assert.equal(fake.rows[0]?.revokeReason, RefreshTokenRevokeReason.LOGOUT);
   assert.equal(fake.rows[1]?.revokeReason, RefreshTokenRevokeReason.SECURITY_EVENT);
-});
-
-test("gateway público revoga sessões por desativação sem expor o repository", async () => {
-  const at = new Date("2026-01-03T00:00:00.000Z");
-  let call: { userId: string; at: Date; reason: RefreshTokenRevokeReason } | undefined;
-  const repository = {
-    async revokeAllFromUser(userId: string, revokedAt: Date, reason: RefreshTokenRevokeReason) {
-      call = { userId, at: revokedAt, reason };
-    },
-  } as Pick<RefreshTokenRepository, "revokeAllFromUser"> as RefreshTokenRepository;
-  const clock: ClockProvider = { now: () => at };
-  const gateway: RefreshTokensGateway = new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
-
-  await gateway.revokeAllFromUser("user-1");
-  assert.deepEqual(call, {
-    userId: "user-1", at,
-    reason: RefreshTokenRevokeReason.USER_DEACTIVATED,
-  });
 });
