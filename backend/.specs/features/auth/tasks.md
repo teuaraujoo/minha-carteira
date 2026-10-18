@@ -155,7 +155,7 @@ Integração PostgreSQL e migration permanecem pendentes até a configuração d
 
 ### T5: [AUTH-05] Implementar refresh sem rotação
 
-**Status:** A fazer
+**Status:** Concluída
 **What:** Validar refresh cookie, sessão, hash e usuário e emitir somente novo
 access token.
 **Where:** caso de uso e testes de `auth`.
@@ -164,9 +164,9 @@ access token.
 
 **Done when:**
 
-- [ ] Refresh expirado, revogado, divergente ou de usuário inativo é rejeitado.
-- [ ] Refresh válido mantém a credencial e atualiza `lastUsedAt`.
-- [ ] Testes comprovam sucesso e falhas listadas.
+- [x] Refresh expirado, revogado, divergente ou de usuário inativo é rejeitado.
+- [x] Refresh válido mantém a credencial e atualiza `lastUsedAt`.
+- [x] Testes comprovam sucesso e falhas listadas.
 
 **Tests:** unit
 **Gate:** quick

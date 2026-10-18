@@ -20,6 +20,11 @@ export interface JwtProvider {
   verifyRefreshToken(token: string): Promise<VerifiedToken>;
 }
 
+export interface TokenHasher {
+  hash(token: string): Promise<string>;
+  matches(token: string, expectedHash: string): Promise<boolean>;
+}
+
 export interface RefreshTokenRepository {
   save(refreshToken: RefreshToken): Promise<void>;
   findActiveById(id: string, at: Date): Promise<RefreshToken | null>;
