@@ -4,6 +4,7 @@ import test from "node:test";
 import type { NextFunction, Request, Response } from "express";
 import { createApp } from "../../src/app/app.js";
 import { UserService } from "../../src/modules/users/application/services/users.service.js";
+import { UserNotFoundError } from "../../src/modules/users/domain/errors/user-not-found.error.js";
 import type { IUsersRepository } from "../../src/modules/users/domain/interfaces/users-repository.interface.js";
 import type { AppLogger, LogInput } from "../../src/shared/application/logging/app-logger.js";
 import type { StorageOperations } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
@@ -99,7 +100,7 @@ test("UserService does not log upload success when the user is absent", async ()
   };
   const service = new UserService(repository(null), storageProvider, new LogContext(logger));
 
-  await assert.rejects(service.uploadProfileImage(input), { message: "Usuário não encontrado." });
+  await assert.rejects(service.uploadProfileImage(input), UserNotFoundError);
   assert.equal(replacements, 0);
   assert.deepEqual(logger.logs, []);
 });

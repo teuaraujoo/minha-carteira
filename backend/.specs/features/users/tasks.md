@@ -57,7 +57,7 @@ T10 → T11
 
 ### T1: [USR-00] Preparar contratos compartilhados
 
-**Status:** A fazer
+**Status:** Concluída; gate específico aprovado. A suíte ampla ainda tem falhas preexistentes nos testes da entidade e do schema de cadastro.
 **What:** Definir `PasswordHasher`, adapter bcrypt e remover dependência de
 `AppError` de apresentação do serviço compartilhado.
 **Where:** contratos e infraestrutura compartilhados, além do serviço que hoje
@@ -67,12 +67,13 @@ depende de `shared/presentation`.
 
 **Done when:**
 
-- [ ] Hash e comparação de senha são cobertos por testes.
-- [ ] Serviço de aplicação não importa `shared/presentation`.
-- [ ] Erros são mapeados para HTTP somente na borda.
+- [x] Hash e comparação de senha são cobertos por testes.
+- [x] Serviço de aplicação não importa `shared/presentation`.
+- [x] Erros são mapeados para HTTP somente na borda.
 
 **Tests:** unit
 **Gate:** quick
+**Gate command:** `node --import tsx --test test/shared/bcrypt-password-hasher.test.ts test/users/profile-image-upload.test.ts test/logging/users-service-logging.test.ts`
 **Commit:** `refactor(shared): define application security contracts`
 
 ### T2: [USR-01] Alinhar entidade e tipos de domínio

@@ -3,6 +3,7 @@ import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-er
 import { sendSuccess } from "../../../../shared/presentation/http/success-response.js";
 import { StoredFileValidationError } from "../../../storage/domain/validation/file-validation.js";
 import type { UserService } from "../../application/services/users.service.js";
+import { UserNotFoundError } from "../../domain/errors/user-not-found.error.js";
 import { uploadProfileImageSchema } from "../schemas/users.schemas.js";
 
 type AuthenticatedRequest = Request & {
@@ -39,6 +40,9 @@ export class UserController {
             const result = await this.userService.uploadProfileImage({ userId, ...parsed.data });
             sendSuccess(response, result);
         } catch (error) {
+            if (error instanceof UserNotFoundError) {
+                throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: error.message, cause: error });
+            }
             if (error instanceof StoredFileValidationError) {
                 throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: error.message, cause: error });
             }

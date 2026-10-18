@@ -1,6 +1,6 @@
 import type { IUsersRepository } from "../../domain/interfaces/users-repository.interface.js";
 import type { UploadProfileImageInput, UploadProfileImageResult } from "../@types/users.types.js";
-import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
+import { UserNotFoundError } from "../../domain/errors/user-not-found.error.js";
 import type { AppLogger } from "../../../../shared/application/logging/app-logger.js";
 import { StorageContextType } from "../../../storage/domain/enums/storage.enums.js";
 import type { StorageOperations } from "../../../storage/domain/interfaces/storage.interfaces.js";
@@ -16,7 +16,7 @@ export class UserService {
     async uploadProfileImage(input: UploadProfileImageInput): Promise<UploadProfileImageResult> {
         const profile = await this.userRepository.findActiveUser(input.userId);
 
-        if (!profile) throw new AppError({ status: 400, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado." })
+        if (!profile) throw new UserNotFoundError();
 
         const stored = await this.storageProvider.replaceFileContent({
             ownerUserId: input.userId,

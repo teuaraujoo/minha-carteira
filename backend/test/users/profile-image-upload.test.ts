@@ -7,6 +7,7 @@ import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
 import { AppError } from "../../src/shared/presentation/http/app-error.js";
 import type { IUsersRepository } from "../../src/modules/users/domain/interfaces/users-repository.interface.js";
 import { UserService } from "../../src/modules/users/application/services/users.service.js";
+import { UserNotFoundError } from "../../src/modules/users/domain/errors/user-not-found.error.js";
 import { UserController } from "../../src/modules/users/presentation/controllers/users.controller.js";
 import { StoredFileValidationError } from "../../src/modules/storage/domain/validation/file-validation.js";
 import { profileImageUpload } from "../../src/modules/users/presentation/middlewares/image-upload.middleware.js";
@@ -175,6 +176,27 @@ test("controller maps storage file validation failures to HTTP validation errors
     assert.ok(error instanceof AppError);
     assert.equal(error.status, 400);
     assert.equal(error.message, "O conteúdo do arquivo está corrompido.");
+    return true;
+  });
+});
+
+test("controller maps missing users to an HTTP not-found error", async () => {
+  const storageProvider: StorageOperations = {
+    async upload() {}, async delete() {}, async getPresignedUrl() { return "unused"; },
+    async replaceFileContent() { throw new Error("Não deveria ser chamado."); },
+  };
+  const repository = { findActiveUser: async () => null } as unknown as IUsersRepository;
+  const controller = new UserController(new UserService(repository, storageProvider, noopLogger));
+
+  await assert.rejects(controller.uploadProfileImage({
+    auth: { userId: profileId, sessionId: "session-id" },
+    file: { buffer: Buffer.from([1, 2, 3]), mimetype: "image/png", size: 3 },
+  } as unknown as Request, {} as Response), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.status, 404);
+    assert.equal(error.code, "NOT_FOUND");
+    assert.equal(error.message, "Usuário não encontrado.");
+    assert.ok(error.cause instanceof UserNotFoundError);
     return true;
   });
 });
