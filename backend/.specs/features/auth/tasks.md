@@ -88,7 +88,7 @@ autenticado, sem dependência de bibliotecas externas no domínio.
 
 ### T2: [AUTH-02] Implementar provider JWT
 
-**Status:** A fazer
+**Status:** Concluída
 **What:** Adaptar `jsonwebtoken` ao contrato JWT e ler a chave de
 `process.env.JWT_SECRET`.
 **Where:** adapter de segurança de `auth`, com testes.
@@ -97,10 +97,10 @@ autenticado, sem dependência de bibliotecas externas no domínio.
 
 **Done when:**
 
-- [ ] Algoritmo e tipo são validados explicitamente para access e refresh.
-- [ ] Assinatura, expiração, claims inválidas e tipos trocados são rejeitados.
-- [ ] Erros externos são traduzidos para erros da aplicação em português.
-- [ ] Testes usam segredo próprio e não dependem de `.env` local.
+- [x] Algoritmo e tipo são validados explicitamente para access e refresh.
+- [x] Assinatura, expiração, claims inválidas e tipos trocados são rejeitados.
+- [x] Erros externos são traduzidos para erros da aplicação em português.
+- [x] Testes usam segredo próprio e não dependem de `.env` local.
 
 **Tests:** unit
 **Gate:** quick
