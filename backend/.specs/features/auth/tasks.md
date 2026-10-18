@@ -68,7 +68,7 @@ frontend. T16 é backlog e depende de mecanismo de agendamento aprovado.
 
 ### T1: [AUTH-01] Definir contratos e entidades
 
-**Status:** A fazer
+**Status:** Concluída
 **What:** Definir entidades, DTOs, repositories, providers, claims e contexto
 autenticado, sem dependência de bibliotecas externas no domínio.
 **Where:** domínio e aplicação de `auth`.
@@ -77,10 +77,10 @@ autenticado, sem dependência de bibliotecas externas no domínio.
 
 **Done when:**
 
-- [ ] Entidades e contratos não usam `any`, Prisma, Express ou JWT.
-- [ ] Refresh token, solicitações e desafios representam status e expiração
+- [x] Entidades e contratos não usam `any`, Prisma, Express ou JWT.
+- [x] Refresh token, solicitações e desafios representam status e expiração
       definidos no design.
-- [ ] Testes cobrem estados, expiração e transições aplicáveis.
+- [x] Testes cobrem estados, expiração e transições aplicáveis.
 
 **Tests:** unit
 **Gate:** quick
