@@ -78,7 +78,7 @@ depende de `shared/presentation`.
 
 ### T2: [USR-01] Alinhar entidade e tipos de domínio
 
-**Status:** A fazer
+**Status:** Concluída; gate específico e verificação TypeScript aprovados. A suíte ampla ainda falha em dois casos preexistentes do schema de cadastro.
 **What:** Corrigir a entidade `User`, seus enums e comportamentos de domínio.
 **Where:** entidade, enums e testes de domínio de `users`.
 **Depends on:** T1.
@@ -86,14 +86,15 @@ depende de `shared/presentation`.
 
 **Done when:**
 
-- [ ] `inactivatedAt` substitui a grafia incorreta e aceita `null`.
-- [ ] O estado preserva `id`, `role`, capabilities e timestamps tipados.
-- [ ] Cadastro de domínio atribui `USER`; ciclo de vida e capabilities são
+- [x] `inactivatedAt` substitui a grafia incorreta e aceita `null`.
+- [x] O estado preserva `id`, `role`, capabilities e timestamps tipados.
+- [x] Cadastro de domínio atribui `USER`; ciclo de vida e capabilities são
       testados com relógio determinístico.
-- [ ] A verificação TypeScript e os testes da entidade passam.
+- [x] A verificação TypeScript e os testes da entidade passam.
 
 **Tests:** unit
 **Gate:** quick
+**Gate command:** `node --import tsx --test test/users/user.entity.test.ts` e `node node_modules/typescript/bin/tsc --noEmit`
 **Commit:** `refactor(users): align user domain entity`
 
 ### T3: [USR-02] Tipar o contrato do repository

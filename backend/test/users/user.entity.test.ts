@@ -1,29 +1,33 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { User } from "../../src/modules/users/domain/entities/users.entity.js";
+import { User, type UserProps } from "../../src/modules/users/domain/entities/users.entity.js";
 import {
   UserCapabilities,
+  UserRoles,
   UserStatus,
 } from "../../src/modules/users/domain/enums/users.enums.js";
 
 const createdAt = new Date("2026-01-01T00:00:00.000Z");
 
-function createUser(): User {
+function createUser(overrides: Partial<UserProps> = {}): User {
   return new User({
     id: "user-1",
     username: " teco ",
     name: " Teco ",
-    email: "TECO@EXAMPLE.COM",
+    email: " TECO@EXAMPLE.COM ",
     phone: " +5585999999999 ",
+    role: UserRoles.ADMIN,
     passwordHash: "hash",
     capabilities: [UserCapabilities.TELEGRAM_MESSAGES],
     status: UserStatus.ACTIVE,
     createdAt,
     updatedAt: createdAt,
+    inactivatedAt: null,
+    ...overrides,
   });
 }
 
-test("constructs a user with normalized fields and defensive values", () => {
+test("rehydrates a normalized user with defensive values and typed fields", () => {
   const user = createUser();
 
   assert.equal(user.id, "user-1");
@@ -31,111 +35,121 @@ test("constructs a user with normalized fields and defensive values", () => {
   assert.equal(user.name, "Teco");
   assert.equal(user.email, "teco@example.com");
   assert.equal(user.phone, "+5585999999999");
+  assert.equal(user.role, UserRoles.ADMIN);
   assert.equal(user.passwordHash, "hash");
   assert.equal(JSON.stringify(user).includes("hash"), false);
   assert.equal(user.status, UserStatus.ACTIVE);
   assert.equal(user.isActive(), true);
+  assert.equal(user.inactivatedAt, null);
 
-  const capabilities = user.capabilities as UserCapabilities[];
+  const capabilities = user.capabilities;
   capabilities.length = 0;
-  assert.deepEqual(user.capabilities, [
-    UserCapabilities.TELEGRAM_MESSAGES,
-  ]);
+  assert.deepEqual(user.capabilities, [UserCapabilities.TELEGRAM_MESSAGES]);
 
   const returnedCreatedAt = user.createdAt;
   returnedCreatedAt.setTime(0);
   assert.equal(user.createdAt.getTime(), createdAt.getTime());
 });
 
-test("changes status and capabilities without duplicating no-op mutations", () => {
-  const user = createUser();
-
-  user.deactivate();
-  assert.equal(user.status, UserStatus.INACTIVE);
-  assert.equal(user.isActive(), false);
-  assert.ok(user.updatedAt > createdAt);
-
-  const updatedAfterDeactivation = user.updatedAt.getTime();
-  user.deactivate();
-  assert.equal(user.updatedAt.getTime(), updatedAfterDeactivation);
-
-  user.revokeCapability(UserCapabilities.TELEGRAM_MESSAGES);
-  assert.equal(
-    user.hasCapability(UserCapabilities.TELEGRAM_MESSAGES),
-    false,
-  );
-
-  user.grantCapability(UserCapabilities.TELEGRAM_MESSAGES);
-  user.grantCapability(UserCapabilities.TELEGRAM_MESSAGES);
-  assert.deepEqual(user.capabilities, [
-    UserCapabilities.TELEGRAM_MESSAGES,
-  ]);
-
-  user.activate();
-  assert.equal(user.status, UserStatus.ACTIVE);
-});
-
-test("rejects invalid required fields, enums, dates, and duplicated capabilities", () => {
-  const validProps = {
-    id: "user-1",
-    username: "teco",
-    name: "Teco",
-    email: "teco@example.com",
+test("creates a public user with USER role, active status, and no capabilities", () => {
+  const user = User.create({
+    id: "user-2",
+    username: " NewUser ",
+    name: " New User ",
+    email: " NEW@EXAMPLE.COM ",
     phone: "+5585999999999",
     passwordHash: "hash",
-    capabilities: [] as UserCapabilities[],
-    status: UserStatus.ACTIVE,
     createdAt,
-    updatedAt: createdAt,
-  };
+  });
 
-  assert.throws(() => new User({ ...validProps, id: " " }), TypeError);
-  assert.throws(
-    () => new User({ ...validProps, email: "invalid-email" }),
-    TypeError,
-  );
-  assert.throws(
-    () => new User({ ...validProps, phone: "" }),
-    TypeError,
-  );
-  assert.throws(
-    () =>
-      new User({
-        ...validProps,
-        capabilities: [
-          UserCapabilities.TELEGRAM_MESSAGES,
-          UserCapabilities.TELEGRAM_MESSAGES,
-        ],
-      }),
-    TypeError,
-  );
-  assert.throws(
-    () =>
-      new User({
-        ...validProps,
-        capabilities: Array(1) as UserCapabilities[],
-      }),
-    TypeError,
-  );
-  assert.throws(
-    () =>
-      new User({
-        ...validProps,
-        status: "BLOCKED" as UserStatus,
-      }),
-    TypeError,
-  );
-  assert.throws(
-    () => new User({ ...validProps, createdAt: new Date("invalid") }),
-    TypeError,
-  );
-  assert.throws(
-    () =>
-      new User({
-        ...validProps,
-        createdAt: new Date("2026-01-02T00:00:00.000Z"),
-        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-      }),
-    RangeError,
-  );
+  assert.equal(user.role, UserRoles.USER);
+  assert.deepEqual(user.capabilities, []);
+  assert.equal(user.status, UserStatus.ACTIVE);
+  assert.equal(user.inactivatedAt, null);
+  assert.equal(user.createdAt.getTime(), user.updatedAt.getTime());
+  assert.equal(user.username, "newuser");
+  assert.equal(user.email, "new@example.com");
+});
+
+test("changes lifecycle timestamps deterministically and preserves no-op transitions", () => {
+  const user = createUser();
+  const deactivatedAt = new Date("2026-01-02T00:00:00.000Z");
+
+  user.deactivate(deactivatedAt);
+  assert.equal(user.status, UserStatus.INACTIVE);
+  assert.equal(user.isActive(), false);
+  assert.equal(user.updatedAt.getTime(), deactivatedAt.getTime());
+  assert.equal(user.inactivatedAt?.getTime(), deactivatedAt.getTime());
+
+  const updatedAfterDeactivation = user.updatedAt.getTime();
+  user.deactivate(new Date("2026-01-03T00:00:00.000Z"));
+  assert.equal(user.updatedAt.getTime(), updatedAfterDeactivation);
+  assert.equal(user.inactivatedAt?.getTime(), deactivatedAt.getTime());
+
+  const activatedAt = new Date("2026-01-04T00:00:00.000Z");
+  user.activate(activatedAt);
+  assert.equal(user.status, UserStatus.ACTIVE);
+  assert.equal(user.inactivatedAt, null);
+  assert.equal(user.updatedAt.getTime(), activatedAt.getTime());
+});
+
+test("changes capabilities once and uses deterministic update dates", () => {
+  const user = createUser({ capabilities: [] });
+  const grantedAt = new Date("2026-01-02T00:00:00.000Z");
+
+  user.grantCapability(UserCapabilities.TELEGRAM_MESSAGES, grantedAt);
+  user.grantCapability(UserCapabilities.TELEGRAM_MESSAGES, new Date("2026-01-03T00:00:00.000Z"));
+  assert.equal(user.hasCapability(UserCapabilities.TELEGRAM_MESSAGES), true);
+  assert.deepEqual(user.capabilities, [UserCapabilities.TELEGRAM_MESSAGES]);
+  assert.equal(user.updatedAt.getTime(), grantedAt.getTime());
+
+  const revokedAt = new Date("2026-01-04T00:00:00.000Z");
+  user.revokeCapability(UserCapabilities.TELEGRAM_MESSAGES, revokedAt);
+  assert.equal(user.hasCapability(UserCapabilities.TELEGRAM_MESSAGES), false);
+  assert.equal(user.updatedAt.getTime(), revokedAt.getTime());
+});
+
+test("changes the password hash without exposing it in serialized output", () => {
+  const user = createUser();
+  const changedAt = new Date("2026-01-02T00:00:00.000Z");
+
+  user.changePasswordHash("new-hash", changedAt);
+  assert.equal(user.passwordHash, "new-hash");
+  assert.equal(user.updatedAt.getTime(), changedAt.getTime());
+  assert.equal(JSON.stringify(user).includes("new-hash"), false);
+});
+
+test("rejects invalid fields, enums, dates, lifecycle timestamps, and capabilities", () => {
+  assert.throws(() => createUser({ id: " " }), TypeError);
+  assert.throws(() => createUser({ email: "invalid-email" }), TypeError);
+  assert.throws(() => createUser({ phone: " " }), TypeError);
+  assert.throws(() => createUser({ role: "GUEST" as UserRoles }), TypeError);
+  assert.throws(() => createUser({ status: "BLOCKED" as UserStatus }), TypeError);
+  assert.throws(() => createUser({ capabilities: ["INVALID"] as unknown as UserCapabilities[] }), TypeError);
+  assert.throws(() => createUser({
+    capabilities: [UserCapabilities.TELEGRAM_MESSAGES, UserCapabilities.TELEGRAM_MESSAGES],
+  }), TypeError);
+  assert.throws(() => createUser({
+    capabilities: Array(1) as UserCapabilities[],
+  }), TypeError);
+  assert.throws(() => createUser({ createdAt: new Date("invalid") }), TypeError);
+  assert.throws(() => createUser({
+    createdAt: new Date("2026-01-02T00:00:00.000Z"),
+    updatedAt: createdAt,
+  }), RangeError);
+  assert.throws(() => createUser({
+    status: UserStatus.INACTIVE,
+    inactivatedAt: null,
+  }), TypeError);
+  assert.throws(() => createUser({
+    status: UserStatus.ACTIVE,
+    inactivatedAt: new Date("2026-01-02T00:00:00.000Z"),
+  }), TypeError);
+});
+
+test("rejects lifecycle changes with an invalid or older timestamp", () => {
+  const user = createUser();
+  assert.throws(() => user.deactivate(new Date("invalid")), TypeError);
+  assert.throws(() => user.deactivate(new Date("2025-12-31T23:59:59.000Z")), RangeError);
+  assert.equal(user.status, UserStatus.ACTIVE);
 });
