@@ -285,8 +285,8 @@ do PostgreSQL. Nenhum tipo do Prisma pode aparecer na assinatura da aplicação.
 ## Cookies
 
 - ambos devem usar `HttpOnly`;
-- `Secure` deve ser habilitado em produção;
-- `SameSite` deve acompanhar a topologia real de frontend e API;
+- ambos devem usar `Secure`;
+- ambos devem usar `SameSite=None`;
 - requisições mutáveis devem validar `Origin` e adotar a estratégia CSRF
   aprovada; CORS sozinho não substitui proteção contra CSRF;
 - `Path` deve ser o menor possível, especialmente para o refresh;
@@ -294,8 +294,10 @@ do PostgreSQL. Nenhum tipo do Prisma pode aparecer na assinatura da aplicação.
   criá-los;
 - valores não aparecem em resposta JSON nem em logs.
 
-Os nomes dos cookies e a duração dos desafios permanecem pendentes. O access
-token expira em 15 minutos e o refresh token em cinco dias.
+Os nomes dos cookies, seus `Path`, a estratégia concreta de CSRF e a duração
+dos desafios permanecem pendentes. O reset de senha não deve ser implementado
+até que suas políticas sejam definidas. O access token expira em 15 minutos e
+o refresh token em cinco dias.
 
 ## Fluxos
 

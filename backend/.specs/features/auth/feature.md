@@ -179,6 +179,7 @@ comparação futura sem interferir no comportamento atual.
 - login aceita e-mail ou nome de usuário;
 - sessão usa access e refresh tokens;
 - tokens são enviados por cookies;
+- cookies usam `SameSite=None; Secure` e a proteção CSRF deve ser explícita;
 - refresh token não é rotacionado nesta versão;
 - access token expira em 15 minutos;
 - refresh token expira em cinco dias;
@@ -191,7 +192,8 @@ comparação futura sem interferir no comportamento atual.
 - a metadata terá política de retenção;
 - logout revoga a sessão;
 - recuperação é usada por pessoa deslogada;
-- recuperação usa somente token no link enviado por e-mail;
+- recuperação usa somente token no link enviado por e-mail, mas permanece
+  bloqueada até que as políticas de reset sejam definidas;
 - envio de e-mail utiliza Resend;
 - após redefinir, o frontend redireciona para login;
 - não há login automático após redefinição;
@@ -203,14 +205,13 @@ comparação futura sem interferir no comportamento atual.
 ## Decisões pendentes
 
 - duração do reset token e dos demais desafios;
-- nomes finais dos cookies;
-- política `SameSite` conforme os domínios de frontend e API;
+- nomes finais dos cookies e seus atributos `Path`;
 - domínio e remetente verificados no Resend;
 - URL pública do frontend usada no link;
 - limites e janela de proteção contra abuso;
 - política final de complexidade da senha;
 - política de reprocessamento quando o Resend falhar;
-- estratégia de proteção contra CSRF para os domínios finais;
+- estratégia concreta de proteção contra CSRF para os domínios finais;
 - prazo e mecanismo da política de retenção da metadata de auditoria;
 
 ## Backlog de segurança contextual
