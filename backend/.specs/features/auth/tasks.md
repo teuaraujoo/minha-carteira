@@ -1,315 +1,428 @@
 # Tarefas — módulo de autenticação
 
-## Ordem de execução
+## Execution Plan
 
-### AUTH-01 — Definir contratos e entidades
+As fases são executadas na ordem indicada. Tarefas marcadas como bloqueadas
+permanecem pendentes até que a decisão ou dependência seja resolvida.
 
-**Depende de:** formato de `UsersAuthGateway` aprovado; sua implementação pode
-ser entregue depois por USR-09.
+### Fase 1 — Contratos e tokens
 
-- criar `RefreshToken`, `PasswordResetRequest` e `Challenge` sem sufixo
-  `Props`;
-- implementar os cinco motivos de revogação aprovados;
-- definir `RequestMetadata` sem importar tipos do Prisma;
-- definir DTOs da aplicação;
-- definir repositories e providers;
-- tipar claims e contexto autenticado;
-- manter domínio independente de bibliotecas externas.
-
-**Testes:** entidades, expiração, revogação e uso único.
-
-**Gate:** TypeScript sem `any` nos contratos do módulo.
-
-**Commit sugerido:** `feat(auth): define authentication contracts`
-
-### AUTH-02 — Implementar provider JWT
-
-**Depende de:** AUTH-01.
-
-- adaptar jsonwebtoken ao `JwtProvider`;
-- fixar algoritmo permitido;
-- separar validação de access e refresh;
-- traduzir erros externos para erros da aplicação.
-
-**Testes:** assinatura, expiração e tipo incorreto. O adapter bcrypt
-compartilhado é coberto por USR-00.
-
-**Gate:** refresh token falha na validação de access e vice-versa.
-
-**Commit sugerido:** `feat(auth): add jwt provider`
-
-### AUTH-03 — Implementar persistência de refresh tokens
-
-**Depende de:** AUTH-01; mudança de schema exige aprovação.
-
-- criar modelo e repository Prisma de refresh token;
-- armazenar hash do refresh token;
-- calcular `expiresAt` para cinco dias após a emissão;
-- persistir `userAgent` e endereço IP como dados opcionais de auditoria;
-- consultar somente refresh tokens não revogados e não expirados;
-- revogar um refresh token e todos os refresh tokens de um usuário;
-- expor `RefreshTokensGateway` para revogação por outros módulos;
-- preparar a migration `create-refresh-tokens` sem executá-la em produção.
-
-**Testes:** integração de criação, consulta, expiração e revogação.
-
-**Gate:** token cujo hash não corresponde à sessão é rejeitado.
-
-**Commit sugerido:** `feat(auth): persist user sessions`
-
-### AUTH-04 — Implementar login
-
-**Depende de:** AUTH-02, AUTH-03, USR-00 e implementação de
-`UsersAuthGateway` em USR-09.
-
-- validar `identifier` e `password`;
-- buscar por e-mail ou nome de usuário;
-- usar o mesmo status, código e mensagem para usuário ausente, senha incorreta e
-  usuário inativo;
-- criar sessão e definir cookies;
-- não retornar tokens no corpo.
-
-**Testes:** e-mail, username, senha inválida, usuário ausente e inativo.
-
-**Gate:** cookies e envelope HTTP correspondem à especificação.
-
-**Commit sugerido:** `feat(auth): implement user login`
-
-### AUTH-05 — Implementar refresh sem rotação
-
-**Depende de:** AUTH-02, AUTH-03 e implementação de `UsersAuthGateway` em
-USR-09.
-
-- ler refresh cookie;
-- validar token, sessão, hash e usuário;
-- emitir apenas novo access token;
-- manter o refresh token atual;
-- documentar o risco aceito desta fase.
-
-**Testes:** sucesso, expirado, revogado, hash divergente e usuário inativo.
-
-**Gate:** teste comprova que o refresh cookie não é substituído.
-
-**Commit sugerido:** `feat(auth): implement session refresh`
-
-### AUTH-06 — Implementar middleware autenticado
-
-**Depende de:** AUTH-02, AUTH-03 e implementação de `UsersAuthGateway` em
-USR-09.
-
-- tipar extensão de `Express.Request`;
-- validar access cookie, sessão e usuário;
-- atribuir `request.auth.userId` e `sessionId`;
-- produzir erros em português;
-- integrar às rotas privadas.
-
-**Testes:** ausente, inválido, expirado, tipo incorreto, revogado e sucesso.
-
-**Gate:** uma rota de teste recebe o ID correto somente com sessão válida.
-
-**Commit sugerido:** `feat(auth): add authentication middleware`
-
-### AUTH-07 — Implementar logout
-
-**Depende de:** AUTH-03 e AUTH-06.
-
-- revogar a sessão atual;
-- limpar cookies com atributos compatíveis;
-- sempre limpar cookies, mesmo se a sessão estiver inválida ou já revogada;
-- tratar a revogação como melhor esforço para manter idempotência;
-- responder 204.
-
-**Testes:** sessão ativa, já revogada e cookies removidos.
-
-**Gate:** refresh posterior ao logout é rejeitado.
-
-**Commit sugerido:** `feat(auth): implement session logout`
-
-### AUTH-08 — Implementar persistência de recuperação
-
-**Depende de:** AUTH-01; mudança de schema exige aprovação.
-
-- criar modelos e repositories Prisma para solicitação e desafio;
-- persistir o hash do segredo somente em `Challenge`;
-- vincular o desafio à solicitação por `subjectType` e `subjectId`;
-- persistir metadata tipada nas duas entidades como JSON na infraestrutura;
-- iniciar `Challenge.metadata.consumed` como nulo;
-- consultar apenas desafio pendente e não expirado;
-- consumir desafio de forma atômica contra confirmações concorrentes;
-- manter múltiplas solicitações pendentes até conclusão, cancelamento ou
-  processamento do job de backlog;
-- preparar as migrations `create-password-reset-requests` e
-  `create-challenges` sem executá-las em produção.
-
-**Testes:** criação, uso único, concorrência, expiração e invalidação.
-
-**Gate:** busca pelo token em texto puro não é possível no banco.
-
-**Commit sugerido:** `feat(auth): persist password reset requests`
-
-### AUTH-09 — Integrar o Resend
-
-**Depende de:** AUTH-01 e aprovação para instalar o SDK `resend`.
-
-- instalar o SDK com Yarn 4 após autorização;
-- implementar `EmailProvider`;
-- validar configuração na inicialização;
-- criar e-mail de recuperação e notificação de alteração;
-- sanitizar logs e erros do provedor.
-
-**Testes:** adapter com client simulado, sucesso e falha do provedor.
-
-**Gate:** nenhum teste ou log contém token, link completo ou destinatário.
-
-**Commit sugerido:** `feat(auth): add resend email provider`
-
-### AUTH-10 — Implementar solicitação de recuperação
-
-**Depende de:** AUTH-08, AUTH-09 e `UsersAuthGateway`.
-
-- validar e normalizar e-mail;
-- responder de modo neutro para usuário existente ou ausente;
-- gerar token criptograficamente seguro;
-- persistir hash e montar link com `FRONTEND_URL`;
-- registrar metadata de auditoria sem usá-la para bloquear ou autorizar o fluxo;
-- enviar e-mail somente quando aplicável;
-- manter a mesma resposta 202 quando o Resend falhar;
-- aplicar a política aprovada de reprocessamento de entrega;
-- aplicar proteção contra abuso conforme política aprovada.
-
-**Testes:** usuário existente, ausente, inativo e falha controlada de envio.
-
-**Gate:** resposta pública não permite enumerar e-mails.
-
-**Commit sugerido:** `feat(auth): request password reset`
-
-### AUTH-11 — Implementar confirmação da recuperação
-
-**Depende de:** AUTH-08, AUTH-09, AUTH-10, USR-00 e USR-09.
-
-- validar token, senha e confirmação;
-- montar a metadata da confirmação e registrá-la no consumo do desafio;
-- trocar hash da senha via contrato público de `users`;
-- usar `PasswordResetUnitOfWork` para trocar o hash, consumir o desafio,
-  concluir a solicitação e revogar refresh tokens na mesma transação;
-- enviar notificação de alteração;
-- manter 204 se a notificação falhar e encaminhá-la ao reprocessamento aprovado;
-- não criar sessão nem retornar token.
-
-**Testes:** sucesso, token inválido, expirado, usado e senhas divergentes.
-
-**Gate:** token reutilizado falha e sessões anteriores não fazem refresh.
-
-**Commit sugerido:** `feat(auth): confirm password reset`
-
-### AUTH-12 — Implementar rotas e composição
-
-**Depende de:** AUTH-04 a AUTH-11.
-
-- criar schemas, controllers e rotas;
-- manter `/auth/register` na apresentação de `auth`, delegando a criação para o
-  caso de uso público de `users`;
-- compor providers e repositories no `Composition Root`;
-- configurar cookies e CORS por ambiente;
-- implementar a estratégia CSRF e validação de `Origin` aprovadas;
-- adicionar `INVALID_OR_EXPIRED_TOKEN` ao contrato HTTP ou mapear para um código
-  existente;
-- fazer `/auth/me` retornar apenas `userId` e `sessionId`; o perfil completo
-  permanece em `/users/me`;
-- preservar os contratos HTTP compartilhados.
-
-**Testes:** testes HTTP de todos os fluxos e atributos dos cookies.
-
-**Gate:** suíte HTTP cobre login, refresh, logout, middleware e reset.
-
-**Commit sugerido:** `feat(auth): expose authentication routes`
-
-### AUTH-13 — Integrar o redirecionamento no frontend
-
-**Depende de:** AUTH-11 e telas de recuperação disponíveis.
-
-- consumir a confirmação de redefinição;
-- após resposta 204, redirecionar para a tela de login;
-- não tratar a redefinição como sessão autenticada;
-- exibir mensagens em português sem expor detalhes do token.
-
-**Testes:** sucesso, token inválido e ausência de cookies de autenticação.
-
-**Gate:** redefinição bem-sucedida termina na tela de login.
-
-**Commit sugerido:** `feat(auth): redirect password reset to login`
-
-### AUTH-14 — Reconciliar documentação
-
-**Depende de:** AUTH-12, AUTH-13 e validação final.
-
-- atualizar a documentação geral para o novo cadastro público;
-- remover a afirmação de rotação de refresh nesta versão;
-- documentar rotas e decisões efetivamente implementadas;
-- registrar configuração do Resend sem incluir segredos.
-
-**Testes:** revisão manual de links, exemplos e divergências.
-
-**Gate:** documentação não contradiz comportamento validado.
-
-**Commit sugerido:** `docs(auth): document authentication flows`
-
-### AUTH-15 — Expirar solicitações e desafios pendentes
-
-**Status:** backlog.
-
-**Depende de:** AUTH-08 e mecanismo de agendamento aprovado.
-
-- buscar registros pendentes com `expiresAt` vencido;
-- marcar solicitações como `EXPIRED`;
-- marcar solicitações ou desafios não processáveis como `FAILED`;
-- marcar desafios vencidos como `EXPIRED`;
-- processar em lotes e de forma idempotente;
-- não enviar e-mail, trocar senha ou criar sessão;
-- aplicar a política de retenção da metadata.
-
-**Testes:** limite de expiração, idempotência, paginação e concorrência.
-
-**Gate:** nenhum registro ainda válido é encerrado.
-
-**Commit sugerido:** `feat(auth): expire pending authentication challenges`
-
-## Matriz de cobertura
-
-| Requisito | Tarefas | Evidência esperada |
-| --- | --- | --- |
-| AUTH-RF-001 | AUTH-04 | e-mail, username e erros indistinguíveis |
-| AUTH-RF-002, AUTH-RF-003 | AUTH-03 a AUTH-05 | integração e HTTP |
-| AUTH-RF-004 | AUTH-07 | logout repetido e refresh rejeitado |
-| AUTH-RF-005, AUTH-RF-006 | AUTH-02, AUTH-06 | middleware protegido |
-| AUTH-RF-007 | AUTH-08 a AUTH-10 | resposta neutra e adapter Resend |
-| AUTH-RF-008, AUTH-RF-009 | AUTH-08, AUTH-11 | teste transacional |
-| AUTH-RF-010 | AUTH-13 | teste de navegação frontend |
-| AUTH-RF-011 | AUTH-01, AUTH-08, AUTH-10 | metadata sem decisão automática |
-
-## Comandos de verificação
-
-Confira os scripts reais antes da execução. No estado atual, o backend não
-possui scripts `test`, `lint` ou `typecheck`. Os comandos conhecidos são:
-
-```powershell
-node node_modules/typescript/bin/tsc --noEmit
-node --import tsx --test test/auth/**/*.test.ts
+```text
+T1 → T2
+T1 → T3
 ```
 
-O padrão de arquivos deve ser ajustado ao suporte de glob do ambiente.
+### Fase 2 — Sessão e autenticação
 
-## Bloqueios antes das tarefas afetadas
+```text
+T2 → T4
+T3 → T4
+T2 → T5
+T3 → T5
+T2 → T6
+T3 → T6
+T6 → T7
+T3 → T7
+T4 → T12
+T5 → T12
+T6 → T12
+T7 → T12
+```
 
-- aprovar a duração dos desafios antes de AUTH-02 e AUTH-08;
-- aprovar nomes e atributos finais dos cookies antes de AUTH-04;
-- criar e revisar as migrations antes de AUTH-03 e AUTH-08;
-- autorizar instalação do SDK `resend` antes de AUTH-09;
-- informar remetente verificado e `FRONTEND_URL` antes de validar AUTH-09;
-- aprovar limites contra abuso antes de concluir AUTH-10;
-- aprovar política de reprocessamento de e-mail antes de concluir AUTH-10 e
-  AUTH-11;
-- aprovar estratégia CSRF e topologia de domínios antes de AUTH-12;
-- aprovar política final de senha antes de concluir AUTH-11;
-- definir prazo e mecanismo de retenção da metadata antes da disponibilização
-  pública.
+T4–T7 consomem o contrato público de `users` implementado em USR-09.
+`T12` permanece bloqueada até definir o nome dos cookies, a estratégia CSRF e
+a regra para usernames contendo `@`.
+
+### Fase 3 — Recuperação de senha
+
+```text
+T1 → T8 → T10 → T11
+T1 → T9 → T10
+T9 → T11
+T8 → T11
+T2 → T11
+```
+
+T8–T11 permanecem bloqueadas até aprovar as políticas de recuperação. T9 também
+depende de autorização para instalar o SDK Resend.
+
+### Fase 4 — Rotas, frontend e documentação
+
+```text
+T8 → T13
+T9 → T13
+T10 → T13
+T11 → T13
+T12 → T13
+T11 → T14
+T12 → T15
+T13 → T15
+T14 → T15
+T8 → T16
+```
+
+T13 contém somente as rotas de recuperação e depende da Fase 3. T14 altera o
+frontend. T16 é backlog e depende de mecanismo de agendamento aprovado.
+
+## Task Breakdown
+
+### T1: [AUTH-01] Definir contratos e entidades
+
+**Status:** A fazer
+**What:** Definir entidades, DTOs, repositories, providers, claims e contexto
+autenticado, sem dependência de bibliotecas externas no domínio.
+**Where:** domínio e aplicação de `auth`.
+**Depends on:** Nenhuma.
+**Requirement:** AUTH-RF-002, AUTH-RF-005, AUTH-RF-006, AUTH-RF-011.
+
+**Done when:**
+
+- [ ] Entidades e contratos não usam `any`, Prisma, Express ou JWT.
+- [ ] Refresh token, solicitações e desafios representam status e expiração
+      definidos no design.
+- [ ] Testes cobrem estados, expiração e transições aplicáveis.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(auth): define authentication contracts`
+
+### T2: [AUTH-02] Implementar provider JWT
+
+**Status:** A fazer
+**What:** Adaptar `jsonwebtoken` ao contrato JWT e ler a chave de
+`process.env.JWT_SECRET`.
+**Where:** adapter de segurança de `auth`, com testes.
+**Depends on:** T1.
+**Requirement:** AUTH-RF-005.
+
+**Done when:**
+
+- [ ] Algoritmo e tipo são validados explicitamente para access e refresh.
+- [ ] Assinatura, expiração, claims inválidas e tipos trocados são rejeitados.
+- [ ] Erros externos são traduzidos para erros da aplicação em português.
+- [ ] Testes usam segredo próprio e não dependem de `.env` local.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(auth): add jwt provider`
+
+### T3: [AUTH-03] Implementar persistência de refresh tokens
+
+**Status:** A fazer
+**What:** Implementar repository Prisma e gateway público de revogação de
+sessões, mantendo integração PostgreSQL adiada até configurar a URL.
+**Where:** infraestrutura e contratos públicos de `auth`; testes sem banco.
+**Depends on:** T1.
+**Requirement:** AUTH-RF-002, AUTH-RF-003, AUTH-RF-004.
+
+**Done when:**
+
+- [ ] Banco guarda somente hash, datas, auditoria opcional e motivo de
+      revogação.
+- [ ] Sessão expira em cinco dias e consultas ignoram sessões expiradas ou
+      revogadas.
+- [ ] Revogação individual e de todas as sessões usa operações tipadas.
+- [ ] Migration é preparada/revisada em código, mas não aplicada.
+- [ ] Testes sem banco passam; teste PostgreSQL fica registrado como pendente.
+
+**Tests:** unit
+**Gate:** full
+**Commit:** `feat(auth): persist user sessions`
+
+### T4: [AUTH-04] Implementar caso de uso de login
+
+**Status:** Bloqueada pela regra de username com `@`
+**What:** Validar credenciais e criar sessão usando `UsersAuthGateway`.
+**Where:** caso de uso e testes de `auth`.
+**Depends on:** T2, T3 e contrato USR-09.
+**Requirement:** AUTH-RF-001, AUTH-RF-002.
+
+**Done when:**
+
+- [ ] Entrada preserva a senha sem `trim` e normaliza somente o identificador.
+- [ ] E-mail e username encontram credenciais pelo contrato público de `users`.
+- [ ] Usuário ausente, senha incorreta e usuário inativo geram o mesmo erro
+      público.
+- [ ] Sessão guarda hash do refresh token e saída não contém tokens ou hash.
+- [ ] Testes cobrem sucesso e erros indistinguíveis.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(auth): implement user login`
+
+### T5: [AUTH-05] Implementar refresh sem rotação
+
+**Status:** A fazer
+**What:** Validar refresh cookie, sessão, hash e usuário e emitir somente novo
+access token.
+**Where:** caso de uso e testes de `auth`.
+**Depends on:** T2, T3 e contrato USR-09.
+**Requirement:** AUTH-RF-003.
+
+**Done when:**
+
+- [ ] Refresh expirado, revogado, divergente ou de usuário inativo é rejeitado.
+- [ ] Refresh válido mantém a credencial e atualiza `lastUsedAt`.
+- [ ] Testes comprovam sucesso e falhas listadas.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(auth): implement session refresh`
+
+### T6: [AUTH-06] Implementar middleware autenticado
+
+**Status:** A fazer
+**What:** Validar access token, sessão e usuário antes de preencher o contexto
+autenticado.
+**Where:** middleware e extensão tipada de `Express.Request`, com testes.
+**Depends on:** T2, T3 e contrato USR-09.
+**Requirement:** AUTH-RF-005, AUTH-RF-006.
+
+**Done when:**
+
+- [ ] Middleware rejeita tokens ausentes, inválidos, expirados, de tipo errado,
+      revogados e usuários inativos.
+- [ ] Em sucesso, define `request.auth.userId` e `sessionId` corretos.
+- [ ] Testes cobrem cada cenário e uma rota protegida de teste.
+
+**Tests:** unit e e2e
+**Gate:** full
+**Commit:** `feat(auth): add authentication middleware`
+
+### T7: [AUTH-07] Implementar logout
+
+**Status:** A fazer
+**What:** Revogar a sessão atual de forma idempotente e remover cookies.
+**Where:** caso de uso e testes de `auth`.
+**Depends on:** T3, T6.
+**Requirement:** AUTH-RF-004.
+
+**Done when:**
+
+- [ ] Sessão ativa recebe motivo `LOGOUT` e data de revogação.
+- [ ] Sessão inválida ou já revogada continua permitindo limpeza dos cookies.
+- [ ] Resposta é 204 e refresh posterior é rejeitado.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(auth): implement session logout`
+
+### T8: [AUTH-08] Implementar persistência da recuperação
+
+**Status:** Bloqueada pelas políticas de recuperação
+**What:** Implementar repositories de solicitações e desafios, metadata tipada
+e consumo atômico do desafio.
+**Where:** infraestrutura de `auth`, com testes sem banco.
+**Depends on:** T1.
+**Requirement:** AUTH-RF-007, AUTH-RF-008, AUTH-RF-009, AUTH-RF-011.
+
+**Done when:**
+
+- [ ] Somente hash do segredo é persistido; busca por token puro não é possível.
+- [ ] Desafio só é consumido uma vez, inclusive sob confirmações concorrentes.
+- [ ] Metadata é persistida como JSON sem tipo Prisma fora da infraestrutura.
+- [ ] Migrations são preparadas em código e não aplicadas.
+- [ ] Testes sem banco passam; PostgreSQL fica pendente de `DATABASE_URL`.
+
+**Tests:** unit
+**Gate:** full
+**Commit:** `feat(auth): persist password reset requests`
+
+### T9: [AUTH-09] Integrar o Resend
+
+**Status:** Bloqueada por autorização de instalação e configuração externa
+**What:** Implementar `EmailProvider` com SDK oficial Resend, leitura segura de
+configuração e logs sanitizados.
+**Where:** adapter de e-mail de `auth`, com client simulado.
+**Depends on:** T1.
+**Requirement:** AUTH-RF-007, AUTH-RF-009.
+
+**Done when:**
+
+- [ ] SDK só é instalado após autorização explícita.
+- [ ] Adapter envia recuperação e aviso de alteração.
+- [ ] Falhas não vazam token, link, destinatário ou conteúdo nos logs.
+- [ ] Testes cobrem sucesso e falha com client simulado.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(auth): add resend email provider`
+
+### T10: [AUTH-10] Implementar solicitação de recuperação
+
+**Status:** Bloqueada pelas políticas de recuperação
+**What:** Gerar desafio seguro, registrar auditoria, enviar link e sempre
+responder de forma neutra.
+**Where:** caso de uso e testes de `auth`.
+**Depends on:** T8, T9 e contrato USR-09.
+**Requirement:** AUTH-RF-007, AUTH-RF-011.
+
+**Done when:**
+
+- [ ] E-mail existente, ausente ou inativo resulta na mesma resposta 202.
+- [ ] Token é criptograficamente seguro e somente seu hash é persistido.
+- [ ] Metadata é apenas auditoria; falha de envio não muda a resposta.
+- [ ] Proteção contra abuso e política de reprocessamento são aprovadas antes
+      de disponibilizar o endpoint.
+
+**Tests:** unit
+**Gate:** quick
+**Commit:** `feat(auth): request password reset`
+
+### T11: [AUTH-11] Implementar confirmação da recuperação
+
+**Status:** Bloqueada pelas políticas de recuperação
+**What:** Validar desafio e senha e atualizar atomicamente senha, solicitação,
+desafio e sessões.
+**Where:** caso de uso, unidade de trabalho e testes de `auth`.
+**Depends on:** T8, T9, T10, T2 e contrato USR-09.
+**Requirement:** AUTH-RF-008, AUTH-RF-009, AUTH-RF-011.
+
+**Done when:**
+
+- [ ] Senha e confirmação obedecem a política aprovada.
+- [ ] Token inválido, expirado ou reutilizado não altera a senha.
+- [ ] Troca de hash, consumo, conclusão e revogação ocorrem na mesma transação.
+- [ ] Nenhuma sessão nova é criada; falha de notificação não desfaz a troca.
+
+**Tests:** unit e integration
+**Gate:** full
+**Commit:** `feat(auth): confirm password reset`
+
+### T12: [AUTH-12A] Compor rotas centrais de autenticação
+
+**Status:** Bloqueada por cookie, CSRF e regra de username com `@`
+**What:** Compor rotas de cadastro, login, refresh, logout e contexto de sessão,
+com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
+**Where:** apresentação e composition root de `auth`, com testes HTTP.
+**Depends on:** T4, T5, T6, T7.
+**Requirement:** AUTH-RF-001 a AUTH-RF-006.
+
+**Done when:**
+
+- [ ] Rotas centrais seguem contratos HTTP existentes e não retornam tokens.
+- [ ] Cookies HttpOnly usam configuração segura e atributos idênticos ao limpar.
+- [ ] `Origin` e mecanismo CSRF são validados nas requisições mutáveis.
+- [ ] `/auth/register` delega cadastro ao caso de uso público de `users`.
+- [ ] `/auth/me` retorna somente `userId` e `sessionId`.
+- [ ] Testes HTTP cobrem fluxos, atributos de cookies e CSRF.
+
+**Tests:** e2e
+**Gate:** full
+**Commit:** `feat(auth): expose core authentication routes`
+
+### T13: [AUTH-12B] Compor rotas de recuperação
+
+**Status:** Bloqueada por T8–T11 e políticas de recuperação
+**What:** Expor endpoints de solicitar e confirmar reset sem alterar contratos
+HTTP compartilhados fora da proposta aprovada.
+**Where:** controllers, schemas, rotas e composition root de `auth`.
+**Depends on:** T8, T9, T10, T11, T12.
+**Requirement:** AUTH-RF-007 a AUTH-RF-011.
+
+**Done when:**
+
+- [ ] Rotas respondem conforme os status neutros definidos na feature.
+- [ ] Respostas não permitem enumeração de e-mail.
+- [ ] Tokens, senhas, cookies e conteúdo do e-mail não aparecem em logs.
+- [ ] Testes HTTP cobrem recuperação e erros documentados.
+
+**Tests:** e2e
+**Gate:** full
+**Commit:** `feat(auth): expose password reset routes`
+
+### T14: [AUTH-13] Integrar redirecionamento de recuperação no frontend
+
+**Status:** A fazer após T11 e telas de recuperação
+**What:** Redirecionar para login após confirmação válida, sem criar sessão.
+**Where:** telas e serviços do frontend de autenticação, com testes.
+**Depends on:** T11.
+**Requirement:** AUTH-RF-010.
+
+**Done when:**
+
+- [ ] Sucesso 204 redireciona à tela de login.
+- [ ] Erros são exibidos em português sem expor o token.
+- [ ] Nenhum cookie de autenticação é criado pelo fluxo de reset.
+
+**Tests:** unit e e2e
+**Gate:** full
+**Commit:** `feat(auth): redirect password reset to login`
+
+### T15: [AUTH-14] Reconciliar documentação
+
+**Status:** A fazer após implementação e validação
+**What:** Atualizar documentação geral e rotas conforme comportamento validado.
+**Where:** documentação geral e referências de auth afetadas.
+**Depends on:** T12, T13, T14.
+**Requirement:** AUTH-RF-001 a AUTH-RF-011.
+
+**Done when:**
+
+- [ ] Documentação descreve apenas fluxos implementados e verificados.
+- [ ] Refresh sem rotação e configuração sem segredos estão documentados.
+- [ ] Links, exemplos e divergências foram revisados.
+
+**Tests:** none
+**Gate:** build
+**Commit:** `docs(auth): document authentication flows`
+
+### T16: [AUTH-15] Expirar solicitações e desafios pendentes
+
+**Status:** Backlog, depende de agendamento aprovado
+**What:** Processar solicitações e desafios pendentes vencidos em lotes e de
+forma idempotente.
+**Where:** processo interno e testes de `auth`.
+**Depends on:** T8 e mecanismo de agendamento aprovado.
+**Requirement:** AUTH-RF-007, AUTH-RF-008.
+
+**Done when:**
+
+- [ ] Solicitações vencidas recebem `EXPIRED`; registros não processáveis,
+      `FAILED`; desafios vencidos, `EXPIRED`.
+- [ ] O processo não envia e-mail, troca senha ou cria sessão.
+- [ ] Testes cobrem expiração, idempotência, paginação e concorrência.
+
+**Tests:** unit e integration
+**Gate:** full
+**Commit:** `feat(auth): expire pending authentication challenges`
+
+## Test Coverage Matrix
+
+> Proveniência: `AGENTS.md`, testes existentes e `backend/package.json`. Não há
+> scripts `test`, `lint` ou `typecheck` configurados.
+
+| Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
+| --- | --- | --- | --- | --- |
+| Domínio, casos de uso e providers | unit | Requisitos e casos de borda de cada tarefa | `backend/test/auth/*.test.ts` | `node --import tsx --test test/auth/*.test.ts` |
+| Repositories Prisma | unit; integração PostgreSQL adiada | Mapeamento e comportamento sem banco; integração após DATABASE_URL | `backend/test/auth/*.test.ts` | `node --import tsx --test test/auth/*.test.ts` |
+| Rotas e middleware HTTP | e2e | Caminho feliz, erros, cookies, CSRF e autorização | `backend/test/auth/*.test.ts` | `node --import tsx --test test/auth/*.test.ts` |
+| Frontend | unit e e2e | Sucesso, token inválido e ausência de sessão | testes do frontend | scripts existentes a confirmar |
+
+## Gate Check Commands
+
+> Executar dentro do pacote correspondente; confirmar scripts disponíveis.
+
+| Gate Level | When to Use | Command |
+| --- | --- | --- |
+| Quick | Tarefas unitárias de backend | `node --import tsx --test test/auth/*.test.ts` |
+| Full | Persistência, HTTP ou frontend | Testes do pacote afetado e `node node_modules/typescript/bin/tsc --noEmit` no backend |
+| Build | Fechamento de fase ou tarefa sem testes | `node node_modules/typescript/bin/tsc --noEmit` no backend; scripts de build/lint do frontend a confirmar |
+
+Testes de integração PostgreSQL ficam adiados até a configuração de
+`DATABASE_URL`. Não executar migrations nesta implementação.
+
+## Pending Decisions and Blockers
+
+- Definir se username pode conter `@`; isso afeta resolução inequívoca de
+  `identifier` em login.
+- Definir nomes de cookies, `Path` e origens permitidas.
+- Escolher implementação concreta de CSRF para `SameSite=None; Secure`.
+- Definir duração e política da senha no reset; até lá, T8–T11 e T13 ficam
+  bloqueadas conforme decisão do usuário.
+- Autorizar instalação do SDK `resend` antes de T9.
+- Configurar `RESEND_FROM_EMAIL` e `FRONTEND_URL` para validar envio real.
+- Definir limite contra abuso, política de retry de e-mail e retenção de
+  metadata antes de disponibilizar reset.
+- Configurar `DATABASE_URL` para validar migrations e integração PostgreSQL.
+- T16 permanece em backlog até aprovação do mecanismo de agendamento.
