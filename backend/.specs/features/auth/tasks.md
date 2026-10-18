@@ -57,15 +57,17 @@ T9 → T13
 T10 → T13
 T11 → T13
 T12 → T13
-T11 → T14
+T3 → T17
+T9 → T17
 T12 → T15
 T13 → T15
-T14 → T15
+T17 → T15
 T8 → T16
 ```
 
 T13 contém somente as rotas de recuperação e depende da Fase 3. T14 altera o
-frontend. T16 é backlog e depende de mecanismo de agendamento aprovado.
+frontend e continua pendente. T17 registra a reativação já implementada.
+T16 é backlog e depende de mecanismo de agendamento aprovado.
 
 ## Task Breakdown
 
@@ -270,9 +272,8 @@ configuração e logs sanitizados.
 
 ### T10: [AUTH-10] Implementar solicitação de recuperação
 
-**Status:** Implementada; 42 testes unitários selecionados passaram em
-18/10/2026; os testes HTTP estão escritos, mas falham com `EACCES` ao conectar
-em `127.0.0.1` neste ambiente.
+**Status:** Implementada; os testes unitários selecionados passaram. Testes
+HTTP integrados foram adiados conforme decisão do usuário.
 **What:** Gerar desafio seguro, registrar auditoria, enviar link e sempre
 responder de forma neutra.
 **Where:** caso de uso e testes de `auth`.
@@ -302,8 +303,8 @@ responder de forma neutra.
 
 ### T11: [AUTH-11] Implementar confirmação da recuperação
 
-**Status:** Implementada; teste unitário passou; validação PostgreSQL pendente
-de `DATABASE_URL` e teste HTTP bloqueado por `EACCES` neste ambiente.
+**Status:** Implementada; teste unitário passou. Validação PostgreSQL e teste
+HTTP integrado foram adiados conforme decisão do usuário.
 **What:** Validar desafio e senha e atualizar atomicamente senha, solicitação,
 desafio e sessões.
 **Where:** caso de uso, unidade de trabalho e testes de `auth`.
@@ -325,7 +326,8 @@ desafio e sessões.
 
 ### T12: [AUTH-12A] Compor rotas centrais de autenticação
 
-**Status:** Implementada; execução dos testes HTTP bloqueada por EACCES no ambiente
+**Status:** Implementada; testes HTTP integrados adiados por decisão do
+usuário.
 **What:** Compor rotas de cadastro, login, refresh, logout e contexto de sessão,
 com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
 **Where:** apresentação e composition root de `auth`, com testes HTTP.
@@ -343,8 +345,7 @@ com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
       validados nas requisições mutáveis.
 - [x] `/auth/register` delega cadastro ao caso de uso público de `users`.
 - [x] `/auth/me` retorna somente `userId` e `sessionId`.
-- [ ] Testes HTTP cobrem os fluxos, mas não puderam ser executados: o sandbox
-      bloqueou conexões locais em `127.0.0.1` com `EACCES`.
+- [ ] Testes HTTP integrados permanecem adiados conforme decisão do usuário.
 
 **Tests:** e2e
 **Gate:** full
@@ -352,7 +353,8 @@ com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
 
 ### T13: [AUTH-12B] Compor rotas de recuperação
 
-**Status:** Implementada; testes HTTP escritos, execução bloqueada por EACCES
+**Status:** Implementada; testes HTTP integrados adiados conforme decisão do
+usuário.
 **What:** Expor endpoints de solicitar e confirmar reset sem alterar contratos
 HTTP compartilhados fora da proposta aprovada.
 **Where:** controllers, schemas, rotas e composition root de `auth`.
@@ -364,8 +366,7 @@ HTTP compartilhados fora da proposta aprovada.
 - [x] Rotas respondem conforme os status neutros definidos na feature.
 - [x] Respostas não permitem enumeração de e-mail.
 - [x] Tokens, senhas, cookies e conteúdo do e-mail não aparecem em logs.
-- [ ] Testes HTTP foram escritos, mas a execução local falhou porque o sandbox
-      bloqueou conexões em `127.0.0.1` com `EACCES`.
+- [ ] Testes HTTP integrados permanecem adiados conforme decisão do usuário.
 
 **Tests:** e2e
 **Gate:** full
@@ -391,18 +392,21 @@ HTTP compartilhados fora da proposta aprovada.
 
 ### T15: [AUTH-14] Reconciliar documentação
 
-**Status:** Em andamento — specs de auth, users e storage estão sendo
-reconciliadas; a documentação geral permanece pendente.
-**What:** Atualizar documentação geral e rotas conforme comportamento validado.
-**Where:** documentação geral e referências de auth afetadas.
-**Depends on:** T12, T13, T14.
-**Requirement:** AUTH-RF-001 a AUTH-RF-011.
+**Status:** Concluída para as specs de `auth`, `users` e `storage`. Testes HTTP,
+PostgreSQL e envio real continuam explicitamente adiados.
+**What:** Reconciliar as specs backend com o comportamento implementado e as
+decisões aprovadas.
+**Where:** `feature.md`, `design.md` e `tasks.md` dos três módulos.
+**Depends on:** T12, T13 e T17.
+**Requirement:** AUTH-RF-001 a AUTH-RF-012.
 
 **Done when:**
 
-- [ ] Documentação descreve apenas fluxos implementados e verificados.
-- [ ] Refresh sem rotação e configuração sem segredos estão documentados.
-- [ ] Links, exemplos e divergências foram revisados.
+- [x] Specs distinguem comportamento implementado, backlog e validações
+      adiadas.
+- [x] Refresh sem rotação, reativação por link e configurações sem segredos
+      estão documentados.
+- [x] Rotas, fluxos e referências internas foram revisados.
 
 **Tests:** none
 **Gate:** build
@@ -427,6 +431,33 @@ forma idempotente.
 **Tests:** unit e integration
 **Gate:** full
 **Commit:** `feat(auth): expire pending authentication challenges`
+
+### T17: [AUTH-16] Implementar reativação de conta por link
+
+**Status:** Implementada; testes unitários e verificação TypeScript passaram.
+Testes HTTP e validação PostgreSQL foram adiados conforme decisão do usuário.
+**What:** Solicitar e confirmar a reativação de conta desativada usando o
+`Challenge` genérico e o provider Resend.
+**Where:** aplicação de `auth`, contrato público de `users`, rotas e composição.
+**Depends on:** persistência de `Challenge`, provider Resend e ciclo de vida
+implementado em USR-06.
+**Requirement:** AUTH-RF-012, USR-RF-005.
+
+**Done when:**
+
+- [x] A solicitação por e-mail responde 202 sem revelar se há conta inativa.
+- [x] O token contém `challengeId.secret`; somente o hash do segredo é salvo.
+- [x] O desafio expira em 15 minutos, permite três tentativas inválidas e é
+      consumido uma única vez.
+- [x] Falha do Resend marca o desafio como `FAILED`, sem reenvio automático.
+- [x] A confirmação invalida os desafios pendentes irmãos e não restaura
+      sessões; a pessoa precisa entrar novamente.
+- [x] A alteração de status e a revogação de sessões são coordenadas por
+      transaction e bloqueio da linha do usuário.
+
+**Tests:** unit
+**Gate:** full
+**Commit:** `feat(auth): implement account reactivation flow`
 
 ## Test Coverage Matrix
 
@@ -457,12 +488,13 @@ Testes de integração PostgreSQL ficam adiados até a configuração de
 
 - Configurar `FRONTEND_ORIGINS` (origens separadas por vírgula) em cada
   ambiente; `FRONTEND_URL` permanece como compatibilidade para uma única origem.
-- Envio real pelo Resend permanece pendente de validação operacional, embora o
-  adapter e suas configurações estejam implementados.
+- Envio real pelo Resend permanece adiado; adapter e testes com provider
+  simulado estão implementados.
 - Configurar e validar o endereço IP quando houver proxy confiável; não confiar
   em cabeçalhos encaminhados por clientes não confiáveis.
-- Configurar `DATABASE_URL` para validar migrations e integração PostgreSQL;
-  nenhuma migration foi aplicada nesta implementação.
-- Validar rotas autenticadas contra PostgreSQL após configurar o banco local;
-  os testes atuais usam portas locais e dependências simuladas.
+- Validar migrations e integração PostgreSQL após configurar `DATABASE_URL`;
+  nenhuma migration foi aplicada nesta implementação. Essa validação foi
+  adiada conforme decisão do usuário.
+- Testes HTTP integrados permanecem adiados conforme decisão do usuário; os
+  testes executados nesta etapa usam contratos e dependências simulados.
 - T16 permanece em backlog até aprovação do mecanismo de agendamento.

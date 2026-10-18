@@ -4,7 +4,8 @@
 
 Implementar autenticação com login por e-mail ou nome de usuário, sessão baseada
 em access e refresh tokens em cookies, logout com revogação, validação JWT,
-middleware autenticado e recuperação de senha por link enviado pelo Resend.
+middleware autenticado, recuperação de senha e reativação de conta por link
+enviado pelo Resend.
 
 ## Resultado esperado
 
@@ -16,17 +17,18 @@ middleware autenticado e recuperação de senha por link enviado pelo Resend.
 - solicitação de recuperação com resposta neutra;
 - link de recuperação contendo token único e opaco;
 - redefinição de senha sem login automático;
+- solicitação e confirmação de reativação de conta desativada;
 - redirecionamento para login realizado pelo frontend após o sucesso.
 
 ## Situação da implementação
 
-Os fluxos de backend de sessão e recuperação estão implementados, incluindo
-limitação em memória e envio pelo Resend. Nesta revisão, 42 testes unitários
-selecionados passaram. Os testes HTTP estão escritos, mas não conseguem abrir
-conexão local neste ambiente (`EACCES` em `127.0.0.1`). A validação PostgreSQL
-depende de `DATABASE_URL`; o envio real pelo Resend e a integração do
-redirecionamento no frontend ainda não foram verificados ou concluídos,
-respectivamente. Consulte `tasks.md` para o estado detalhado.
+Os fluxos de backend de sessão, recuperação de senha e reativação de conta estão
+implementados, incluindo limitação em memória e envio pelo Resend. Testes
+unitários e verificação TypeScript foram executados para as mudanças recentes.
+Os testes HTTP integrados e a validação PostgreSQL foram adiados conforme
+decisão do usuário. O envio real pelo Resend e o redirecionamento de recuperação
+no frontend ainda não foram verificados ou concluídos, respectivamente.
+Consulte `tasks.md` para o estado detalhado.
 
 ## Escopo
 
@@ -41,6 +43,7 @@ respectivamente. Consulte `tasks.md` para o estado detalhado.
 - middleware de autenticação;
 - endpoint para obter o usuário autenticado;
 - solicitação e confirmação de recuperação de senha;
+- solicitação e confirmação de reativação de conta desativada;
 - auditoria do contexto de solicitações de recuperação e desafios por metadata;
 - envio transacional pelo Resend;
 - revogação de todas as sessões após redefinir a senha;
@@ -150,6 +153,23 @@ cliente. Nenhum desses valores é evidência confiável de identidade.
 `Challenge` separa o contexto de emissão do contexto de consumo, permitindo
 comparação futura sem interferir no comportamento atual.
 
+### AUTH-RF-012 — Reativação de conta desativada
+
+O sistema DEVE aceitar uma solicitação de reativação identificada por e-mail e
+responder com `202` neutro, sem revelar se o endereço possui uma conta inativa.
+Para uma conta elegível, deve criar um `Challenge` com propósito
+`ACCOUNT_REACTIVATION`, sujeito `USER`, e enviar pelo Resend um link com token
+opaco no formato `challengeId.secret`. Somente o hash do segredo pode ser
+persistido. A metadata do desafio registra o contexto de emissão e confirmação
+somente para auditoria. Falha de envio deve marcar o desafio como `FAILED`, sem
+alterar a resposta pública ou reenviar automaticamente.
+
+O desafio expira em 15 minutos, permite no máximo três tentativas inválidas e
+só pode ser consumido uma vez. A confirmação válida reativa a conta, invalida
+outros desafios pendentes de reativação e mantém as sessões antigas revogadas;
+a pessoa deve entrar novamente. O endpoint é público, mas exige a proteção CSRF
+aprovada. A rota administrativa de reativação pertence ao módulo `users`.
+
 ## Critérios de aceitação
 
 - [x] Login funciona com e-mail ou nome de usuário no mesmo campo.
@@ -188,6 +208,12 @@ comparação futura sem interferir no comportamento atual.
 - [x] Metadata permanece enquanto existir seu registro e é removida com ele;
   desafios polimórficos vinculados são excluídos na mesma transação.
 - [x] `auth` não acessa diretamente o repository de `users`.
+- [x] A solicitação de reativação responde `202` neutro e não revela se existe
+  uma conta inativa para o e-mail informado.
+- [x] Reativação usa `Challenge` de uso único, validade de 15 minutos e três
+  tentativas inválidas; falhas de envio marcam o desafio como `FAILED`.
+- [x] Reativar invalida outros desafios pendentes e não restaura sessões
+  antigas.
 
 ## Dependências
 
@@ -248,6 +274,12 @@ comparação futura sem interferir no comportamento atual.
 - logout revoga a sessão;
 - recuperação é usada por pessoa deslogada;
 - recuperação usa somente token no link enviado por e-mail;
+- reativação própria usa somente token no link enviado por e-mail;
+- link de reativação expira em 15 minutos, é de uso único e permite três
+  tentativas inválidas;
+- falha no envio de reativação marca o desafio como `FAILED`; não há reenvio
+  automático;
+- reativar invalida outros desafios pendentes de reativação e exige novo login;
 - envio de e-mail utiliza Resend;
 - após redefinir, o frontend redireciona para login;
 - não há login automático após redefinição;

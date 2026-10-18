@@ -182,13 +182,22 @@ marca o desafio como `FAILED`. Para reset de senha, `expiresAt` é definido para
 15 minutos após a emissão e `maxAttempts` recebe `3`. A senha nova deve seguir
 as mesmas validações do cadastro.
 
+Para reativação de conta, `purpose` recebe `ACCOUNT_REACTIVATION`,
+`subjectType` recebe `USER` e `subjectId` recebe o ID da conta inativa. O token
+também usa `challengeId.secret`, expira em 15 minutos e permite três tentativas
+inválidas. A metadata de emissão e consumo é mantida para auditoria, sem
+participar da decisão. A solicitação usa o mesmo limitador em memória da
+recuperação de senha: três solicitações por e-mail normalizado e dez por IP em
+uma hora, com teto de 10.000 chaves por processo.
+
 Tokens malformados ou com ID de desafio inexistente recebem erro genérico e não
 alteram um desafio. O limitador por IP também protege esse caminho.
 
 O vínculo `subjectType + subjectId` é polimórfico e não pode ter uma foreign key
-convencional para todos os destinos no PostgreSQL. O caso de uso deve validar o
-alvo pelo contrato do módulo proprietário e impedir desafios órfãos. A política
-de limpeza desses registros deve ser definida antes da migration.
+convencional para todos os destinos no PostgreSQL. O caso de uso valida o alvo
+pelo contrato do módulo proprietário. A limpeza futura de uma conta deve
+remover também os desafios cujo sujeito seja aquele usuário; desafios ligados a
+uma solicitação de reset devem ser removidos explicitamente junto com ela.
 
 ### Limitação de solicitações de reset
 
@@ -215,10 +224,10 @@ existir; não há prazo de retenção separado para a metadata. Apagar o registr
 remove também sua metadata. O job de expiração muda status para `EXPIRED`, mas
 não apaga registros.
 
-Como `Challenge` referencia `PasswordResetRequest` por campos polimórficos e
-não possui foreign key, o repository deve apagar os desafios vinculados junto
-com a solicitação, na mesma transação. Isso também deve ser respeitado quando a
-exclusão do usuário remover solicitações por cascade.
+Como `Challenge` referencia `PasswordResetRequest` ou `User` por campos
+polimórficos e não possui foreign key, a limpeza deve apagar os desafios
+vinculados explicitamente: os de reset junto com a solicitação e os de
+reativação junto com a conta, conforme a futura rotina de exclusão de usuários.
 
 ## Claims dos tokens
 
@@ -299,6 +308,7 @@ interface ChallengeRepository {
 interface EmailProvider {
   sendPasswordReset(input: PasswordResetEmail): Promise<{ messageId: string }>;
   sendPasswordChanged(input: PasswordChangedEmail): Promise<void>;
+  sendAccountReactivation(input: AccountReactivationEmail): Promise<void>;
 }
 ```
 
@@ -449,6 +459,43 @@ todos os outros desafios `ACCOUNT_REACTIVATION` ainda `REQUESTED` da conta.
    nessa notificação é registrada em log sanitizado, não desfaz a troca e não
    gera reenvio automático. O frontend redireciona para login.
 
+### Fluxo — solicitar reativação de conta
+
+1. **Input:** recebe o e-mail e metadata de auditoria; o cliente não informa
+   `userId`.
+2. **Validação:** Zod valida o e-mail e a metadata; a camada HTTP completa IP e
+   `userAgent` e exige `Origin` permitido e o token CSRF double-submit.
+3. **Use case:** aplica o limitador em memória já usado pela recuperação de
+   senha e procura somente uma conta inativa elegível por contrato público de
+   `users`.
+4. **Módulos:** gera o segredo, calcula seu hash e cria o link com origem
+   configurada do frontend.
+5. **Persistência:** salva `Challenge` com propósito `ACCOUNT_REACTIVATION`,
+   sujeito `USER`, metadata de emissão, expiração em 15 minutos e no máximo três
+   tentativas inválidas. Não existe `PasswordResetRequest` para esse fluxo.
+6. **E-mail:** o `EmailProvider` envia o link pelo Resend. Se houver falha,
+   marca o desafio como `FAILED`; não há reenvio automático.
+7. **Resposta:** responde 202 de forma neutra, mesmo quando o e-mail não
+   corresponde a uma conta inativa ou o limite impede o envio.
+
+### Fluxo — confirmar reativação de conta
+
+1. **Input:** recebe `challengeId.secret` e metadata de auditoria; a rota
+   continua pública, mas exige CSRF e `Origin` permitido.
+2. **Validação:** valida o formato, propósito `ACCOUNT_REACTIVATION`, sujeito
+   `USER`, status utilizável, expiração e hash do segredo. Segredo inválido
+   incrementa tentativas; a terceira falha marca o desafio como `FAILED`.
+3. **Use case:** consome o desafio uma única vez por atualização condicional e
+   solicita a reativação pelo contrato público `UsersAuthGateway`.
+4. **Módulos:** `users` delega a mudança de estado ao
+   `AccountSessionCoordinator`.
+5. **Persistência:** o desafio consumido fica `COMPLETED`. Sob uma transaction
+   e bloqueio da linha do usuário, `users` ativa a conta, mantém sessões
+   revogadas e marca como `FAILED` os demais desafios `ACCOUNT_REACTIVATION`
+   ainda `REQUESTED`.
+6. **Resposta:** responde 204, sem criar sessão; a pessoa deve autenticar-se
+   novamente.
+
 ## Adapter do Resend
 
 O adapter usa o SDK oficial `resend` e lê a chave de `RESEND_API_KEY`. O
@@ -555,10 +602,14 @@ até o momento é:
 2. `create-storage`;
 3. `create-refresh-tokens`;
 4. `create-password-reset-requests`;
-5. `create-challenges`.
+5. `create-challenges`;
+6. `add-account-reactivation-challenge` (adiciona `ACCOUNT_REACTIVATION` ao
+   enum `ChallengePurpose`).
 
 `create-storage` pertence ao módulo `storage`. As migrations de refresh,
 recuperação e desafios pertencem a `auth` e dependem da existência de `User`.
+A migration de reativação já está preparada em código, mas nenhuma migration
+foi aplicada; a validação PostgreSQL permanece adiada até a configuração da URL.
 `create-messaging-identities` permanece futura e não autorizada enquanto a
 especificação de mensageria estiver em draft.
 
