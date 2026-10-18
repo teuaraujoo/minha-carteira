@@ -6,15 +6,12 @@ import type { RegisterUserInput } from "../../src/modules/users/application/dto/
 import { UserService } from "../../src/modules/users/application/services/users.service.js";
 import type { StorageOperations } from "../../src/modules/storage/domain/interfaces/storage.interfaces.js";
 import { createUsersRepositoryDouble } from "./users-repository.double.js";
+import type { PrismaClient } from "../../generated/prisma/client.js";
 
 const createdAt = new Date("2026-05-10T12:00:00.000Z");
 const storage = { upload: async () => undefined, delete: async () => undefined, getPresignedUrl: async () => "", getActiveFileUrl: async () => null, replaceFileContent: async () => ({ file: {} as never, url: "", expiresAt: createdAt }) } satisfies StorageOperations;
 function service(repository: ReturnType<typeof createUsersRepositoryDouble>, passwordHasher: { hash(password: string): Promise<string>; compare(password: string, hash: string): Promise<boolean> }, id = "generated-user-id") {
-  return new UserService(repository, storage, { debug() { }, info() { }, warn() { }, error() { }, fatal() { }, async close() { } }, passwordHasher, { generate: () => id }, { now: () => new Date(createdAt.getTime()) }, {
-    createSessionIfAccountActive: async () => true,
-    deactivateAccountAndRevokeSessions: async () => true,
-    reactivateAccountAndRevokeSessions: async () => ({ found: true, reactivated: true }),
-  });
+  return new UserService(repository, storage, { debug() { }, info() { }, warn() { }, error() { }, fatal() { }, async close() { } }, passwordHasher, { generate: () => id }, { now: () => new Date(createdAt.getTime()) }, {} as PrismaClient);
 }
 const validInput: RegisterUserInput = {
   username: " NewUser ",
