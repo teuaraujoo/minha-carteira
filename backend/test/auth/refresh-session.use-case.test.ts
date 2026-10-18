@@ -6,14 +6,15 @@ import type {
   TokenHasher,
   VerifiedToken,
 } from "../../src/modules/auth/application/contracts/auth.contracts.js";
-import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
-import { RefreshToken, type RefreshTokenProps } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
+import type { RefreshTokenProps } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
 import type { UsersAuthGateway } from "../../src/modules/users/index.js";
 import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/users.enums.js";
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 import { Sha256TokenHasher } from "../../src/modules/auth/infrastructure/security/sha256-token.hasher.js";
-import { accountSessionCoordinatorDouble } from "./account-session-coordinator.double.js";
+import type { PrismaClient } from "../../generated/prisma/client.js";
 
 const now = new Date("2026-01-02T00:00:00.000Z");
 const rawRefreshToken = "signed-refresh-token";
@@ -57,7 +58,7 @@ function setup(options: {
       return options.verified ?? verifiedRefresh;
     },
   };
-  const refreshTokenRepository: RefreshTokenRepository = {
+  const refreshTokenRepository: IRefreshTokenRepository = {
     async save() { throw new Error("Não esperado."); },
     async findActiveById(id, at) {
       calls.push("findActiveById");
@@ -103,7 +104,7 @@ function setup(options: {
   };
   const clock: ClockProvider = { now: () => now };
   return {
-    service: new AuthService(refreshTokenRepository, clock, tokenHasher, { hash: async () => "", compare: async () => false }, usersAuthGateway, jwtProvider, { generate: () => "session-1" }, accountSessionCoordinatorDouble),
+    service: new AuthService(refreshTokenRepository, clock, tokenHasher, { hash: async () => "", compare: async () => false }, usersAuthGateway, jwtProvider, { generate: () => "session-1" }, {} as PrismaClient),
     calls,
     get registeredUse() { return registeredUse; },
   };

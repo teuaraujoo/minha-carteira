@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
-import { RefreshToken, type RefreshTokenProps } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
+import type { RefreshTokenProps } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
 import { RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import { PrismaRefreshTokenRepository, type PrismaRefreshTokensClient } from "../../src/modules/auth/infrastructure/repositories/refresh-token.repository.js";
 

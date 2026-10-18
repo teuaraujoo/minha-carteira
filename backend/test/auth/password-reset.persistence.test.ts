@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PrismaClient } from "../../generated/prisma/client.js";
-import { Challenge, PasswordResetRequest } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
+import { PasswordResetRequest } from "../../src/modules/auth/domain/entities/password-reset-request.entity.js";
 import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, PasswordResetRequestStatus } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import { PrismaChallengeRepository } from "../../src/modules/auth/infrastructure/repositories/challenge.repository.js";
 import { PrismaPasswordResetRequestRepository } from "../../src/modules/auth/infrastructure/repositories/password-reset-request.repository.js";

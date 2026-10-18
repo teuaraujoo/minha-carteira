@@ -7,8 +7,9 @@ import type {
   JwtProvider,
   VerifiedToken,
 } from "../../src/modules/auth/application/contracts/auth.contracts.js";
-import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
-import { RefreshToken, type RefreshTokenProps } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
+import type { RefreshTokenProps } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
 import type { UsersAuthGateway } from "../../src/modules/users/index.js";
 import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/users.enums.js";
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
@@ -51,7 +52,7 @@ function setup(options: {
     },
     async verifyRefreshToken() { throw new Error("Não esperado."); },
   };
-  const refreshTokenRepository: RefreshTokenRepository = {
+  const refreshTokenRepository: IRefreshTokenRepository = {
     async save() { throw new Error("Não esperado."); },
     async findActiveById(id, at) {
       calls.push("findActiveById");

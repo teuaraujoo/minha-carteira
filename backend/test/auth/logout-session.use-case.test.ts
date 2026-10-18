@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
-import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
-import { accountSessionCoordinatorDouble } from "./account-session-coordinator.double.js";
+import type { PrismaClient } from "../../generated/prisma/client.js";
 
 const revokedAt = new Date("2026-01-02T12:00:00.000Z");
 
@@ -23,10 +23,10 @@ function setup() {
       effectiveRevocations += 1;
     },
     async revokeAllFromUser() { throw new Error("Não esperado."); },
-  } as RefreshTokenRepository;
+  } as IRefreshTokenRepository;
   const clock: ClockProvider = { now: () => revokedAt };
   return {
-    service: new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, findInactiveAccountReactivationRecipient: async () => null, reactivateUserById: async () => false, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }, accountSessionCoordinatorDouble),
+    service: new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, findInactiveAccountReactivationRecipient: async () => null, reactivateUserById: async () => false, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }, {} as PrismaClient),
     calls,
     alreadyRevoked,
     get effectiveRevocations() { return effectiveRevocations; },
@@ -59,8 +59,8 @@ test("propaga falhas de persistência para que a camada HTTP não confirme falso
   const expectedError = new Error("Falha de persistência.");
   const repository = {
     async revoke() { throw expectedError; },
-  } as Pick<RefreshTokenRepository, "revoke"> as RefreshTokenRepository;
-  const service = new AuthService(repository, { now: () => revokedAt }, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, findInactiveAccountReactivationRecipient: async () => null, reactivateUserById: async () => false, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }, accountSessionCoordinatorDouble);
+  } as Pick<IRefreshTokenRepository, "revoke"> as IRefreshTokenRepository;
+  const service = new AuthService(repository, { now: () => revokedAt }, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, findInactiveAccountReactivationRecipient: async () => null, reactivateUserById: async () => false, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }, {} as PrismaClient);
 
   await assert.rejects(service.logout({ sessionId: "session-1" }), error => error === expectedError);
 });

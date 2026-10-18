@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
-import type { PasswordResetUnitOfWork } from "../../src/modules/auth/application/contracts/password-reset-unit-of-work.js";
-import { Challenge, type RequestMetadata } from "../../src/modules/auth/domain/entities/auth.entities.js";
-import { ACCOUNT_REACTIVATION_MAX_ATTEMPTS, ACCOUNT_REACTIVATION_TOKEN_TTL_MS } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
+import type { RequestMetadata } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
+import { ACCOUNT_REACTIVATION_MAX_ATTEMPTS, ACCOUNT_REACTIVATION_TOKEN_TTL_MS } from "../../src/modules/auth/domain/constants/auth.constants.js";
 import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType } from "../../src/modules/auth/domain/enums/auth.enums.js";
-import type { ChallengeRepository } from "../../src/modules/auth/domain/interfaces/challenge-repository.interface.js";
-import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import type { IChallengeRepository } from "../../src/modules/auth/domain/interfaces/challenge-repository.interface.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { InMemoryPasswordResetRateLimiter } from "../../src/modules/auth/infrastructure/security/in-memory-password-reset-rate-limiter.js";
 import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
 import { confirmAccountReactivationSchema, requestAccountReactivationSchema } from "../../src/modules/auth/presentation/schemas/auth.schemas.js";
+import type { PrismaClient } from "../../generated/prisma/client.js";
 
 const now = new Date("2026-10-18T12:00:00.000Z");
 const metadata: RequestMetadata = { location: null, userAgent: "Navegador", ipAddress: "127.0.0.1", deviceId: null };
@@ -23,7 +24,7 @@ function setup(options: { recipient?: { id: string; email: string } | null; fail
   let reactivated = false;
   let reactivationCalls = 0;
   const emails: Array<{ email: string; reactivationUrl: string }> = [];
-  const challengeRepository: ChallengeRepository = {
+  const challengeRepository: IChallengeRepository = {
     save: async (challenge) => {
       storedChallenge = challenge;
       status = challenge.status;
@@ -83,10 +84,7 @@ function setup(options: { recipient?: { id: string; email: string } | null; fail
     },
     changePasswordHash: async () => undefined,
   };
-  const unitOfWork: PasswordResetUnitOfWork = {
-    execute: async <T>() => { throw new Error("Não esperado."); },
-  };
-  const refreshTokens: RefreshTokenRepository = {
+  const refreshTokens: IRefreshTokenRepository = {
     save: async () => undefined,
     findActiveById: async () => null,
     registerUse: async () => undefined,
@@ -101,13 +99,8 @@ function setup(options: { recipient?: { id: string; email: string } | null; fail
     usersAuthGateway,
     { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } },
     { generate: () => "challenge-1" },
+    {} as PrismaClient,
     {
-      createSessionIfAccountActive: async () => true,
-      deactivateAccountAndRevokeSessions: async () => true,
-      reactivateAccountAndRevokeSessions: async () => ({ found: true, reactivated: true }),
-    },
-    {
-      unitOfWork,
       challengeRepository,
       emailProvider: {
         sendPasswordReset: async () => undefined,

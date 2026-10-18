@@ -8,13 +8,15 @@ import type {
   TokenHasher,
   TokenSubject,
 } from "../../src/modules/auth/application/contracts/auth.contracts.js";
-import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
-import { REFRESH_TOKEN_TTL_MS, type RefreshToken } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import { REFRESH_TOKEN_TTL_MS } from "../../src/modules/auth/domain/constants/auth.constants.js";
+import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
 import type { AuthUser, AuthUserCredentials, UsersAuthGateway } from "../../src/modules/users/index.js";
 import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/users.enums.js";
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
 import type { IdGenerator } from "../../src/shared/application/id-generator.js";
 import type { PasswordHasher } from "../../src/shared/application/security/password-hasher.js";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 
 const now = new Date("2026-01-02T03:04:05.000Z");
 const rawPassword = "  senha com espaços  ";
@@ -87,7 +89,7 @@ function setup(options: {
     },
     async matches() { throw new Error("Não esperado."); },
   };
-  const refreshTokenRepository: RefreshTokenRepository = {
+  const refreshTokenRepository: IRefreshTokenRepository = {
     async save(session) { savedSessions.push(session); },
     async findActiveById() { throw new Error("Não esperado."); },
     async registerUse() { throw new Error("Não esperado."); },
@@ -95,17 +97,23 @@ function setup(options: {
     async revokeAllFromUser() { throw new Error("Não esperado."); },
   };
   const clock: ClockProvider = { now: () => now };
-  return {
-    service: new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersAuthGateway, jwtProvider, idGenerator, {
-      createSessionIfAccountActive: async (session) => {
+  const transaction = {
+    $queryRaw: async () => {
+      calls.push({ method: "lock-account" });
+      return options.sessionAllowed === false ? [] : [{ status: "ACTIVE" }];
+    },
+    refreshToken: {
+      create: async ({ data }: { data: ConstructorParameters<typeof RefreshToken>[0] }) => {
         calls.push({ method: "save" });
-        if (options.sessionAllowed === false) return false;
-        savedSessions.push(session);
-        return true;
+        savedSessions.push(new RefreshToken(data));
       },
-      deactivateAccountAndRevokeSessions: async () => true,
-      reactivateAccountAndRevokeSessions: async () => ({ found: true, reactivated: true }),
-    }),
+    },
+  } as unknown as Prisma.TransactionClient;
+  const prisma = {
+    $transaction: async <T>(operation: (client: Prisma.TransactionClient) => Promise<T>) => operation(transaction),
+  } as unknown as PrismaClient;
+  return {
+    service: new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersAuthGateway, jwtProvider, idGenerator, prisma),
     calls,
     savedSessions,
     get generatedIds() { return generatedIds; },
@@ -185,7 +193,8 @@ test("recusa criar sessão se a conta deixar de estar ativa ao persistir o login
 
   assert.equal(error.message, "E-mail, nome de usuário ou senha inválidos.");
   assert.equal(fixture.savedSessions.length, 0);
-  assert.equal(fixture.calls.some((call) => call.method === "save"), true);
+  assert.equal(fixture.calls.some((call) => call.method === "lock-account"), true);
+  assert.equal(fixture.calls.some((call) => call.method === "save"), false);
 });
 
 test("rejeita identificador vazio com a mesma resposta genérica", async () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Resend } from "resend";
-import { ResendEmailProvider } from "../../src/modules/auth/infrastructure/providers/resend-email.provider.js";
+import { ResendEmailProvider } from "../../src/shared/infrastructure/providers/email/resend-email.provider.js";
 
 function createClient(send: (input: Record<string, unknown>) => Promise<unknown>): Pick<Resend, "emails"> {
   return { emails: { send } } as unknown as Pick<Resend, "emails">;
@@ -16,6 +16,8 @@ test("Resend envia link de recuperação com conteúdo em português", async () 
   assert.equal(sent?.from, "Minha Carteira <conta@example.com>");
   assert.match(String(sent?.subject), /Redefinição de senha/);
   assert.match(String(sent?.text), /challenge\.secret/);
+  assert.match(String(sent?.html), /Criar nova senha/);
+  assert.match(String(sent?.html), /https:\/\/carteira\.example\/reset-password\?token=challenge\.secret/);
 });
 
 test("Resend envia link de reativação com conteúdo em português", async () => {
@@ -26,6 +28,26 @@ test("Resend envia link de reativação com conteúdo em português", async () =
   assert.equal(sent?.to, "teco@example.com");
   assert.match(String(sent?.subject), /Reativação da conta/);
   assert.match(String(sent?.text), /challenge\.secret/);
+  assert.match(String(sent?.html), /Reativar conta/);
+  assert.match(String(sent?.html), /https:\/\/carteira\.example\/reactivate-account\?token=challenge\.secret/);
+});
+
+test("Resend envia template externo para aviso de senha alterada", async () => {
+  let sent: Record<string, unknown> | undefined;
+  const provider = new ResendEmailProvider(createClient(async (input) => { sent = input; return { data: { id: "email-3" }, error: null }; }), "Minha Carteira <conta@example.com>");
+  await provider.sendPasswordChanged({ email: "teco@example.com" });
+
+  assert.match(String(sent?.subject), /Senha alterada/);
+  assert.match(String(sent?.html), /Sua senha foi alterada/);
+  assert.match(String(sent?.text), /Sua senha foi alterada/);
+});
+
+test("templates não aceitam links com protocolo inseguro", async () => {
+  const provider = new ResendEmailProvider(createClient(async () => ({ data: { id: "email-4" }, error: null })), "conta@example.com");
+  await assert.rejects(
+    provider.sendPasswordReset({ email: "teco@example.com", resetUrl: "javascript:alert(1)" }),
+    /O link do e-mail deve usar HTTPS/,
+  );
 });
 
 test("Resend rejeita falhas sem propagar dados sensíveis do provedor", async () => {

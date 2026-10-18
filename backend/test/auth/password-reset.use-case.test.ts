@@ -1,14 +1,98 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
-import type { PasswordResetTransaction, PasswordResetUnitOfWork } from "../../src/modules/auth/application/contracts/password-reset-unit-of-work.js";
-import type { Challenge, PasswordResetRequest, RequestMetadata } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
+import { PasswordResetRequest } from "../../src/modules/auth/domain/entities/password-reset-request.entity.js";
+import type { RequestMetadata } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
+import type { IChallengeRepository } from "../../src/modules/auth/domain/interfaces/challenge-repository.interface.js";
+import type { IPasswordResetRequestRepository } from "../../src/modules/auth/domain/interfaces/password-reset-request-repository.interface.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import type { UsersAuthGateway } from "../../src/modules/users/index.js";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, PasswordResetRequestStatus, RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import { InMemoryPasswordResetRateLimiter } from "../../src/modules/auth/infrastructure/security/in-memory-password-reset-rate-limiter.js";
 import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
 
 const now = new Date("2026-10-18T12:00:00.000Z");
 const metadata: RequestMetadata = { location: null, userAgent: "Teste", ipAddress: "127.0.0.1", deviceId: null };
+
+interface MemoryPasswordResetTransaction {
+  requests: IPasswordResetRequestRepository;
+  challenges: IChallengeRepository;
+  refreshTokens: IRefreshTokenRepository;
+  users: UsersAuthGateway;
+}
+
+function createPrisma(transaction: MemoryPasswordResetTransaction): PrismaClient {
+  const prismaTransaction = {
+    passwordResetRequest: {
+      create: async ({ data }: { data: ConstructorParameters<typeof PasswordResetRequest>[0] }) => transaction.requests.save(new PasswordResetRequest(data)),
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const request = await transaction.requests.findById(where.id);
+        return request ? {
+          id: request.id, userId: request.userId, status: request.status,
+          requestedAt: request.requestedAt, expiresAt: request.expiresAt, metadata: request.metadata,
+          completedAt: request.completedAt, cancelledAt: request.cancelledAt,
+          createdAt: request.createdAt, updatedAt: request.updatedAt,
+        } : null;
+      },
+      updateMany: async ({ where, data }: { where: { id: string }; data: { status: string; completedAt?: Date; updatedAt: Date } }) => {
+        if (data.status === "COMPLETED") return { count: await transaction.requests.complete(where.id, data.completedAt ?? data.updatedAt) ? 1 : 0 };
+        await transaction.requests.markFailed(where.id, data.updatedAt);
+        return { count: 1 };
+      },
+    },
+    challenge: {
+      create: async ({ data }: { data: ConstructorParameters<typeof Challenge>[0] }) => transaction.challenges.save(new Challenge(data)),
+      findUnique: async (input: { where: { id: string }; select?: { attempts: boolean; maxAttempts: boolean } }) => {
+        const challenge = await transaction.challenges.findById(input.where.id);
+        if (!challenge) return null;
+        return input.select ? { attempts: challenge.attempts, maxAttempts: challenge.maxAttempts } : {
+          id: challenge.id, purpose: challenge.purpose, subjectType: challenge.subjectType,
+          subjectId: challenge.subjectId, secretHash: challenge.secretHash, status: challenge.status,
+          attempts: challenge.attempts, maxAttempts: challenge.maxAttempts, metadata: challenge.metadata,
+          expiresAt: challenge.expiresAt, consumedAt: challenge.consumedAt,
+          createdAt: challenge.createdAt, updatedAt: challenge.updatedAt,
+        };
+      },
+      updateMany: async ({ where, data }: { where: { id: string; purpose?: Challenge["purpose"]; subjectType?: Challenge["subjectType"]; attempts?: { lt: number } }; data: { status?: string; attempts?: { increment: number }; metadata?: Challenge["metadata"]; consumedAt?: Date; updatedAt: Date } }) => {
+        if (data.attempts) {
+          const updated = await transaction.challenges.registerInvalidAttemptForPurpose(
+            where.id, where.purpose ?? ChallengePurpose.PASSWORD_RESET,
+            where.subjectType ?? ChallengeSubjectType.PASSWORD_RESET_REQUEST,
+            where.attempts?.lt ?? 3, data.updatedAt,
+          );
+          return { count: updated ? 1 : 0 };
+        }
+        if (data.status === "COMPLETED") {
+          const completed = await transaction.challenges.completeIfUsable(
+            where.id, data.metadata!, data.consumedAt ?? data.updatedAt,
+          );
+          return { count: completed ? 1 : 0 };
+        }
+        await transaction.challenges.markFailed(where.id, data.updatedAt);
+        return { count: 1 };
+      },
+    },
+    refreshToken: {
+      updateMany: async ({ where, data }: { where: { userId: string }; data: { revokedAt: Date; revokeReason: "PASSWORD_RESET" } }) => {
+        await transaction.refreshTokens.revokeAllFromUser(where.userId, data.revokedAt, data.revokeReason as RefreshTokenRevokeReason);
+        return { count: 1 };
+      },
+    },
+    user: {
+      findFirst: async ({ where }: { where: { id: string } }) => transaction.users.findActivePasswordResetRecipientById(where.id),
+      updateMany: async ({ where, data }: { where: { id: string }; data: { passwordHash: string } }) => {
+        await transaction.users.changePasswordHash(where.id, data.passwordHash);
+        return { count: 1 };
+      },
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  return {
+    $transaction: async <T>(operation: (client: Prisma.TransactionClient) => Promise<T>) => operation(prismaTransaction),
+  } as unknown as PrismaClient;
+}
 
 function setup(options: { activeRecipient?: { id: string; email: string } | null; failEmail?: boolean } = {}) {
   let request: PasswordResetRequest | null = null;
@@ -22,7 +106,7 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
   const emails: string[] = [];
   const sentResetUrls: string[] = [];
   const recipient = options.activeRecipient === undefined ? { id: "user-1", email: "teco@example.com" } : options.activeRecipient;
-  const transaction: PasswordResetTransaction = {
+  const transaction: MemoryPasswordResetTransaction = {
     requests: {
       save: async (value) => { request = value; },
       findById: async (id) => request?.id === id && !requestCompleted ? request : null,
@@ -79,7 +163,7 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
     },
   };
   let requestFailed = false;
-  const unitOfWork: PasswordResetUnitOfWork = { execute: async (operation) => operation(transaction) };
+  const prisma = createPrisma(transaction);
   let id = 0;
   const service = new AuthService(
     transaction.refreshTokens,
@@ -89,13 +173,8 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
     transaction.users,
     { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } },
     { generate: () => `generated-${++id}` },
+    prisma,
     {
-      createSessionIfAccountActive: async () => true,
-      deactivateAccountAndRevokeSessions: async () => true,
-      reactivateAccountAndRevokeSessions: async () => ({ found: true, reactivated: true }),
-    },
-    {
-      unitOfWork,
       challengeRepository: transaction.challenges,
       emailProvider: {
         sendPasswordReset: async (input) => { if (options.failEmail) throw new Error("Falha do provedor."); emails.push(input.email); sentResetUrls.push(input.resetUrl); },

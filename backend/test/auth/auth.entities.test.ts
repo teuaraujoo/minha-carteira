@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  Challenge,
-  PasswordResetRequest,
-  RefreshToken,
-  type ChallengeProps,
-  type PasswordResetRequestProps,
-  type RefreshTokenProps,
-} from "../../src/modules/auth/domain/entities/auth.entities.js";
+import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
+import { PasswordResetRequest } from "../../src/modules/auth/domain/entities/password-reset-request.entity.js";
+import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
+import type { ChallengeProps, PasswordResetRequestProps, RefreshTokenProps } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
 import {
   ChallengePurpose,
   ChallengeStatus,

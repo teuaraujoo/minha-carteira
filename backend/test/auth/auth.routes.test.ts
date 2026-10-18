@@ -4,8 +4,9 @@ import type { AddressInfo } from "node:net";
 import type { AuthUser, RegisterUserInput, UsersAuthGateway, UsersRegistrationGateway } from "../../src/modules/users/index.js";
 import { UserStatus, UserRoles } from "../../src/modules/users/domain/enums/users.enums.js";
 import type { JwtProvider, TokenHasher, VerifiedToken } from "../../src/modules/auth/application/contracts/auth.contracts.js";
-import type { RefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
-import { RefreshToken, ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../src/modules/auth/domain/entities/auth.entities.js";
+import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
+import { ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../src/modules/auth/domain/constants/auth.constants.js";
 import { createAuthRouter, type AuthRoutesDependencies } from "../../src/modules/auth/presentation/routes/auth.routes.js";
 import { AUTH_COOKIE_NAMES, AUTH_COOKIE_PATHS } from "../../src/modules/auth/presentation/security/auth-cookies.js";
 import { createApp } from "../../src/app/app.js";
@@ -53,7 +54,7 @@ function createDependencies(overrides: Partial<AuthRoutesDependencies> = {}): Au
     verifyAccessToken: async () => verified("access"),
     verifyRefreshToken: async () => verified("refresh"),
   };
-  const refreshTokenRepository: RefreshTokenRepository = {
+  const refreshTokenRepository: IRefreshTokenRepository = {
     save: async () => undefined,
     findActiveById: async () => session,
     registerUse: async () => undefined,
