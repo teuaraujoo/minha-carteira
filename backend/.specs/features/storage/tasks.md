@@ -10,9 +10,11 @@ verificação independente dos critérios e criação dos commits necessários.
 ## Ordem de execução
 
 Esta spec foi iniciada pela extração da integração R2. STR-00, STR-01 e STR-03
-estão concluídas; STR-04 tem implementação e testes unitários, enquanto STR-02
-aguarda validação PostgreSQL. STR-05 já foi integrado ao módulo `users`; falta
-fechar a validação HTTP integrada e as verificações ambientais.
+estão concluídas. STR-02 está implementada em código, mas sua validação real
+com PostgreSQL foi adiada. STR-04 tem implementação e testes unitários; a
+validação de persistência também permanece adiada. STR-05 foi integrado ao
+módulo `users`, com testes unitários/de controller; os testes HTTP integrados
+foram adiados conforme decisão do usuário.
 
 ### STR-00 — Extrair client e serviço do Cloudflare R2
 
@@ -102,8 +104,8 @@ que a URL estiver disponível.
 
 ### STR-04 — Implementar armazenamento por contexto
 
-**Status:** Revisão — implementação e testes unitários concluídos; pendente
-validar em conjunto com a persistência PostgreSQL de STR-02.
+**Status:** Revisão — implementação e testes unitários concluídos; a validação
+com PostgreSQL foi adiada conforme decisão do usuário.
 **Concorrência nesta etapa:** serialização por contexto dentro de uma instância
 do processo Node.js. Coordenação entre múltiplas instâncias fica fora do escopo.
 
@@ -135,8 +137,8 @@ autorização do proprietário. A garantia cobre uma instância do processo.
 
 ### STR-05 — Integrar módulos consumidores
 
-**Status:** Revisão — integração implementada; falta teste HTTP integrado e
-validação ambiental.
+**Status:** Revisão — integração e testes unitários/de controller concluídos;
+teste HTTP integrado foi adiado conforme decisão do usuário.
 
 **Depende de:** STR-04.
 
@@ -174,13 +176,22 @@ nenhum consumidor importa infraestrutura de R2 ou storage de `shared`.
 
 ## Pendências antes da conclusão
 
-- adicionar e executar testes HTTP integrados para upload autenticado, CSRF,
-  erros de Multer e tentativa de associação a outro usuário;
-- executar a validação de PostgreSQL descrita em STR-02 quando
-  `DATABASE_URL` estiver configurada.
+- executar testes HTTP integrados para upload autenticado, CSRF, erros de
+  Multer e tentativa de associação a outro usuário quando essa etapa for
+  retomada; eles foram adiados conforme decisão do usuário;
+- executar validação de schema, migration e repository em PostgreSQL quando
+  `DATABASE_URL` estiver configurada; essa etapa também foi adiada conforme
+  decisão do usuário.
 
 ## Validações adiadas
 
 - aplicar e validar as migrations em PostgreSQL após configurar `DATABASE_URL`;
 - planejar coordenação compartilhada se a aplicação passar a executar em mais
   de uma instância.
+
+## Situação da documentação
+
+`feature.md`, `design.md` e este plano foram revisados para refletir o código
+atual, os limites de `storage` e as verificações adiadas. STR-02, STR-04 e
+STR-05 não devem ser marcadas como concluídas enquanto as validações externas
+adiadas continuarem pendentes.

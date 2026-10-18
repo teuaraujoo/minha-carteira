@@ -50,7 +50,7 @@ T5 → T11
 T6 → T11
 T7 → T11
 T8 → T11
-T10 → T11
+T9 → T11
 ```
 
 ## Task Breakdown
@@ -298,18 +298,21 @@ por contratos públicos.
 
 ### T11: [USR-10] Atualizar documentação após implementação
 
-**Status:** A fazer
-**What:** Reconciliar documentação geral com o comportamento efetivamente
-implementado.
-**Where:** documentação geral e referências de `users` realmente afetadas.
-**Depends on:** T4, T5, T6, T7, T8, T9 e T10.
+**Status:** Concluída para as specs de `users`, `auth` e `storage`. Testes HTTP,
+PostgreSQL e a limpeza agendada continuam explicitamente adiados ou em backlog.
+**What:** Reconciliar as specs backend com o comportamento implementado e as
+decisões aprovadas.
+**Where:** `feature.md`, `design.md` e `tasks.md` dos três módulos.
+**Depends on:** T4, T5, T6, T7, T8 e T9.
 **Requirement:** USR-RF-001 a USR-RF-009.
 
 **Done when:**
 
-- [ ] Rotas, exemplos e decisões documentadas correspondem ao código validado.
-- [ ] Pendências não implementadas permanecem identificadas como pendentes.
-- [ ] Links e nomes são revisados manualmente.
+- [x] Rotas, fluxos, política de telefone e ciclo de vida correspondem ao
+      comportamento implementado.
+- [x] Pendências de HTTP/PostgreSQL e a limpeza futura permanecem identificadas
+      sem serem apresentadas como concluídas.
+- [x] Links e nomes entre as três specs foram revisados.
 
 **Tests:** none
 **Gate:** build
@@ -347,13 +350,13 @@ validado no PowerShell.
 
 ## Pending Decisions and Blockers
 
-- `phone` não é único; o formato obrigatório de celular brasileiro foi definido
-  como `+55` + DDD de dois dígitos + `9` + oito dígitos. Falta implementar essa
-  validação no cadastro e na atualização do perfil.
-- Campos editáveis desta etapa já aprovados: `name` e `phone`.
-- A reativação pode ser solicitada pela própria pessoa mediante link ou por um
-  administrador; faltam definir canal, validade e uso único do link.
-- A política de exclusão foi aprovada: apagar todos os dados após 30 dias de
-  desativação, incluindo identidades de mensageria. Frequência e tamanho de
-  lote ficam para a futura spec de processos agendados.
-- A URL do PostgreSQL será configurada depois; não executar migrations agora.
+- Confirmar e-mail antes do primeiro acesso permanece uma decisão de produto
+  futura.
+- Endpoint e política de autorização para alteração administrativa de
+  capabilities pertencem a uma especificação futura.
+- A limpeza definitiva após 30 dias está aprovada, mas execução, frequência,
+  tamanho de lote e tratamento de falhas dependem da futura spec de processos
+  agendados. Nenhuma rotina de exclusão foi implementada.
+- Testes HTTP integrados e validação de persistência PostgreSQL foram adiados
+  conforme decisão do usuário; configurar `DATABASE_URL` quando essa validação
+  for retomada.

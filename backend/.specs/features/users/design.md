@@ -65,8 +65,8 @@ capabilities do cliente. A role controla responsabilidades amplas, enquanto
 capabilities liberam funcionalidades específicas, como a integração com
 Telegram.
 
-O nome correto é `inactivatedAt`. A grafia atual `inactivetedAt` deve ser
-corrigida de forma coordenada em entidade, persistência e testes.
+O nome adotado no código e no schema é `inactivatedAt`. A grafia antiga
+`inactivetedAt` não deve ser reintroduzida.
 
 ### Comportamentos mínimos
 
@@ -92,9 +92,7 @@ factory de criação pode receber esses valores por providers.
 - `password`: não aplicar `trim`, pois isso mudaria a credencial;
 - `phone`: obrigatório no cadastro, mantido como string e validado como celular
   brasileiro no formato `+55` + DDD de dois dígitos + `9` + oito dígitos, por
-  exemplo `+5579988887777`. A mesma validação deve ser aplicada ao atualizar o
-  perfil. A regra foi aprovada, mas ainda precisa ser implementada no schema e
-  na entidade.
+  exemplo `+5579988887777`. A mesma validação é aplicada ao atualizar o perfil.
 
 Índices únicos no banco devem sustentar as regras de e-mail e nome de usuário.
 A checagem antecipada melhora a mensagem, mas não substitui a constraint. A
@@ -222,18 +220,19 @@ da imagem.
 
 1. **Input:** Multer disponibiliza o arquivo em memória e o middleware fornece
    `request.auth.userId`.
-2. **Validação:** Zod valida conteúdo, MIME e tamanho; o caso de uso de `users`
-   consulta o próprio repository e confirma usuário existente e ativo. O
-   cliente não envia IDs de proprietário ou contexto.
+2. **Validação:** a apresentação valida presença, tamanho e tipo; o caso de uso
+   de `users` consulta o próprio repository e confirma usuário existente e
+   ativo. O cliente não envia IDs de proprietário ou contexto.
 3. **Use case:** define `contextType=USER_PROFILE`, `contextId=userId` e
    `ownerUserId=userId`, usando somente o ID autenticado.
-4. **Módulos:** chama `StorageOperations.replaceFileContent`; `storage` não consulta
-   o módulo de usuários.
-5. **Persistência:** `storage` remove a imagem de perfil anterior, apaga seu
-   objeto no R2, armazena o novo objeto e salva `StoredFile` com os identificadores
-   e o contexto validados por `users`.
-6. **Resposta:** retorna, quando necessário, uma URL pré-assinada temporária
-   com expiração de 30 minutos.
+4. **Módulos:** chama `StorageOperations.replaceFileContent`; `storage` valida
+   bytes e estrutura básica, mas não consulta o módulo de usuários.
+5. **Persistência e substituição:** `storage` mantém a imagem anterior ativa,
+   cria e envia a nova imagem e só remove a anterior depois que a nova estiver
+   `COMPLETED`. Se a tentativa falhar, marca o novo registro como `FAILED`
+   quando possível e preserva a imagem anterior.
+6. **Resposta:** retorna a nova URL pré-assinada e `expiresAt`, válidos por
+   30 minutos.
 
 ### Fluxo — desativação
 
@@ -254,10 +253,10 @@ da imagem.
    confirmação; alternativamente, um administrador solicita a reativação de
    uma conta específica.
 2. **Validação:** o link usa `Challenge` com propósito
-   `ACCOUNT_REACTIVATION`, sujeito `USER`, segredo armazenado como hash, validade
-   de 15 minutos e até três tentativas inválidas. O token é consumido uma única
-   vez antes de reativar a conta. A rota administrativa valida role `ADMIN` no
-   servidor.
+   `ACCOUNT_REACTIVATION`, sujeito `USER`, segredo armazenado como hash,
+   validade de 15 minutos e até três tentativas inválidas. O token é consumido
+   uma única vez antes de reativar a conta. A rota administrativa valida role
+   `ADMIN` no servidor.
 3. **Use case:** solicita a reativação pelo `AccountSessionCoordinator`.
 4. **Módulos:** sessões antigas permanecem revogadas; todos os outros desafios
    pendentes da conta são marcados `FAILED`, tanto no fluxo por e-mail quanto

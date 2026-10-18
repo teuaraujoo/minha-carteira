@@ -94,9 +94,11 @@ caso de uso. Campos internos devem ser rejeitados pelo schema HTTP.
 
 O sistema DEVE permitir desativar e reativar um usuário sem apagar seu
 histórico enquanto a conta estiver inativa. A própria pessoa pode solicitar a
-reativação e confirmá-la por um link; um administrador também pode reativar a
-conta. Ao desativar, o sistema registra `inactivatedAt` e revoga as sessões.
-Ao reativar, remove `inactivatedAt`; sessões antigas permanecem revogadas, e a
+reativação por e-mail e confirmá-la por um link; um administrador também pode
+reativar a conta. O link, gerenciado por `auth`, expira em 15 minutos, é de uso
+único e permite três tentativas inválidas. Ao desativar, o sistema registra
+`inactivatedAt` e revoga as sessões. Ao reativar, remove `inactivatedAt`,
+invalida outros desafios pendentes e mantém as sessões antigas revogadas; a
 pessoa precisa entrar novamente.
 
 ### USR-RF-006 — Exclusão definitiva
@@ -150,6 +152,11 @@ log.
   autenticado.
 - [x] Desativação e reativação preservam o histórico; links pendentes irmãos
   são invalidados ao reativar.
+- [x] A reativação própria usa link via Resend, com validade de 15 minutos,
+  uso único e até três tentativas inválidas; falha no envio marca o desafio
+  como `FAILED`.
+- [x] Uma reativação administrativa exige role `ADMIN`; nenhuma sessão antiga
+  é restaurada.
 - [x] Nenhuma saída pública contém `passwordHash`.
 - [x] `auth` usa o contrato público de `users`, não seu repository.
 - [ ] Testes HTTP integrados para perfil, upload, ciclo de vida, CSRF e IDOR
@@ -191,6 +198,8 @@ log.
 - o link de reativação é enviado pelo Resend, expira em 15 minutos, é de uso
   único, permite três tentativas inválidas e reutiliza `Challenge` com propósito
   `ACCOUNT_REACTIVATION`; reativar invalida os outros desafios pendentes;
+- falha no envio do link marca o desafio como `FAILED`; não há reenvio
+  automático;
 - login, desativação e reativação coordenam o bloqueio da linha do usuário para
   serializar gravação de sessão, mudança de status e revogação;
 - a exclusão definitiva ocorre ao completar 30 dias de desativação, se não
@@ -211,6 +220,6 @@ log.
 - adicionar e executar testes HTTP integrados para perfil, upload, ciclo de
   vida, CSRF e IDOR. Esses testes foram adiados conforme decisão do usuário;
 - validar migrations e repositories com PostgreSQL após configurar
-  `DATABASE_URL`;
+  `DATABASE_URL`; essa validação foi adiada conforme decisão do usuário;
 - escrever a spec futura de processos agendados para definir execução,
   frequência, tamanho de lote e tratamento de falhas na limpeza definitiva.

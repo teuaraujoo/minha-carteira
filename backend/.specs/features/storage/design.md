@@ -58,9 +58,9 @@ com expiração de 30 minutos.
 
 A migração dos consumidores e da composição já foi realizada: `users` chama o
 contrato público `StorageOperations`, e a implementação R2 fica no módulo
-`storage`. A revisão final ainda deve confirmar por busca que não há imports
-legados; a validação HTTP e a validação PostgreSQL seguem pendentes, conforme
-`tasks.md`.
+`storage`. A busca atual não encontrou imports da integração antiga nem dos
+utilitários compartilhados. Testes HTTP e validação PostgreSQL foram adiados,
+conforme `tasks.md`.
 
 O módulo que conhece o contexto recebe a requisição HTTP, extrai o arquivo,
 valida existência, status e autorização do recurso e chama `storage` por
