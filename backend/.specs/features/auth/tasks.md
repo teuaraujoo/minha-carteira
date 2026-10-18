@@ -194,7 +194,7 @@ autenticado.
 
 ### T7: [AUTH-07] Implementar logout
 
-**Status:** A fazer
+**Status:** Concluída em aplicação; HTTP pendente em T12
 **What:** Revogar a sessão atual de forma idempotente e remover cookies.
 **Where:** caso de uso e testes de `auth`.
 **Depends on:** T3, T6.
@@ -202,9 +202,12 @@ autenticado.
 
 **Done when:**
 
-- [ ] Sessão ativa recebe motivo `LOGOUT` e data de revogação.
-- [ ] Sessão inválida ou já revogada continua permitindo limpeza dos cookies.
+- [x] Sessão ativa recebe motivo `LOGOUT` e data de revogação.
+- [x] Sessão inválida ou já revogada continua permitindo limpeza dos cookies.
 - [ ] Resposta é 204 e refresh posterior é rejeitado.
+
+A resposta HTTP 204 e a limpeza dos cookies dependem da integração de rotas
+definida para T12; o caso de uso não controla cookies.
 
 **Tests:** unit
 **Gate:** quick
