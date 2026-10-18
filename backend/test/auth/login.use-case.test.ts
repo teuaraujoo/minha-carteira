@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { LoginUseCase } from "../../src/modules/auth/application/use-cases/login.use-case.js";
-import { mapLoginOutput, type LoginInput } from "../../src/modules/auth/application/dto/login.dto.js";
+import { mapLoginOutput } from "../../src/modules/auth/application/dto/login.dto.js";
+import { InvalidCredentialsError } from "../../src/modules/auth/application/errors/invalid-credentials.error.js";
 import type {
   JwtProvider,
   RefreshTokenRepository,
@@ -14,7 +15,6 @@ import { UserRoles, UserStatus } from "../../src/modules/users/domain/enums/user
 import type { ClockProvider } from "../../src/shared/application/clock-provider.js";
 import type { IdGenerator } from "../../src/shared/application/id-generator.js";
 import type { PasswordHasher } from "../../src/shared/application/security/password-hasher.js";
-import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
 
 const now = new Date("2026-01-02T03:04:05.000Z");
 const rawPassword = "  senha com espaços  ";
@@ -104,12 +104,12 @@ function setup(options: {
   };
 }
 
-async function unauthorizedSnapshot(promise: Promise<unknown>): Promise<{ status: number; code: ErrorCode; message: string }> {
+async function unauthorizedSnapshot(promise: Promise<unknown>): Promise<{ name: string; message: string }> {
   try {
     await promise;
   } catch (error) {
-    assert.ok(error instanceof AppError);
-    return { status: error.status, code: error.code, message: error.message };
+    assert.ok(error instanceof InvalidCredentialsError);
+    return { name: error.name, message: error.message };
   }
   assert.fail("Era esperado que o login fosse rejeitado.");
 }
@@ -161,8 +161,7 @@ test("usuário ausente, senha incorreta e usuário inativo têm o mesmo erro pú
   ]);
 
   assert.deepEqual(errors, Array.from({ length: errors.length }, () => ({
-    status: 401,
-    code: ErrorCode.UNAUTHORIZED,
+    name: "InvalidCredentialsError",
     message: "Identificador ou senha inválidos.",
   })));
   assert.equal(missingUser.savedSessions.length, 0);
@@ -177,8 +176,7 @@ test("rejeita identificador vazio com a mesma resposta genérica", async () => {
   const error = await unauthorizedSnapshot(fixture.useCase.execute({ identifier: " ", password: rawPassword }));
 
   assert.deepEqual(error, {
-    status: 401,
-    code: ErrorCode.UNAUTHORIZED,
+    name: "InvalidCredentialsError",
     message: "Identificador ou senha inválidos.",
   });
   assert.equal(fixture.calls.length, 0);

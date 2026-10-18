@@ -1,8 +1,8 @@
 import type { ClockProvider } from "../../../../shared/application/clock-provider.js";
 import type { IdGenerator } from "../../../../shared/application/id-generator.js";
 import type { PasswordHasher } from "../../../../shared/application/security/password-hasher.js";
-import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import type { UsersAuthGateway } from "../../../users/index.js";
+import { InvalidCredentialsError } from "../errors/invalid-credentials.error.js";
 import { REFRESH_TOKEN_TTL_MS, RefreshToken } from "../../domain/entities/auth.entities.js";
 import type {
   JwtProvider,
@@ -75,10 +75,6 @@ export class LoginUseCase {
   }
 }
 
-function invalidCredentials(): AppError {
-  return new AppError({
-    status: 401,
-    code: ErrorCode.UNAUTHORIZED,
-    message: "Identificador ou senha inválidos.",
-  });
+function invalidCredentials(): InvalidCredentialsError {
+  return new InvalidCredentialsError();
 }
