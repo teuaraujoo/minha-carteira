@@ -171,7 +171,7 @@ preparar a migration.
 
 ### T6: [USR-09] Expor contratos públicos para auth
 
-**Status:** A fazer
+**Status:** Concluída; gate focado, suíte ampla de users, verificação TypeScript e busca de imports diretos aprovados.
 **What:** Implementar `UsersAuthGateway` e expor o caso de uso de cadastro sem
 expor o repository de `users`.
 **Where:** contratos públicos e adapters de `users`, com testes.
@@ -180,14 +180,15 @@ expor o repository de `users`.
 
 **Done when:**
 
-- [ ] `auth` consegue buscar credenciais por identificador, buscar usuário
+- [x] `auth` consegue buscar credenciais por identificador, buscar usuário
       ativo por ID e trocar hash usando apenas o gateway público.
-- [ ] Hash nunca aparece em DTO ou saída HTTP.
-- [ ] Nenhum outro módulo importa diretamente o repository de `users`.
-- [ ] Testes cobrem adapters e busca de usuário ativo.
+- [x] Hash nunca aparece em DTO ou saída HTTP.
+- [x] Nenhum outro módulo importa diretamente o repository de `users`.
+- [x] Testes cobrem adapters e busca de usuário ativo.
 
 **Tests:** unit
 **Gate:** quick
+**Gate command:** `node --import tsx --test test/users/users-public-gateways.test.ts` e `node node_modules/typescript/bin/tsc --noEmit`; suíte ampla validada com `node --import tsx --test test/users/*.test.ts`; imports revisados com `rg "users/(infrastructure/repositories|.*users\\.repository)|IUsersRepository" src/modules --glob "*.ts"`
 **Commit:** `feat(users): expose public module gateways`
 
 ### T7: [USR-04] Implementar perfil autenticado
