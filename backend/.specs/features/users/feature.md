@@ -14,7 +14,8 @@ Ela não amplia automaticamente o escopo dos módulos financeiros.
 - substituir todos os `Promise<any>` do contrato de persistência;
 - separar operações de repository de casos de uso;
 - permitir cadastro público com nome, nome de usuário, e-mail, telefone e senha;
-- permitir consulta e atualização do próprio perfil autenticado;
+- permitir consulta e atualização do próprio perfil autenticado; nesta etapa,
+  somente nome e telefone;
 - manter desativação, reativação e exclusão definitiva programada;
 - manter o upload de imagem associado ao usuário autenticado;
 - integrar a foto de perfil ao módulo `storage` por contrato público;
@@ -30,7 +31,7 @@ Ela não amplia automaticamente o escopo dos módulos financeiros.
 - DTOs de entrada e saída baseados em schemas Zod na apresentação;
 - cadastro público de usuário;
 - consulta do perfil autenticado;
-- atualização de nome, telefone e dados de perfil aprovados;
+- atualização de nome e telefone;
 - desativação e reativação do usuário;
 - exclusão definitiva de usuários inativos há mais de 30 dias;
 - upload de imagem de perfil para o usuário autenticado;
@@ -121,27 +122,27 @@ log.
 
 ## Critérios de aceitação
 
-- [ ] `IUsersRepository` não possui `any` e não contém casos de uso.
-- [ ] O erro de digitação `cpdateUser` não existe nos contratos finais.
-- [ ] `createUser` e `registerUser` não permanecem como operações duplicadas.
-- [ ] Cadastro rejeita e-mail e nome de usuário duplicados sem diferenciar
+- [x] `IUsersRepository` não possui `any` e não contém casos de uso.
+- [x] O erro de digitação `cpdateUser` não existe nos contratos finais.
+- [x] Cadastro rejeita e-mail e nome de usuário duplicados sem diferenciar
   letras maiúsculas e minúsculas.
-- [ ] Usuários distintos podem possuir o mesmo telefone.
-- [ ] Senhas são persistidas somente como hash.
-- [ ] A senha de cadastro preserva espaços externos e não recebe `trim`.
-- [ ] O perfil autenticado é obtido a partir de `request.auth.userId`.
-- [ ] `GET /users/me` retorna `profileImage.url` e `profileImage.expiresAt`
+- [x] Usuários distintos podem possuir o mesmo telefone.
+- [x] Senhas são persistidas somente como hash.
+- [x] A senha de cadastro preserva espaços externos e não recebe `trim`.
+- [x] O perfil autenticado é obtido a partir de `request.auth.userId`.
+- [x] `GET /users/me` retorna `profileImage.url` e `profileImage.expiresAt`
   quando existe uma imagem concluída.
-- [ ] O upload ignora qualquer `userId` enviado pelo cliente.
-- [ ] A entidade mantém `status`, `createdAt`, `updatedAt` e `inactivatedAt`.
-- [ ] Cadastro público atribui role `USER` e rejeita role ou capabilities
+- [x] O upload ignora qualquer `userId` enviado pelo cliente.
+- [x] A entidade mantém `status`, `createdAt`, `updatedAt` e `inactivatedAt`.
+- [x] Cadastro público atribui role `USER` e rejeita role ou capabilities
   enviados pelo cliente.
-- [ ] A imagem de perfil é registrada como `StoredFile` no contexto do usuário
+- [x] A imagem de perfil é registrada como `StoredFile` no contexto do usuário
   autenticado.
 - [ ] Desativação e reativação preservam o histórico.
-- [ ] Nenhuma saída pública contém `passwordHash`.
-- [ ] `auth` usa o contrato público de `users`, não seu repository.
-- [ ] Testes cobrem sucesso, duplicidade, usuário inativo e acesso cruzado.
+- [x] Nenhuma saída pública contém `passwordHash`.
+- [x] `auth` usa o contrato público de `users`, não seu repository.
+- [ ] Testes HTTP integrados ainda não cobrem as rotas de perfil/upload, CSRF e
+  IDOR; os testes existentes são unitários/de controller.
 
 ## Dependências
 
@@ -184,8 +185,13 @@ log.
 - política de integridade e limpeza do vínculo polimórfico
   `contextType + contextId`.
 
-## Documentação a reconciliar
+## Validações pendentes
 
-Após a implementação, a documentação geral deve deixar de afirmar que cadastro
-público pertence apenas a uma etapa indefinida. Essa atualização deve ser feita
-em tarefa própria para não misturar implementação e revisão ampla de escopo.
+- adicionar e executar testes HTTP integrados das rotas `/users/me` e do upload
+  autenticado, incluindo autenticação, CSRF, erros e tentativa de acesso
+  cruzado. Os testes atuais exercitam serviços, controllers e middleware, não o
+  router HTTP completo;
+- validar migrations e repositories com PostgreSQL após configurar
+  `DATABASE_URL`;
+- concluir o ciclo de vida e a política de limpeza, conforme as decisões
+  pendentes registradas nas tarefas.

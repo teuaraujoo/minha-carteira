@@ -9,10 +9,10 @@ verificação independente dos critérios e criação dos commits necessários.
 
 ## Ordem de execução
 
-Esta é a primeira spec de funcionalidade a executar na próxima etapa. A
-extração da integração R2 é o primeiro trabalho desta spec; as tarefas de
-domínio, persistência e integração completam a migração sem antecipar o recurso
-ao MVP financeiro.
+Esta spec foi iniciada pela extração da integração R2. STR-00, STR-01 e STR-03
+estão concluídas; STR-04 tem implementação e testes unitários, enquanto STR-02
+aguarda validação PostgreSQL. STR-05 já foi integrado ao módulo `users`; falta
+fechar a validação HTTP integrada e as verificações ambientais.
 
 ### STR-00 — Extrair client e serviço do Cloudflare R2
 
@@ -73,9 +73,10 @@ conclusão das specs escolhidas para esta etapa.
 - manter `create-storage` após `create-users` na ordem cronológica das pastas;
 - revisar os índices de storage, proprietário e status, sem índice por contexto.
 
-**Verificação atual:** `prisma validate` e revisão estática do schema e das
-migrations. A integração do repository e as constraints serão verificadas em
-PostgreSQL depois da configuração da `DATABASE_URL`.
+**Verificação atual:** revisão estática do schema e das migrations. A tentativa
+de validação do Prisma não foi concluída porque `DATABASE_URL` não está
+configurada; repository e constraints serão verificados em PostgreSQL depois
+que a URL estiver disponível.
 
 **Gate:** migration revisada; não executada em produção.
 
@@ -101,7 +102,8 @@ PostgreSQL depois da configuração da `DATABASE_URL`.
 
 ### STR-04 — Implementar armazenamento por contexto
 
-**Status:** Em andamento
+**Status:** Revisão — implementação e testes unitários concluídos; pendente
+validar em conjunto com a persistência PostgreSQL de STR-02.
 **Concorrência nesta etapa:** serialização por contexto dentro de uma instância
 do processo Node.js. Coordenação entre múltiplas instâncias fica fora do escopo.
 
@@ -133,11 +135,8 @@ autorização do proprietário. A garantia cobre uma instância do processo.
 
 ### STR-05 — Integrar módulos consumidores
 
-**Status:** Em andamento
-**blocked:** true
-**blockedReason:** O middleware de autenticação que fornece `request.auth` ainda
-não foi implementado, e a composição/rota de usuários ainda não existe.
-**blockedAt:** 2026-10-17
+**Status:** Revisão — integração implementada; falta teste HTTP integrado e
+validação ambiental.
 
 **Depende de:** STR-04.
 
@@ -173,10 +172,12 @@ nenhum consumidor importa infraestrutura de R2 ou storage de `shared`.
 | STR-RF-007 | STR-00, STR-03 e STR-05 | client, serviço e imports |
 | STR-RF-008 | STR-01, STR-03 e STR-05 | validação e segurança do arquivo |
 
-## Bloqueios antes da conclusão
+## Pendências antes da conclusão
 
-- implementar o middleware de autenticação e a composição/rota de `users` que
-  fornecem `request.auth`.
+- adicionar e executar testes HTTP integrados para upload autenticado, CSRF,
+  erros de Multer e tentativa de associação a outro usuário;
+- executar a validação de PostgreSQL descrita em STR-02 quando
+  `DATABASE_URL` estiver configurada.
 
 ## Validações adiadas
 

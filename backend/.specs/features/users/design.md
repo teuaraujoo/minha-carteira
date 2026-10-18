@@ -2,10 +2,13 @@
 
 ## Contexto atual
 
-O módulo já possui uma entidade `User`, schema de criação, upload de imagem e um
-serviço inicial. O contrato `IUsersRepository` ainda usa `Promise<any>`, possui
-métodos sem parâmetros, contém o erro `cpdateUser` e mistura persistência com
-ações da aplicação.
+O módulo possui a entidade `User`, cadastro público, persistência Prisma
+preparada, gateway público consumido por `auth`, consulta e atualização do
+próprio perfil e upload de imagem integrado a `storage`. O contrato
+`IUsersRepository` está tipado e separado da implementação. A validação real da
+persistência em PostgreSQL e os testes HTTP integrados das rotas autenticadas
+continuam pendentes; o ciclo de vida e a limpeza definitiva também não foram
+implementados.
 
 ## Organização Onion Architecture
 
@@ -30,9 +33,9 @@ users/
 ```
 
 O `Composition Root` injeta implementações concretas. Domínio e aplicação não
-devem importar Express, Prisma, Multer, Pino, Zod nem erros definidos em
-`shared/presentation`. Erros de domínio e aplicação devem ser mapeados para HTTP
-somente na borda.
+devem importar Express, Prisma, Multer, Pino ou Zod. Para erros, o código atual
+reutiliza o `AppError` global compartilhado, conforme a convenção do projeto; a
+apresentação converte erros em respostas HTTP.
 
 ## Entidade `User`
 
@@ -250,14 +253,14 @@ da imagem.
    política definitiva seja aprovada.
 6. **Resposta:** registra apenas contagens e IDs técnicos permitidos no log.
 
-## Rotas propostas
+## Rotas implementadas e planejadas
 
 | Método | Rota | Auth | Resultado |
 | --- | --- | --- | --- |
-| GET | `/api/v1/users/me` | Sim | Perfil atual — 200 |
-| PATCH | `/api/v1/users/me` | Sim | Atualiza perfil — 200 |
-| POST | `/api/v1/users/me/profile-image` | Sim | Envia imagem — 200 |
-| POST | `/api/v1/users/me/deactivate` | Sim | Desativa — 204 |
+| GET | `/api/v1/users/me` | Sim | Perfil atual — 200; implementada |
+| PATCH | `/api/v1/users/me` | Sim | Atualiza nome e telefone — 200; implementada |
+| POST | `/api/v1/users/me/profile-image` | Sim | Envia imagem — 200; implementada |
+| POST | `/api/v1/users/me/deactivate` | Sim | Desativa — 204; planejada, não implementada |
 
 A rota de reativação depende da definição de produto: um usuário inativo não
 possui sessão válida. Ela deve ser administrativa ou integrada a um fluxo

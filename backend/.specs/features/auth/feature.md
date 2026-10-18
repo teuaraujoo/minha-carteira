@@ -18,6 +18,16 @@ middleware autenticado e recuperação de senha por link enviado pelo Resend.
 - redefinição de senha sem login automático;
 - redirecionamento para login realizado pelo frontend após o sucesso.
 
+## Situação da implementação
+
+Os fluxos de backend de sessão e recuperação estão implementados, incluindo
+limitação em memória e envio pelo Resend. Nesta revisão, 42 testes unitários
+selecionados passaram. Os testes HTTP estão escritos, mas não conseguem abrir
+conexão local neste ambiente (`EACCES` em `127.0.0.1`). A validação PostgreSQL
+depende de `DATABASE_URL`; o envio real pelo Resend e a integração do
+redirecionamento no frontend ainda não foram verificados ou concluídos,
+respectivamente. Consulte `tasks.md` para o estado detalhado.
+
 ## Escopo
 
 ### Incluído
@@ -156,26 +166,26 @@ comparação futura sem interferir no comportamento atual.
 - [x] Cadastro não inicia sessão automaticamente.
 - [x] Logout usa access ou refresh válido para localizar a sessão e sempre limpa
   cookies, mesmo sem credenciais válidas.
-- [ ] Solicitação de reset produz resposta indistinguível para e-mail ausente.
-- [ ] Falha do Resend marca a solicitação e o desafio como `FAILED`, sem mudar
+- [x] Solicitação de reset produz resposta indistinguível para e-mail ausente.
+- [x] Falha do Resend marca a solicitação e o desafio como `FAILED`, sem mudar
   status, código ou mensagem da resposta pública.
-- [ ] O e-mail do Resend contém link com token, sem código numérico.
-- [ ] O token usa `challengeId.secret`, expira em 15 minutos e só seu segredo
+- [x] O e-mail do Resend contém link com token, sem código numérico.
+- [x] O token usa `challengeId.secret`, expira em 15 minutos e só seu segredo
   é persistido como hash.
-- [ ] A terceira validação inválida marca o desafio como `FAILED`.
-- [ ] A senha redefinida segue a mesma política do cadastro.
-- [ ] O limitador aplica três solicitações por e-mail normalizado e dez por IP
+- [x] A terceira validação inválida marca o desafio como `FAILED`.
+- [x] A senha redefinida segue a mesma política do cadastro.
+- [x] O limitador aplica três solicitações por e-mail normalizado e dez por IP
   em janela móvel de uma hora, em memória no processo.
-- [ ] Exceder o limite mantém a resposta neutra 202 e não envia e-mail.
-- [ ] Solicitação e desafio persistem metadata de auditoria sem alterar o
+- [x] Exceder o limite mantém a resposta neutra 202 e não envia e-mail.
+- [x] Solicitação e desafio persistem metadata de auditoria sem alterar o
   resultado do fluxo.
-- [ ] A aplicação não trata localização, IP, `userAgent` ou `deviceId` como
+- [x] A aplicação não trata localização, IP, `userAgent` ou `deviceId` como
   mecanismo de autenticação nesta versão.
-- [ ] Token expirado, usado ou inválido não altera a senha.
-- [ ] Redefinição válida revoga todas as sessões e não autentica
+- [x] Token expirado, usado ou inválido não altera a senha.
+- [x] Redefinição válida revoga todas as sessões e não autentica
   automaticamente.
-- [ ] Token, senha, cookies e conteúdo do e-mail não aparecem em logs.
-- [ ] Metadata permanece enquanto existir seu registro e é removida com ele;
+- [x] Token, senha, cookies e conteúdo do e-mail não aparecem em logs.
+- [x] Metadata permanece enquanto existir seu registro e é removida com ele;
   desafios polimórficos vinculados são excluídos na mesma transação.
 - [x] `auth` não acessa diretamente o repository de `users`.
 

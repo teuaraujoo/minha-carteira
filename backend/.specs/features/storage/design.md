@@ -31,7 +31,7 @@ infraestrutura de `storage`, não preservar exatamente esses nomes.
 
 ## Extração da integração R2 existente
 
-O ponto de partida é
+O ponto de partida histórico foi
 `backend/src/shared/infrastructure/integrations/aws/s3.service.ts`. Embora a
 classe se chame `R2Client`, ela também implementa `IStorageProvider`: lê a
 configuração do ambiente, instancia `S3Client`, executa `PutObjectCommand` e
@@ -56,10 +56,11 @@ distintas. Os utilitários de chave, hoje em
 migrados para `storage`. A URL de leitura, quando necessária, será pré-assinada
 com expiração de 30 minutos.
 
-A migração deve atualizar consumidores, composição e testes antes de remover o
-arquivo e a interface antigos de `shared`. Se for necessário um encaminhamento
-temporário para manter a aplicação compilando, ele deve ser eliminado na
-integração final; não deve haver dois serviços R2 ativos no resultado.
+A migração dos consumidores e da composição já foi realizada: `users` chama o
+contrato público `StorageOperations`, e a implementação R2 fica no módulo
+`storage`. A revisão final ainda deve confirmar por busca que não há imports
+legados; a validação HTTP e a validação PostgreSQL seguem pendentes, conforme
+`tasks.md`.
 
 O módulo que conhece o contexto recebe a requisição HTTP, extrai o arquivo,
 valida existência, status e autorização do recurso e chama `storage` por

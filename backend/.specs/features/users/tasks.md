@@ -38,9 +38,9 @@ T9 → T10
 T9 → T11
 ```
 
-Esta fase começa depois da implementação de `auth` e dos contratos que ela
-fornece. `T9` permanece bloqueada até aprovação do mecanismo de agendamento e
-da política de retenção dos dados financeiros.
+O middleware de `auth` e o gateway de revogação de sessões já existem. `T9`
+permanece pendente somente até definir quem pode solicitar a reativação de um
+usuário; as decisões de agendamento e retenção financeira pertencem a T10.
 
 ### Fase 4 — Documentação
 
@@ -57,19 +57,20 @@ T10 → T11
 
 ### T1: [USR-00] Preparar contratos compartilhados
 
-**Status:** Concluída; gate específico aprovado. A suíte ampla ainda falha em dois casos preexistentes do schema de cadastro.
-**What:** Definir `PasswordHasher`, adapter bcrypt e remover dependência de
-`AppError` de apresentação do serviço compartilhado.
-**Where:** contratos e infraestrutura compartilhados, além do serviço que hoje
-depende de `shared/presentation`.
+**Status:** Concluída; suíte focada aprovada. A referência a duas falhas antigas
+era histórica e foi removida.
+**What:** Definir `PasswordHasher`, adapter bcrypt e reutilizar o `AppError`
+global nos serviços, sem criar classes de erro específicas por módulo.
+**Where:** contratos e infraestrutura compartilhados e serviços de aplicação.
 **Depends on:** Nenhuma.
 **Requirement:** USR-RF-001.
 
 **Done when:**
 
 - [x] Hash e comparação de senha são cobertos por testes.
-- [x] Serviço de aplicação não importa `shared/presentation`.
-- [x] Erros são mapeados para HTTP somente na borda.
+- [x] Serviços reutilizam o `AppError` global; não existem classes de erro
+      específicas para users/auth/storage.
+- [x] A apresentação centraliza a serialização do erro global em HTTP.
 
 **Tests:** unit
 **Gate:** quick
@@ -78,7 +79,8 @@ depende de `shared/presentation`.
 
 ### T2: [USR-01] Alinhar entidade e tipos de domínio
 
-**Status:** Concluída; gate específico e verificação TypeScript aprovados. A suíte ampla ainda falha em dois casos preexistentes do schema de cadastro.
+**Status:** Concluída; suíte users/storage atual passou (51/51) e TypeScript
+passou em 18/10/2026. A referência a falhas antigas era histórica.
 **What:** Corrigir a entidade `User`, seus enums e comportamentos de domínio.
 **Where:** entidade, enums e testes de domínio de `users`.
 **Depends on:** T1.
@@ -99,7 +101,8 @@ depende de `shared/presentation`.
 
 ### T3: [USR-02] Tipar o contrato do repository
 
-**Status:** Concluída; gate específico e verificação TypeScript aprovados. A suíte ampla ainda falha em dois casos preexistentes do schema de cadastro.
+**Status:** Concluída; suíte users/storage atual passou (51/51) e TypeScript
+passou em 18/10/2026. A referência a falhas antigas era histórica.
 **What:** Substituir respostas `any` e restringir o repository a operações de
 persistência.
 **Where:** contrato do repository, doubles e consumidores diretamente afetados.
@@ -193,7 +196,8 @@ expor o repository de `users`.
 
 ### T7: [USR-04] Implementar perfil autenticado
 
-**Status:** Implementada para nome e telefone; execução HTTP pendente no ambiente
+**Status:** Revisão — implementação e testes unitários concluídos; falta teste
+integrado do router HTTP.
 **What:** Consultar e atualizar o próprio perfil a partir do contexto autenticado.
 **Where:** aplicação e apresentação de `users`, incluindo testes.
 **Depends on:** T3 e middleware de autenticação da spec `auth`.
@@ -214,7 +218,8 @@ expor o repository de `users`.
 
 ### T8: [USR-05] Integrar upload ao contexto autenticado
 
-**Status:** Implementada; execução HTTP pendente no ambiente
+**Status:** Revisão — integração e testes de controller/Multer concluídos; falta
+teste integrado do router HTTP.
 **What:** Associar upload à identidade autenticada e integrar pelo contrato
 público de `storage`.
 **Where:** caso de uso e controller de imagem de perfil em `users`, incluindo
@@ -229,9 +234,10 @@ testes.
       `storage`.
 - [x] Validações de arquivo e logs em português permanecem aplicadas, sem dados
       sensíveis.
-- [x] Testes unitários cobrem arquivo ausente, tipo/tamanho inválido e sucesso
-      associado ao próprio usuário; a validação HTTP aguarda permissão de rede
-      local no ambiente de execução.
+- [x] Testes unitários/de controller cobrem arquivo ausente, tipo/tamanho
+      inválido, contexto ausente e sucesso associado ao usuário autenticado.
+- [ ] Teste HTTP integrado da rota autenticada ainda não existe; não confundir
+      isso com a execução bloqueada dos testes HTTP de `auth` neste ambiente.
 
 **Tests:** unit e e2e
 **Gate:** full
@@ -239,7 +245,8 @@ testes.
 
 ### T9: [USR-06] Implementar ciclo de vida do usuário
 
-**Status:** Bloqueada por auth e pela definição do chamador de reativação
+**Status:** A fazer — auth e gateway de revogação disponíveis; depende da
+definição do chamador autorizado para reativação.
 **What:** Implementar desativação e reativação como casos de uso.
 **Where:** casos de uso de ciclo de vida de `users`, com testes.
 **Depends on:** T2, T3 e `RefreshTokensGateway` de auth.
@@ -257,7 +264,7 @@ testes.
 
 ### T10: [USR-07] Implementar limpeza de inativos
 
-**Status:** Bloqueada por decisões de produto e agendamento
+**Status:** A fazer — bloqueada por decisões de produto e agendamento.
 **What:** Excluir em lotes usuários inativos elegíveis, coordenando dependências
 por contratos públicos.
 **Where:** caso de uso interno de limpeza e testes de `users`.
@@ -331,7 +338,7 @@ validado no PowerShell.
 
 - `phone` não é único; definir apenas o formato aceito antes de fechar sua
   validação de cadastro.
-- Aprovar campos editáveis antes de concluir T7.
+- Campos editáveis desta etapa já aprovados: `name` e `phone`.
 - Definir quem pode reativar usuários antes de expor essa rota em T9.
 - Aprovar mecanismo de agendamento, retenção dos dados financeiros e política
   da identidade de mensageria antes da limpeza destrutiva em T10.

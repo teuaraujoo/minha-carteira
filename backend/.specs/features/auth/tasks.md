@@ -44,9 +44,10 @@ T8 → T11
 T2 → T11
 ```
 
-As políticas de recuperação estão aprovadas. T8 pode iniciar; T9 depende da
-autorização para instalar o SDK Resend e da configuração externa. T10 e T11
-seguem após as dependências indicadas.
+As políticas de recuperação e a instalação do SDK Resend estão aprovadas e
+implementadas. T8–T11 estão implementadas em código; validações PostgreSQL,
+execução dos testes HTTP e envio real permanecem como verificações
+ambientais/operacionais.
 
 ### Fase 4 — Rotas, frontend e documentação
 
@@ -266,7 +267,9 @@ configuração e logs sanitizados.
 
 ### T10: [AUTH-10] Implementar solicitação de recuperação
 
-**Status:** Implementada; validação HTTP pendente no ambiente atual
+**Status:** Implementada; 42 testes unitários selecionados passaram em
+18/10/2026; os testes HTTP estão escritos, mas falham com `EACCES` ao conectar
+em `127.0.0.1` neste ambiente.
 **What:** Gerar desafio seguro, registrar auditoria, enviar link e sempre
 responder de forma neutra.
 **Where:** caso de uso e testes de `auth`.
@@ -296,7 +299,8 @@ responder de forma neutra.
 
 ### T11: [AUTH-11] Implementar confirmação da recuperação
 
-**Status:** Implementada; PostgreSQL e HTTP pendentes de validação ambiental
+**Status:** Implementada; teste unitário passou; validação PostgreSQL pendente
+de `DATABASE_URL` e teste HTTP bloqueado por `EACCES` neste ambiente.
 **What:** Validar desafio e senha e atualizar atomicamente senha, solicitação,
 desafio e sessões.
 **Where:** caso de uso, unidade de trabalho e testes de `auth`.
@@ -384,7 +388,8 @@ HTTP compartilhados fora da proposta aprovada.
 
 ### T15: [AUTH-14] Reconciliar documentação
 
-**Status:** A fazer após implementação e validação
+**Status:** Em andamento — specs de auth, users e storage estão sendo
+reconciliadas; a documentação geral permanece pendente.
 **What:** Atualizar documentação geral e rotas conforme comportamento validado.
 **Where:** documentação geral e referências de auth afetadas.
 **Depends on:** T12, T13, T14.

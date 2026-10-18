@@ -666,8 +666,9 @@ real de cada operação. O contrato completo está em
 * **CreateUserInput:** `username`, `name`, `email`, `phone`, `password`.
 
 Todos os campos são strings obrigatórias e não aceitam valor vazio. `email`
-também deve possuir um formato de endereço válido. Ainda não foram aprovadas
-regras adicionais de formato para `username` e `phone`.
+também deve possuir um formato de endereço válido. `username` rejeita `@` para
+que o login possa distinguir username de e-mail. `phone` não é único; seu
+formato final ainda está pendente.
 
 O schema HTTP remove espaços externos de `username`, `name`, `email` e
 `phone`, normaliza `email` para letras minúsculas e rejeita campos internos

@@ -7,14 +7,15 @@ foto de perfil. O módulo `storage` deve armazenar os metadados dos arquivos,
 integrar com o Cloudflare R2 e oferecer contratos públicos aos módulos que
 precisam associar uma imagem a um contexto.
 
-## Situação atual e migração necessária
+## Situação atual
 
-O código inicial reunia a configuração do client compatível com S3 e as
-operações do Cloudflare R2 em `shared`. A implementação em andamento já criou
-um módulo `storage` com client, adapter R2, repository, serviço de aplicação,
-validação e chave opaca. `users` começou a consumir `StorageOperations`; ainda
-faltam testes, composição da aplicação, remoção de todos os resquícios legados
-e validações completas desta spec.
+A integração está implementada no módulo `storage`: client e adapter Cloudflare
+R2, repository, serviço de aplicação, utilitários, validação do arquivo e
+contrato `StorageOperations`. O módulo `users` já consome esse contrato pela
+composição da aplicação e expõe upload autenticado de imagem de perfil. Há
+testes unitários de domínio, serviço, controller e middleware. Ainda faltam
+testes HTTP integrados das rotas de `users` e validação real de schema,
+migrations e repository em PostgreSQL, dependente de `DATABASE_URL`.
 
 Os componentes próprios do projeto usam nomenclatura R2. O SDK pode continuar
 expondo tipos e comandos com nome `S3`, pois essa é a API compatível usada para
@@ -99,7 +100,10 @@ No fluxo de `USER_PROFILE`, `users` DEVE verificar o usuário ativo e passar
 não podem ser escolhidos pelo cliente. `storage` apenas persiste os valores
 fornecidos pelo caso de uso consumidor; não conhece a regra de autenticação.
 
-ex: uma coisa que o modulo de image pode fazer é compara se o id recebido é igual ao id do contexto persistido em algum caso de uso que precise atualizar algum registro;
+O módulo consumidor valida a autorização e a associação do contexto antes da
+chamada. `storage` não consulta o módulo de usuários nem aplica regras de negócio
+externas sobre esses identificadores; ele persiste os valores internos
+recebidos e aplica suas próprias invariantes de armazenamento.
 
 ### STR-RF-004 — Estados
 
@@ -153,35 +157,36 @@ futura caso o sistema passe a processar ou transformar imagens.
 
 ## Critérios de aceitação
 
-- [ ] O único provider persistido nesta fase é `CLOUDFLARE_R2`.
-- [ ] `StorageStatus` contém exatamente `PROCESSING`, `UPLOADING`, `COMPLETED` e
+- [x] O único provider persistido nesta fase é `CLOUDFLARE_R2`.
+- [x] `StorageStatus` contém exatamente `PROCESSING`, `UPLOADING`, `COMPLETED` e
   `FAILED`.
-- [ ] O upload de perfil deriva os IDs do contexto autenticado.
-- [ ] `users` verifica existência, status ativo e propriedade antes de chamar
+- [x] O upload de perfil deriva os IDs do contexto autenticado.
+- [x] `users` verifica existência, status ativo e propriedade antes de chamar
   `storage`; `storage` não consulta o módulo de usuários.
-- [ ] O cliente não consegue associar uma imagem a outro usuário.
-- [ ] O nome original não é usado como chave pública do objeto.
-- [ ] Existe unicidade para `storageProvider + storageKey`.
-- [ ] A imagem anterior permanece ativa enquanto a nova tentativa é enviada.
-- [ ] Uma falha ao enviar ou persistir a nova imagem marca a tentativa como
+- [x] O cliente não consegue associar uma imagem a outro usuário.
+- [x] O nome original não é usado como chave pública do objeto.
+- [x] Existe unicidade para `storageProvider + storageKey` no schema e migration;
+  a constraint ainda não foi validada em PostgreSQL.
+- [x] A imagem anterior permanece ativa enquanto a nova tentativa é enviada.
+- [x] Uma falha ao enviar ou persistir a nova imagem marca a tentativa como
   `FAILED` quando o registro existe e o banco aceita a atualização, preserva a
   imagem anterior e retorna erro ao consumidor.
-- [ ] A imagem anterior só é removida depois que a nova imagem estiver
+- [x] A imagem anterior só é removida depois que a nova imagem estiver
   `COMPLETED`.
-- [ ] A consulta do arquivo ativo prioriza o registro `COMPLETED` mais recente.
-- [ ] Requisições simultâneas para o mesmo contexto são serializadas dentro de
+- [x] A consulta do arquivo ativo prioriza o registro `COMPLETED` mais recente.
+- [x] Requisições simultâneas para o mesmo contexto são serializadas dentro de
   uma instância do processo; múltiplas instâncias não fazem parte desta etapa.
-- [ ] Falhas não deixam o registro marcado como concluído.
-- [ ] Quando necessário, a resposta contém URL pré-assinada com expiração de
+- [x] Falhas não deixam o registro marcado como concluído.
+- [x] Quando necessário, a resposta contém URL pré-assinada com expiração de
   30 minutos.
-- [ ] Logs estão em português e não expõem conteúdo do arquivo ou dados
+- [x] Logs estão em português e não expõem conteúdo do arquivo ou dados
   pessoais.
-- [ ] `users` utiliza somente o contrato público de `storage`.
-- [ ] Client e serviço R2 possuem responsabilidades separadas e residem em
+- [x] `users` utiliza somente o contrato público de `storage`.
+- [x] Client e serviço R2 possuem responsabilidades separadas e residem em
   `storage/infrastructure`, sem implementação R2 remanescente em `shared`.
-- [ ] Referências internas a AWS S3 como nome do provider ou do serviço foram
+- [x] Referências internas a AWS S3 como nome do provider ou do serviço foram
   substituídas por R2; nomes próprios do SDK compatível podem permanecer.
-- [ ] A migração dos consumidores e testes não deixa imports quebrados nem
+- [x] A migração dos consumidores e testes não deixa imports quebrados nem
   implementações duplicadas de upload.
 
 ## Dependências
@@ -240,11 +245,8 @@ futura caso o sistema passe a processar ou transformar imagens.
 - decodificação completa dos pixels, caso uma funcionalidade futura processe ou
   transforme imagens.
 
-## Bloqueios de implementação
-
-- A integração final de perfil depende do middleware e da composição de `users`.
-
-## Validações adiadas
+## Validações ainda pendentes
 
 - validar migrations e repository em PostgreSQL após configurar `DATABASE_URL`;
+- adicionar e executar testes HTTP integrados das rotas autenticadas de `users`;
 - adotar coordenação compartilhada se houver mais de uma instância da API.
