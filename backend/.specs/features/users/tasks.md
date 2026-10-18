@@ -121,7 +121,7 @@ persistência.
 
 ### T4: [USR-03] Implementar cadastro público
 
-**Status:** A fazer
+**Status:** Concluída; gate quick e verificação TypeScript aprovados.
 **What:** Criar DTOs, mapper e caso de uso para cadastro seguro de usuário.
 **Where:** aplicação e apresentação de `users`, incluindo testes.
 **Depends on:** T1, T2, T3.
@@ -129,17 +129,18 @@ persistência.
 
 **Done when:**
 
-- [ ] O schema não aplica `trim` à senha e rejeita `role` e `capabilities`
+- [x] O schema não aplica `trim` à senha e rejeita `role` e `capabilities`
       enviados pelo cliente.
-- [ ] O caso de uso normaliza e verifica unicidade de e-mail e username,
+- [x] O caso de uso normaliza e verifica unicidade de e-mail e username,
       protege-se contra duplicidade na persistência e permite telefone
       compartilhado.
-- [ ] O cadastro usa `PasswordHasher`, `IdGenerator` e `ClockProvider`, cria
+- [x] O cadastro usa `PasswordHasher`, `IdGenerator` e `ClockProvider`, cria
       usuário ativo com role `USER` e não devolve `passwordHash`.
-- [ ] Testes cobrem sucesso, entrada inválida, duplicidade e hash obrigatório.
+- [x] Testes cobrem sucesso, entrada inválida, duplicidade e hash obrigatório.
 
 **Tests:** unit
 **Gate:** quick
+**Gate command:** `node --import tsx --test test/users/register-user.use-case.test.ts test/users/create-user.schema.test.ts` e `node node_modules/typescript/bin/tsc --noEmit`
 **Commit:** `feat(users): implement public registration`
 
 ### T5: [USR-08] Implementar persistência Prisma

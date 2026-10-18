@@ -24,7 +24,6 @@ export const createUserSchema = z
       .min(11, "Telefone é obrigatório."),
     password: z
       .string({ error: "Senha deve ser uma string." })
-      .trim()
       .min(8, "Senha é obrigatória.")
   })
   .strict();

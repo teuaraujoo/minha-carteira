@@ -4,16 +4,16 @@ import { createUserSchema } from "../../src/modules/users/presentation/schemas/u
 
 test("parses and normalizes the public create-user input", () => {
   const result = createUserSchema.parse({
-    username: " teco ",
-    name: " Teco ",
+    username: " teco1 ",
+    name: " Teco User ",
     email: " TECO@EXAMPLE.COM ",
     phone: " +5585999999999 ",
     password: " password with spaces ",
   });
 
   assert.deepEqual(result, {
-    username: "teco",
-    name: "Teco",
+    username: "teco1",
+    name: "Teco User",
     email: "teco@example.com",
     phone: "+5585999999999",
     password: " password with spaces ",
@@ -22,8 +22,8 @@ test("parses and normalizes the public create-user input", () => {
 
 test("rejects missing, empty, and invalid public fields", () => {
   const validInput = {
-    username: "teco",
-    name: "Teco",
+    username: "teco1",
+    name: "Teco User",
     email: "teco@example.com",
     phone: "+5585999999999",
     password: "password",
@@ -67,8 +67,8 @@ test("rejects missing, empty, and invalid public fields", () => {
 
 test("rejects administrative and persistence fields from the public input", () => {
   const validInput = {
-    username: "teco",
-    name: "Teco",
+    username: "teco1",
+    name: "Teco User",
     email: "teco@example.com",
     phone: "+5585999999999",
     password: "password",
@@ -76,6 +76,7 @@ test("rejects administrative and persistence fields from the public input", () =
 
   const forbiddenFields: Record<string, unknown> = {
     passwordHash: "client-controlled-hash",
+    role: "ADMIN",
     capabilities: ["TELEGRAM_TRANSACTIONS"],
     status: "ACTIVE",
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -89,4 +90,17 @@ test("rejects administrative and persistence fields from the public input", () =
       false,
     );
   }
+});
+
+test("preserves password whitespace exactly as supplied", () => {
+  const password = "  password with spaces  ";
+  const result = createUserSchema.parse({
+    username: "teco1",
+    name: "Teco User",
+    email: "teco@example.com",
+    phone: "+5585999999999",
+    password,
+  });
+
+  assert.equal(result.password, password);
 });
