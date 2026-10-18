@@ -14,7 +14,7 @@ export class UserService {
     ) { }
 
     async uploadProfileImage(input: UploadProfileImageInput): Promise<UploadProfileImageResult> {
-        const profile = await this.userRepository.findActiveUser(input.userId);
+        const profile = await this.userRepository.findActiveById(input.userId);
 
         if (!profile) throw new UserNotFoundError();
 

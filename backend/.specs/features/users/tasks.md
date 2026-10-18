@@ -57,7 +57,7 @@ T10 → T11
 
 ### T1: [USR-00] Preparar contratos compartilhados
 
-**Status:** Concluída; gate específico aprovado. A suíte ampla ainda tem falhas preexistentes nos testes da entidade e do schema de cadastro.
+**Status:** Concluída; gate específico aprovado. A suíte ampla ainda falha em dois casos preexistentes do schema de cadastro.
 **What:** Definir `PasswordHasher`, adapter bcrypt e remover dependência de
 `AppError` de apresentação do serviço compartilhado.
 **Where:** contratos e infraestrutura compartilhados, além do serviço que hoje
@@ -99,7 +99,7 @@ depende de `shared/presentation`.
 
 ### T3: [USR-02] Tipar o contrato do repository
 
-**Status:** A fazer
+**Status:** Concluída; gate específico e verificação TypeScript aprovados. A suíte ampla ainda falha em dois casos preexistentes do schema de cadastro.
 **What:** Substituir respostas `any` e restringir o repository a operações de
 persistência.
 **Where:** contrato do repository, doubles e consumidores diretamente afetados.
@@ -108,14 +108,15 @@ persistência.
 
 **Done when:**
 
-- [ ] O contrato não contém `Promise<any>`, métodos sem parâmetros ou
+- [x] O contrato não contém `Promise<any>`, métodos sem parâmetros ou
       `cpdateUser`.
-- [ ] Operações de persistência retornam entidades/resultados explícitos.
-- [ ] A consulta paginada de inativos possui entrada e saída tipadas.
-- [ ] Testes de contrato ou doubles tipados passam.
+- [x] Operações de persistência retornam entidades/resultados explícitos.
+- [x] A consulta paginada de inativos possui entrada e saída tipadas.
+- [x] Testes de contrato ou doubles tipados passam.
 
 **Tests:** unit
 **Gate:** quick
+**Gate command:** `node --import tsx --test test/users/users-repository.contract.test.ts test/users/profile-image-upload.test.ts test/logging/users-service-logging.test.ts` e `node node_modules/typescript/bin/tsc --noEmit`
 **Commit:** `refactor(users): type repository contract`
 
 ### T4: [USR-03] Implementar cadastro público
