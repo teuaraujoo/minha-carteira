@@ -284,20 +284,25 @@ do PostgreSQL. Nenhum tipo do Prisma pode aparecer na assinatura da aplicação.
 
 ## Cookies
 
-- ambos devem usar `HttpOnly`;
-- ambos devem usar `Secure`;
-- ambos devem usar `SameSite=None`;
-- requisições mutáveis devem validar `Origin` e adotar a estratégia CSRF
-  aprovada; CORS sozinho não substitui proteção contra CSRF;
+- access e refresh usam `__Secure-mc_access` e `__Secure-mc_refresh`;
+- ambos devem usar `HttpOnly`, `Secure` e `SameSite=None`;
+- operações mutáveis exigem `Origin` exato na allowlist e o header
+  `X-CSRF-Token` idêntico ao valor do cookie `__Secure-mc_csrf`; comparar os
+  valores em tempo constante;
+- `GET /api/v1/auth/csrf` gera token aleatório, define cookie
+  `__Secure-mc_csrf` e retorna o token no corpo para uso no header;
+- o cookie CSRF também usa `Secure` e `SameSite=None`; não deve aparecer em
+  logs;
+- CORS com credenciais permite somente origens configuradas e não substitui a
+  validação explícita de `Origin` e CSRF;
 - `Path` deve ser o menor possível, especialmente para o refresh;
 - logout deve expirar ambos os cookies com os mesmos atributos usados ao
   criá-los;
 - valores não aparecem em resposta JSON nem em logs.
 
-Os nomes dos cookies, seus `Path`, a estratégia concreta de CSRF e a duração
-dos desafios permanecem pendentes. O reset de senha não deve ser implementado
-até que suas políticas sejam definidas. O access token expira em 15 minutos e
-o refresh token em cinco dias.
+Os atributos `Path` e a duração dos desafios permanecem pendentes. O reset de
+senha não deve ser implementado até que suas políticas sejam definidas. O
+access token expira em 15 minutos e o refresh token em cinco dias.
 
 ## Fluxos
 
@@ -401,6 +406,7 @@ conteúdo integral não devem aparecer em logs.
 | POST | `/api/v1/auth/refresh` | Refresh cookie | Renova access — 204 |
 | POST | `/api/v1/auth/logout` | Sessão | Revoga e limpa cookies — 204 |
 | GET | `/api/v1/auth/me` | Access cookie | Retorna contexto da sessão — 200 |
+| GET | `/api/v1/auth/csrf` | Não | Define cookie e retorna token CSRF — 200 |
 | POST | `/api/v1/auth/password-reset` | Não | Solicita link — 202 |
 | POST | `/api/v1/auth/password-reset/confirm` | Não | Troca senha — 204 |
 

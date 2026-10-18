@@ -83,7 +83,8 @@ factory de criação pode receber esses valores por providers.
 
 - `email`: remover espaços externos e persistir em letras minúsculas;
 - `username`: remover espaços externos, converter para letras minúsculas e
-  persistir a forma normalizada;
+  persistir a forma normalizada; rejeitar `@` para distingui-lo de e-mail no
+  campo de login `identifier`;
 - `name`: remover apenas espaços externos;
 - `password`: não aplicar `trim`, pois isso mudaria a credencial;
 - `phone`: manter como string; a regra final de formato está pendente.
@@ -94,8 +95,9 @@ unicidade case-insensitive usa canonicalização em letras minúsculas antes da
 persistência. As constraints únicas protegem os valores normalizados. A
 migration deve adicionar constraints `CHECK` para impedir valores que não sejam
 iguais a `lower(email)` e `lower(username)`, inclusive em escritas externas à
-aplicação. `phone` não possui constraint de unicidade. Também é necessário
-decidir se `username` pode conter `@`, evitando ambiguidade com e-mail no login.
+aplicação. `phone` não possui constraint de unicidade. A apresentação rejeita
+`@` em username; o login classifica identificadores com `@` como e-mail e os
+demais como username.
 
 ## Contrato de persistência
 

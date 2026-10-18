@@ -54,6 +54,20 @@ test("rejects missing, empty, and invalid public fields", () => {
       .success,
     false,
   );
+  assert.equal(
+    createUserSchema.safeParse({ ...validInput, username: "user@domain" })
+      .success,
+    false,
+  );
+
+  const usernameWithAtResult = createUserSchema.safeParse({
+    ...validInput,
+    username: "user@domain",
+  });
+  assert.equal(usernameWithAtResult.success, false);
+  if (!usernameWithAtResult.success) {
+    assert.equal(usernameWithAtResult.error.issues[0]?.message, "Nome de usuário não pode conter @.");
+  }
 
   const emptyNameResult = createUserSchema.safeParse({
     ...validInput,

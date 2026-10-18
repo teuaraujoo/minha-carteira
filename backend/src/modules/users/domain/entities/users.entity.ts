@@ -42,6 +42,9 @@ export class User {
   constructor(props: UserProps) {
     this.userId = User.normalizeRequired(props.id, "ID");
     this.userUsername = User.normalizeRequired(props.username, "Nome de usuário").toLowerCase();
+    if (this.userUsername.includes("@")) {
+      throw new TypeError("Nome de usuário não pode conter @.");
+    }
     this.userName = User.normalizeRequired(props.name, "Nome");
     this.userEmail = User.normalizeRequired(props.email, "E-mail").toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.userEmail)) {

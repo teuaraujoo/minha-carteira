@@ -177,9 +177,14 @@ comparação futura sem interferir no comportamento atual.
 ## Decisões confirmadas
 
 - login aceita e-mail ou nome de usuário;
+- username não pode conter `@`; o login classifica o identificador com `@`
+  como e-mail e os demais como username;
 - sessão usa access e refresh tokens;
 - tokens são enviados por cookies;
 - cookies usam `SameSite=None; Secure` e a proteção CSRF deve ser explícita;
+- cookies de autenticação usam `__Secure-mc_access` e `__Secure-mc_refresh`;
+- operações mutáveis validam token CSRF sincronizador no header e `Origin` na
+  allowlist;
 - refresh token não é rotacionado nesta versão;
 - access token expira em 15 minutos;
 - refresh token expira em cinco dias;
@@ -205,13 +210,12 @@ comparação futura sem interferir no comportamento atual.
 ## Decisões pendentes
 
 - duração do reset token e dos demais desafios;
-- nomes finais dos cookies e seus atributos `Path`;
+- atributos `Path` dos cookies;
 - domínio e remetente verificados no Resend;
 - URL pública do frontend usada no link;
 - limites e janela de proteção contra abuso;
 - política final de complexidade da senha;
 - política de reprocessamento quando o Resend falhar;
-- estratégia concreta de proteção contra CSRF para os domínios finais;
 - prazo e mecanismo da política de retenção da metadata de auditoria;
 
 ## Backlog de segurança contextual

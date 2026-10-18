@@ -67,6 +67,9 @@ O sistema DEVE cadastrar um usuário com `username`, `name`, `email`, `phone` e
 `password`. O hash deve ser produzido antes da persistência, e a senha original
 não pode ser salva nem registrada em logs.
 
+O `username` DEVE rejeitar o caractere `@`, pois o login aceita e-mail e
+username no mesmo campo `identifier`.
+
 ### USR-RF-002 — Unicidade
 
 O sistema DEVE rejeitar `email` ou `username` já utilizados, considerando a

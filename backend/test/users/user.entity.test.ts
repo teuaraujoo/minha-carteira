@@ -121,6 +121,7 @@ test("changes the password hash without exposing it in serialized output", () =>
 
 test("rejects invalid fields, enums, dates, lifecycle timestamps, and capabilities", () => {
   assert.throws(() => createUser({ id: " " }), TypeError);
+  assert.throws(() => createUser({ username: "user@domain" }), /Nome de usuário não pode conter @/);
   assert.throws(() => createUser({ email: "invalid-email" }), TypeError);
   assert.throws(() => createUser({ phone: " " }), TypeError);
   assert.throws(() => createUser({ role: "GUEST" as UserRoles }), TypeError);

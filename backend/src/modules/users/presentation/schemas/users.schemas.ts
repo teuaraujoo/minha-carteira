@@ -7,7 +7,8 @@ export const createUserSchema = z
       .string({ error: "Nome de usuário deve ser uma string." })
       .trim()
       .toLowerCase()
-      .min(5, "Nome de usuário é obrigatório."),
+      .min(5, "Nome de usuário é obrigatório.")
+      .refine((username) => !username.includes("@"), "Nome de usuário não pode conter @."),
     name: z
       .string({ error: "Nome deve ser uma string." })
       .trim()
