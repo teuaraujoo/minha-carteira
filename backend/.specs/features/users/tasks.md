@@ -145,7 +145,7 @@ persistência.
 
 ### T5: [USR-08] Implementar persistência Prisma
 
-**Status:** A fazer
+**Status:** Concluída; gate focado, suíte ampla de users e verificação TypeScript aprovados. Integração PostgreSQL adiada até configurar a URL do banco.
 **What:** Mapear entidade e repository de usuários para o modelo Prisma e
 preparar a migration.
 **Where:** schema/modelo Prisma, repository e testes de persistência de `users`.
@@ -154,18 +154,19 @@ preparar a migration.
 
 **Done when:**
 
-- [ ] E-mail e username são normalizados, possuem unicidade e checks para
+- [x] E-mail e username são normalizados, possuem unicidade e checks para
       impedir persistência não normalizada.
-- [ ] Telefone não é único; status, role, capabilities e timestamps são
+- [x] Telefone não é único; status, role, capabilities e timestamps são
       mapeados.
-- [ ] A migration `create-users` está revisada em código e precede a migration
+- [x] A migration `create-users` está revisada em código e precede a migration
       de `storage`.
-- [ ] Testes de repository são preparados sem exigir conexão real enquanto a
+- [x] Testes de repository são preparados sem exigir conexão real enquanto a
       URL do PostgreSQL não estiver configurada.
-- [ ] Nenhuma migration é executada nesta tarefa.
+- [x] Nenhuma migration é executada nesta tarefa.
 
-**Tests:** integration
+**Tests:** unit para mapeamento e comportamento do repository usando Prisma fake; integração real com PostgreSQL adiada até a configuração da URL do banco.
 **Gate:** full
+**Gate command:** `node --import tsx --test test/users/prisma-users.repository.test.ts` e `node node_modules/typescript/bin/tsc --noEmit`; suíte ampla validada com `node --import tsx --test test/users/*.test.ts`
 **Commit:** `feat(users): add prisma persistence`
 
 ### T6: [USR-09] Expor contratos públicos para auth
