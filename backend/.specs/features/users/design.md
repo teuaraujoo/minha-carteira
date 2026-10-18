@@ -7,8 +7,8 @@ preparada, gateway público consumido por `auth`, consulta e atualização do
 próprio perfil e upload de imagem integrado a `storage`. O contrato
 `IUsersRepository` está tipado e separado da implementação. A validação real da
 persistência em PostgreSQL e os testes HTTP integrados das rotas autenticadas
-continuam pendentes; o ciclo de vida e a limpeza definitiva também não foram
-implementados.
+continuam pendentes. O ciclo de vida está implementado; a limpeza definitiva
+segue no backlog.
 
 ## Organização Onion Architecture
 
@@ -90,7 +90,11 @@ factory de criação pode receber esses valores por providers.
   campo de login `identifier`;
 - `name`: remover apenas espaços externos;
 - `password`: não aplicar `trim`, pois isso mudaria a credencial;
-- `phone`: manter como string; a regra final de formato está pendente.
+- `phone`: obrigatório no cadastro, mantido como string e validado como celular
+  brasileiro no formato `+55` + DDD de dois dígitos + `9` + oito dígitos, por
+  exemplo `+5579988887777`. A mesma validação deve ser aplicada ao atualizar o
+  perfil. A regra foi aprovada, mas ainda precisa ser implementada no schema e
+  na entidade.
 
 Índices únicos no banco devem sustentar as regras de e-mail e nome de usuário.
 A checagem antecipada melhora a mensagem, mas não substitui a constraint. A
@@ -234,23 +238,47 @@ da imagem.
 ### Fluxo — desativação
 
 1. **Input:** recebe o `userId` autenticado.
-2. **Validação:** confirma usuário existente e ativo.
-3. **Use case:** chama `deactivate(now)` na entidade.
-4. **Módulos:** solicita a `auth` a revogação de todos os refresh tokens por
-   contrato público `RefreshTokensGateway`, sem acessar seu repository.
-5. **Persistência:** salva `status`, `inactivatedAt` e `updatedAt`.
+2. **Validação:** `AccountSessionCoordinator` bloqueia a linha da conta e
+   confirma que ela existe e está ativa.
+3. **Use case:** solicita a desativação pelo contrato público de coordenação.
+4. **Módulos:** o adapter Prisma atualiza o usuário e revoga suas sessões na
+   mesma transaction; o login usa o mesmo bloqueio para serializar a criação
+   da sessão com a desativação.
+5. **Persistência:** atualiza `status`, `inactivatedAt` e `updatedAt`, além de
+   marcar refresh tokens como revogados com `USER_DEACTIVATED`.
 6. **Resposta:** confirma a operação sem expor dados internos.
+
+### Fluxo — reativação
+
+1. **Input:** a própria pessoa solicita a reativação e apresenta o link de
+   confirmação; alternativamente, um administrador solicita a reativação de
+   uma conta específica.
+2. **Validação:** o link usa `Challenge` com propósito
+   `ACCOUNT_REACTIVATION`, sujeito `USER`, segredo armazenado como hash, validade
+   de 15 minutos e até três tentativas inválidas. O token é consumido uma única
+   vez antes de reativar a conta. A rota administrativa valida role `ADMIN` no
+   servidor.
+3. **Use case:** solicita a reativação pelo `AccountSessionCoordinator`.
+4. **Módulos:** sessões antigas permanecem revogadas; todos os outros desafios
+   pendentes da conta são marcados `FAILED`, tanto no fluxo por e-mail quanto
+   no administrativo.
+5. **Persistência:** na mesma transaction com bloqueio da linha de `users`,
+   ativa a conta, limpa `inactivatedAt`, revoga sessões ainda não revogadas e
+   invalida desafios pendentes.
+6. **Resposta:** confirma a reativação sem expor dados internos.
 
 ### Fluxo — exclusão de inativos
 
 1. **Input:** processo interno recebe data de corte e paginação.
-2. **Validação:** data de corte corresponde a mais de 30 dias de inatividade.
+2. **Validação:** a conta completou 30 dias desde `inactivatedAt` e não foi
+   reativada.
 3. **Use case:** lista usuários elegíveis.
 4. **Módulos:** coordena a limpeza dos recursos que não usam cascata.
-5. **Persistência:** remove somente usuários elegíveis dentro de transação; as
-   sessões, solicitações de reset e imagens vinculadas são removidas em cascata.
-   Uma identidade de mensageria ainda vinculada bloqueia a exclusão até que sua
-   política definitiva seja aprovada.
+5. **Persistência:** remove o usuário e todos os dados associados, incluindo
+   dados financeiros e identidades de mensageria; sessões, solicitações de
+   reset e registros de imagens são removidos em cascata. O objeto físico da
+   imagem também deve ser removido. Frequência, lote e recuperação de falhas
+   serão definidos na spec futura de processos agendados.
 6. **Resposta:** registra apenas contagens e IDs técnicos permitidos no log.
 
 ## Rotas implementadas e planejadas
@@ -260,11 +288,12 @@ da imagem.
 | GET | `/api/v1/users/me` | Sim | Perfil atual — 200; implementada |
 | PATCH | `/api/v1/users/me` | Sim | Atualiza nome e telefone — 200; implementada |
 | POST | `/api/v1/users/me/profile-image` | Sim | Envia imagem — 200; implementada |
-| POST | `/api/v1/users/me/deactivate` | Sim | Desativa — 204; planejada, não implementada |
+| POST | `/api/v1/users/me/deactivate` | Sim | Desativa — 204; implementada |
+| POST | `/api/v1/users/:userId/reactivate` | Sim, role `ADMIN` | Reativa — 204; implementada |
 
-A rota de reativação depende da definição de produto: um usuário inativo não
-possui sessão válida. Ela deve ser administrativa ou integrada a um fluxo
-específico de reativação antes de ser exposta.
+A reativação própria é solicitada por `/auth/account-reactivation` e confirmada
+por `/auth/account-reactivation/confirm`; o Resend envia o link. Os testes HTTP
+integrados dessas rotas foram adiados conforme decisão do usuário.
 
 O cadastro é listado apenas no design de `auth`, que possui seu controller HTTP.
 O caso de uso e a persistência continuam no módulo `users`.

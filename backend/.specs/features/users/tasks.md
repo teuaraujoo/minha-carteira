@@ -38,9 +38,9 @@ T9 → T10
 T9 → T11
 ```
 
-O middleware de `auth` e o gateway de revogação de sessões já existem. `T9`
-permanece pendente somente até definir quem pode solicitar a reativação de um
-usuário; as decisões de agendamento e retenção financeira pertencem a T10.
+O middleware de `auth` e o `AccountSessionCoordinator` estão implementados.
+`T9` foi concluída; as decisões de agendamento e retenção financeira pertencem
+a T10.
 
 ### Fase 4 — Documentação
 
@@ -124,7 +124,8 @@ persistência.
 
 ### T4: [USR-03] Implementar cadastro público
 
-**Status:** Concluída; gate quick e verificação TypeScript aprovados.
+**Status:** Feito — cadastro e validação de telefone implementados; testes
+unitários e TypeScript passaram. Validação PostgreSQL continua adiada.
 **What:** Criar DTOs, mapper e caso de uso para cadastro seguro de usuário.
 **Where:** aplicação e apresentação de `users`, incluindo testes.
 **Depends on:** T1, T2, T3.
@@ -134,6 +135,8 @@ persistência.
 
 - [x] O schema não aplica `trim` à senha e rejeita `role` e `capabilities`
       enviados pelo cliente.
+- [x] Telefone é obrigatório e aceita somente celular brasileiro no formato
+      `+55` + DDD de dois dígitos + `9` + oito dígitos.
 - [x] O caso de uso normaliza e verifica unicidade de e-mail e username,
       protege-se contra duplicidade na persistência e permite telefone
       compartilhado.
@@ -196,8 +199,8 @@ expor o repository de `users`.
 
 ### T7: [USR-04] Implementar perfil autenticado
 
-**Status:** Revisão — implementação e testes unitários concluídos; falta teste
-integrado do router HTTP.
+**Status:** Implementado; validação do telefone coberta por testes unitários.
+Testes HTTP integrados foram adiados conforme decisão do usuário.
 **What:** Consultar e atualizar o próprio perfil a partir do contexto autenticado.
 **Where:** aplicação e apresentação de `users`, incluindo testes.
 **Depends on:** T3 e middleware de autenticação da spec `auth`.
@@ -211,6 +214,8 @@ integrado do router HTTP.
 - [x] Respostas seguras cobrem sucesso e usuário inexistente/inativo; a
       identidade não é aceita do cliente, prevenindo IDOR nesse fluxo.
 - [x] Os campos autorizados para esta etapa são `name` e `phone`.
+- [x] Ao atualizar `phone`, o schema e a entidade aplicam o formato brasileiro
+      aprovado para celular.
 
 **Tests:** unit e e2e
 **Gate:** full
@@ -218,8 +223,8 @@ integrado do router HTTP.
 
 ### T8: [USR-05] Integrar upload ao contexto autenticado
 
-**Status:** Revisão — integração e testes de controller/Multer concluídos; falta
-teste integrado do router HTTP.
+**Status:** Revisão — integração e testes de controller/Multer concluídos. O
+teste HTTP integrado foi adiado conforme decisão do usuário.
 **What:** Associar upload à identidade autenticada e integrar pelo contrato
 público de `storage`.
 **Where:** caso de uso e controller de imagem de perfil em `users`, incluindo
@@ -245,18 +250,23 @@ testes.
 
 ### T9: [USR-06] Implementar ciclo de vida do usuário
 
-**Status:** A fazer — auth e gateway de revogação disponíveis; depende da
-definição do chamador autorizado para reativação.
+**Status:** Implementado; testes unitários e TypeScript passaram. Testes HTTP e
+validação PostgreSQL foram adiados conforme decisão do usuário.
 **What:** Implementar desativação e reativação como casos de uso.
 **Where:** casos de uso de ciclo de vida de `users`, com testes.
-**Depends on:** T2, T3 e `RefreshTokensGateway` de auth.
+**Depends on:** T2, T3 e `AccountSessionCoordinator` de auth.
 **Requirement:** USR-RF-005.
 
 **Done when:**
 
-- [ ] Desativação registra datas e revoga sessões por contrato público.
-- [ ] Reativação só é exposta após definir o chamador autorizado.
-- [ ] Testes cobrem idempotência, transições e revogação de sessões.
+- [x] Desativação registra datas e revoga sessões na mesma transaction que
+      serializa a criação de sessões no login.
+- [x] A própria pessoa confirma reativação por link; administrador também pode
+      reativar a conta.
+- [x] Links pendentes irmãos são invalidados ao reativar, e sessões revogadas
+      durante a desativação não são restauradas após reativação.
+- [x] Testes unitários cobrem link, tentativas, consumo único, autorização
+      administrativa e coordenação transacional.
 
 **Tests:** unit
 **Gate:** full
@@ -264,7 +274,8 @@ definição do chamador autorizado para reativação.
 
 ### T10: [USR-07] Implementar limpeza de inativos
 
-**Status:** A fazer — bloqueada por decisões de produto e agendamento.
+**Status:** Backlog — regra de retenção aprovada; execução automática será
+especificada junto aos futuros processos agendados.
 **What:** Excluir em lotes usuários inativos elegíveis, coordenando dependências
 por contratos públicos.
 **Where:** caso de uso interno de limpeza e testes de `users`.
@@ -273,12 +284,12 @@ por contratos públicos.
 
 **Done when:**
 
-- [ ] A consulta seleciona somente usuários inativos há mais de 30 dias e
-      processa lotes.
-- [ ] Exclusão respeita cascatas de sessões, resets e imagens e bloqueia
-      identidade de mensageria ainda vinculada.
-- [ ] A política para dados financeiros e o mecanismo de agendamento estão
-      aprovados antes de implementar exclusão destrutiva.
+- [ ] A consulta seleciona contas que completaram 30 dias de desativação e não
+      foram reativadas.
+- [ ] A exclusão apaga dados financeiros, identidades de mensageria, sessões,
+      resets, metadados e objetos de imagem associados.
+- [ ] A futura spec de processos agendados define frequência, tamanho dos lotes
+      e tratamento de falhas antes de ativar a rotina automática.
 - [ ] Testes cobrem data limite, paginação, falha parcial e usuário reativado.
 
 **Tests:** integration
@@ -336,10 +347,13 @@ validado no PowerShell.
 
 ## Pending Decisions and Blockers
 
-- `phone` não é único; definir apenas o formato aceito antes de fechar sua
-  validação de cadastro.
+- `phone` não é único; o formato obrigatório de celular brasileiro foi definido
+  como `+55` + DDD de dois dígitos + `9` + oito dígitos. Falta implementar essa
+  validação no cadastro e na atualização do perfil.
 - Campos editáveis desta etapa já aprovados: `name` e `phone`.
-- Definir quem pode reativar usuários antes de expor essa rota em T9.
-- Aprovar mecanismo de agendamento, retenção dos dados financeiros e política
-  da identidade de mensageria antes da limpeza destrutiva em T10.
+- A reativação pode ser solicitada pela própria pessoa mediante link ou por um
+  administrador; faltam definir canal, validade e uso único do link.
+- A política de exclusão foi aprovada: apagar todos os dados após 30 dias de
+  desativação, incluindo identidades de mensageria. Frequência e tamanho de
+  lote ficam para a futura spec de processos agendados.
 - A URL do PostgreSQL será configurada depois; não executar migrations agora.

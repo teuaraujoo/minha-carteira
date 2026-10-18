@@ -65,8 +65,10 @@ importar ou consultar diretamente `IUsersRepository`.
 ### USR-RF-001 — Cadastro público
 
 O sistema DEVE cadastrar um usuário com `username`, `name`, `email`, `phone` e
-`password`. O hash deve ser produzido antes da persistência, e a senha original
-não pode ser salva nem registrada em logs.
+`password`. O telefone é obrigatório e deve estar no formato de celular
+brasileiro `+55` + DDD com dois dígitos + `9` + oito dígitos, por exemplo
+`+5579988887777`. O hash deve ser produzido antes da persistência, e a senha
+original não pode ser salva nem registrada em logs.
 
 O `username` DEVE rejeitar o caractere `@`, pois o login aceita e-mail e
 username no mesmo campo `identifier`.
@@ -91,13 +93,19 @@ caso de uso. Campos internos devem ser rejeitados pelo schema HTTP.
 ### USR-RF-005 — Ciclo de vida
 
 O sistema DEVE permitir desativar e reativar um usuário sem apagar seu
-histórico. Ao desativar, deve registrar `inactivatedAt`; ao reativar, deve
-removê-lo.
+histórico enquanto a conta estiver inativa. A própria pessoa pode solicitar a
+reativação e confirmá-la por um link; um administrador também pode reativar a
+conta. Ao desativar, o sistema registra `inactivatedAt` e revoga as sessões.
+Ao reativar, remove `inactivatedAt`; sessões antigas permanecem revogadas, e a
+pessoa precisa entrar novamente.
 
 ### USR-RF-006 — Exclusão definitiva
 
-O sistema DEVE permitir que um processo interno exclua usuários que permaneçam
-inativos por mais de 30 dias, conforme a decisão já registrada no projeto.
+O sistema DEVE excluir definitivamente o usuário e os dados associados quando
+completar 30 dias de desativação, desde que a conta não tenha sido reativada.
+Isso inclui dados financeiros, identidades de mensageria, sessões, solicitações
+de reset e imagens. A execução automática ficará para uma spec futura de
+processos agendados; esta regra não aprova frequência nem tamanho de lote.
 
 ### USR-RF-007 — Imagem de perfil
 
@@ -136,13 +144,17 @@ log.
 - [x] A entidade mantém `status`, `createdAt`, `updatedAt` e `inactivatedAt`.
 - [x] Cadastro público atribui role `USER` e rejeita role ou capabilities
   enviados pelo cliente.
+- [x] Cadastro e atualização de perfil validam telefone brasileiro no formato
+  aprovado `+55` + DDD de dois dígitos + `9` + oito dígitos.
 - [x] A imagem de perfil é registrada como `StoredFile` no contexto do usuário
   autenticado.
-- [ ] Desativação e reativação preservam o histórico.
+- [x] Desativação e reativação preservam o histórico; links pendentes irmãos
+  são invalidados ao reativar.
 - [x] Nenhuma saída pública contém `passwordHash`.
 - [x] `auth` usa o contrato público de `users`, não seu repository.
-- [ ] Testes HTTP integrados ainda não cobrem as rotas de perfil/upload, CSRF e
-  IDOR; os testes existentes são unitários/de controller.
+- [ ] Testes HTTP integrados para perfil, upload, ciclo de vida, CSRF e IDOR
+  foram adiados conforme decisão do usuário; os testes existentes são
+  unitários/de controller.
 
 ## Dependências
 
@@ -155,7 +167,8 @@ log.
 
 ## Decisões confirmadas
 
-- cadastro recebe `username`, `name`, `email`, `phone` e `password`;
+- cadastro recebe `username`, `name`, `email`, `phone` e `password`; telefone é
+  obrigatório e segue o formato brasileiro de celular `+55` + DDD + número;
 - `status`, `createdAt` e `updatedAt` permanecem na entidade;
 - capabilities permanecem no usuário;
 - role permanece no usuário como enum `USER` ou `ADMIN`;
@@ -172,26 +185,32 @@ log.
 - o módulo `storage` usa Cloudflare R2 e possui uma especificação própria;
 - autenticação pode aceitar e-mail ou nome de usuário;
 - `passwordHash` é interno;
-- exclusão definitiva ocorre somente após 30 dias de inatividade;
-- sessões, solicitações de reset e imagens são removidas em cascata com a
-  exclusão definitiva.
+- a desativação registra `inactivatedAt` e revoga sessões;
+- a própria pessoa confirma por link a reativação, e administradores também
+  podem reativar; sessões antigas não são restauradas;
+- o link de reativação é enviado pelo Resend, expira em 15 minutos, é de uso
+  único, permite três tentativas inválidas e reutiliza `Challenge` com propósito
+  `ACCOUNT_REACTIVATION`; reativar invalida os outros desafios pendentes;
+- login, desativação e reativação coordenam o bloqueio da linha do usuário para
+  serializar gravação de sessão, mudança de status e revogação;
+- a exclusão definitiva ocorre ao completar 30 dias de desativação, se não
+  houver reativação, e apaga dados financeiros e identidades de mensageria,
+  além dos registros de auth e imagens associados;
+- a rotina automática de exclusão será especificada futuramente junto a outros
+  processos agendados; frequência e tamanho de lote ainda não foram definidos.
 
 ## Decisões pendentes
 
-- regras finais de formato de `phone`;
 - confirmação de e-mail antes do primeiro acesso;
 - endpoint e autorização para alterar capabilities em uma especificação futura;
-- política de remoção dos objetos de imagem após exclusão definitiva;
 - política de integridade e limpeza do vínculo polimórfico
   `contextType + contextId`.
 
 ## Validações pendentes
 
-- adicionar e executar testes HTTP integrados das rotas `/users/me` e do upload
-  autenticado, incluindo autenticação, CSRF, erros e tentativa de acesso
-  cruzado. Os testes atuais exercitam serviços, controllers e middleware, não o
-  router HTTP completo;
+- adicionar e executar testes HTTP integrados para perfil, upload, ciclo de
+  vida, CSRF e IDOR. Esses testes foram adiados conforme decisão do usuário;
 - validar migrations e repositories com PostgreSQL após configurar
   `DATABASE_URL`;
-- concluir o ciclo de vida e a política de limpeza, conforme as decisões
-  pendentes registradas nas tarefas.
+- escrever a spec futura de processos agendados para definir execução,
+  frequência, tamanho de lote e tratamento de falhas na limpeza definitiva.

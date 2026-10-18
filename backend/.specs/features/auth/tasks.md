@@ -137,7 +137,8 @@ a migration foi preparada em código e não foi aplicada.
 
 ### T4: [AUTH-04] Implementar caso de uso de login
 
-**Status:** Concluída
+**Status:** Concluída; a gravação de sessão usa `AccountSessionCoordinator` para
+serializar login e desativação. Testes unitários e TypeScript passaram.
 **What:** Validar credenciais e criar sessão usando `UsersAuthGateway`.
 **Where:** caso de uso e testes de `auth`.
 **Depends on:** T2, T3 e contrato USR-09.
@@ -151,6 +152,8 @@ a migration foi preparada em código e não foi aplicada.
 - [x] Usuário ausente, senha incorreta e usuário inativo geram o mesmo erro
       público.
 - [x] Sessão guarda hash do refresh token e saída pública não contém tokens ou hash.
+- [x] A gravação da sessão bloqueia a conta, revalida o status ativo e persiste
+      o refresh token na mesma transaction.
 - [x] Testes cobrem sucesso e erros indistinguíveis.
 
 **Tests:** unit

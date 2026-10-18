@@ -151,6 +151,7 @@ interface Challenge {
 
 enum ChallengePurpose {
   PASSWORD_RESET = "PASSWORD_RESET",
+  ACCOUNT_REACTIVATION = "ACCOUNT_REACTIVATION",
   EMAIL_VERIFICATION = "EMAIL_VERIFICATION",
   MESSAGING_IDENTITY_VERIFICATION = "MESSAGING_IDENTITY_VERIFICATION",
 }
@@ -266,8 +267,13 @@ interface RefreshTokenRepository {
   ): Promise<void>;
 }
 
-interface RefreshTokensGateway {
-  revokeAllFromUser(userId: string): Promise<void>;
+interface AccountSessionCoordinator {
+  createSessionIfAccountActive(session: RefreshToken): Promise<boolean>;
+  deactivateAccountAndRevokeSessions(userId: string, at: Date): Promise<boolean>;
+  reactivateAccountAndRevokeSessions(
+    userId: string,
+    at: Date,
+  ): Promise<{ found: boolean; reactivated: boolean }>;
 }
 
 interface PasswordResetRequestRepository {
@@ -299,8 +305,10 @@ interface EmailProvider {
 Também são necessários `PasswordHasher`, `TokenGenerator`, `TokenHasher`,
 `ClockProvider`, `UnitOfWork`, `AppLogger` e `UsersAuthGateway`.
 
-`RefreshTokensGateway` é a porta pública que permite a `users` revogar sessões
-durante a desativação, sem conhecer o repository interno de `auth`.
+`AccountSessionCoordinator` é o contrato público usado por `auth` e `users` para
+serializar a criação de sessões com a mudança do ciclo de vida da conta. O
+adapter Prisma implementa as operações sob a mesma transaction e bloqueio da
+linha do usuário; os módulos não acessam diretamente o repository um do outro.
 
 `consumeUsableBySecretHash` deve usar atualização condicional, lock de linha ou
 isolamento equivalente para que somente uma confirmação concorrente consuma o
@@ -365,9 +373,17 @@ access token expira em 15 minutos e o refresh token em cinco dias.
 3. **Use case:** `UsersAuthGateway` busca credenciais pelo identificador
    normalizado e confirma usuário ativo sem variar a resposta pública.
 4. **Módulos:** `PasswordHasher` compara o hash; o provider JWT cria tokens.
-5. **Persistência:** salva `RefreshToken` com o hash da credencial e os dados de
-   auditoria explícitos previstos pela entidade.
+5. **Persistência:** `AccountSessionCoordinator` abre uma transaction, bloqueia
+   a linha de `users` com `SELECT ... FOR UPDATE`, revalida `ACTIVE` e cria o
+   `RefreshToken`. Se a conta tiver sido desativada, a criação é recusada.
 6. **Resposta:** controller define cookies e retorna somente a visão do usuário.
+
+O mesmo coordinator bloqueia a linha da conta na desativação e, na mesma
+transaction, muda o status e revoga todas as sessões. Assim, login e
+desativação são serializados: se o login gravar primeiro, a desativação revoga
+a sessão; se a desativação ocorrer primeiro, o login encontra a conta inativa e
+não cria sessão. A reativação também usa esse coordinator e marca como `FAILED`
+todos os outros desafios `ACCOUNT_REACTIVATION` ainda `REQUESTED` da conta.
 
 ### Fluxo — refresh
 
@@ -463,6 +479,8 @@ conteúdo integral não devem aparecer em logs.
 | GET | `/api/v1/auth/csrf` | Não | Define cookie e retorna token CSRF — 200 |
 | POST | `/api/v1/auth/password-reset` | Não | Solicita link — 202 |
 | POST | `/api/v1/auth/password-reset/confirm` | Não | Troca senha — 204 |
+| POST | `/api/v1/auth/account-reactivation` | Não; CSRF | Solicita link neutro — 202 |
+| POST | `/api/v1/auth/account-reactivation/confirm` | Não; CSRF | Confirma reativação — 204 |
 
 O controller de `/auth/register` pertence à apresentação de `auth`, mas chama o
 caso de uso público do módulo `users`. `/auth/me` devolve somente `userId` e
