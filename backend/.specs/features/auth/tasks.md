@@ -108,7 +108,7 @@ autenticado, sem dependência de bibliotecas externas no domínio.
 
 ### T3: [AUTH-03] Implementar persistência de refresh tokens
 
-**Status:** A fazer
+**Status:** Concluída
 **What:** Implementar repository Prisma e gateway público de revogação de
 sessões, mantendo integração PostgreSQL adiada até configurar a URL.
 **Where:** infraestrutura e contratos públicos de `auth`; testes sem banco.
@@ -117,13 +117,16 @@ sessões, mantendo integração PostgreSQL adiada até configurar a URL.
 
 **Done when:**
 
-- [ ] Banco guarda somente hash, datas, auditoria opcional e motivo de
+- [x] Banco guarda somente hash, datas, auditoria opcional e motivo de
       revogação.
-- [ ] Sessão expira em cinco dias e consultas ignoram sessões expiradas ou
+- [x] Sessão expira em cinco dias e consultas ignoram sessões expiradas ou
       revogadas.
-- [ ] Revogação individual e de todas as sessões usa operações tipadas.
-- [ ] Migration é preparada/revisada em código, mas não aplicada.
-- [ ] Testes sem banco passam; teste PostgreSQL fica registrado como pendente.
+- [x] Revogação individual e de todas as sessões usa operações tipadas.
+- [x] Migration é preparada/revisada em código, mas não aplicada.
+- [x] Testes sem banco passam; teste PostgreSQL fica registrado como pendente.
+
+Integração PostgreSQL permanece pendente até a configuração de `DATABASE_URL`;
+a migration está preparada em código e não foi aplicada.
 
 **Tests:** unit
 **Gate:** full
