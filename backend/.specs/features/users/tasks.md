@@ -305,11 +305,12 @@ implementado.
 | --- | --- | --- | --- | --- |
 | Domain, services e use cases | unit | Cobrir requisitos e casos de borda da tarefa | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
 | Apresentação HTTP | e2e | Cobrir rota feliz, erros documentados e IDOR | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
-| Prisma repository | integration | Consultas, mapeamentos e erros de persistência | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
+| Prisma repository | unit e integration | Testes unitários de mapeamento e comportamento sem banco; integração real após configurar PostgreSQL | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
 | Entidade, schemas e configuração | unit | Validar regras e transformações documentadas | `backend/test/users/*.test.ts` | `node --import tsx --test test/users/*.test.ts` |
 
-Testes de integração que dependem de PostgreSQL ficam preparados, mas não serão
-executados até a configuração do banco de teste estar disponível.
+Testes de integração que dependem de PostgreSQL ficam adiados até a configuração
+da URL do banco de teste. Até lá, a persistência é verificada por testes sem
+banco e por TypeScript.
 
 ## Gate Check Commands
 
@@ -318,7 +319,7 @@ executados até a configuração do banco de teste estar disponível.
 | Gate Level | When to Use | Command |
 | --- | --- | --- |
 | Quick | Tarefas com testes unitários | `node --import tsx --test test/users/*.test.ts` |
-| Full | Tarefas HTTP ou de integração | `node --import tsx --test test/users/*.test.ts` e testes de integração quando o banco de teste estiver configurado |
+| Full | Tarefas HTTP ou persistência em código | `node --import tsx --test test/users/*.test.ts` e `node node_modules/typescript/bin/tsc --noEmit`; testes PostgreSQL após configurar a URL |
 | Build | Fechamento de fase ou tarefa sem testes | `node node_modules/typescript/bin/tsc --noEmit` |
 
 Os scripts disponíveis devem ser conferidos antes da execução. Não há gate de

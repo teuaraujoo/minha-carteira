@@ -26,6 +26,16 @@
 - Classes, interfaces, and types: PascalCase, such as `TransactionRepository`.
 - Global constants: UPPER_SNAKE_CASE, such as `MAX_PAGE_SIZE`.
 - Backend files and folders: kebab-case, such as `create-transaction.use-case.ts`.
+- Backend domain entities must each have a dedicated entity file.
+- Define each repository interface in its own file, separate from the entity
+  and the repository implementation.
+- Format interfaces consistently with the project formatter and
+  `backend/.editorconfig` (two spaces, no tabs).
+- Reuse an existing global contract and its shared implementation whenever
+  one already covers the need. Do not create module-specific functions or
+  classes for concerns already handled globally, such as errors, logging, or
+  pagination. Extend the shared implementation only when the behavior is
+  genuinely reusable; keep domain-specific rules in their owning module.
 - On the frontend, adhere to existing conventions and framework-mandated naming.
 - Error messages must always be written in Brazilian Portuguese.
 - Code comments must always be written in Brazilian Portuguese.

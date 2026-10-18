@@ -307,6 +307,12 @@ const prisma = new PrismaClient({ adapter });
 export default prisma;
 ```
 
+Secret de 64 caracteres: 
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
 O arquivo `prisma.config.ts` carrega `.env`, aponta para
 `prisma/schema.prisma` e usa `DATABASE_URL` como datasource. A configuração da
 URL é necessária para migrations e acesso ao banco, mas o schema pode ser
@@ -851,68 +857,68 @@ Todas as rotas abaixo utilizam o prefixo **/api/v1**. A coluna “Auth” indica
 
 ### System
 
-| Método | Rota | Auth | Resultado |
-| ---| ---| ---| --- |
-| GET | `/health` | Não | Estado básico da API — 200 |
+| Método | Rota      | Auth | Resultado                  |
+| ------ | --------- | ---- | -------------------------- |
+| GET    | `/health` | Não  | Estado básico da API — 200 |
 
 ### Auth Management
 
-| Método | Rota | Auth | Resultado |
-| ---| ---| ---| --- |
-| POST | `/auth/login` | Não | Autentica e inicia sessão — 200 |
-| POST | `/auth/refresh` | Refresh cookie | Renova apenas o access token — 204 |
-| POST | `/auth/logout` | Sim | Revoga a sessão e remove cookies — 204 |
-| GET | `/auth/me` | Sim | Retorna o usuário autenticado — 200 |
+| Método | Rota            | Auth           | Resultado                              |
+| ------ | --------------- | -------------- | -------------------------------------- |
+| POST   | `/auth/login`   | Não            | Autentica e inicia sessão — 200        |
+| POST   | `/auth/refresh` | Refresh cookie | Renova apenas o access token — 204     |
+| POST   | `/auth/logout`  | Sim            | Revoga a sessão e remove cookies — 204 |
+| GET    | `/auth/me`      | Sim            | Retorna o usuário autenticado — 200    |
 
 ### Account Management
 
-| Método | Rota | Auth | Resultado |
-| ---| ---| ---| --- |
-| GET | `/accounts` | Sim | Lista as contas e seus saldos — 200 |
-| POST | `/accounts` | Sim | Cria uma conta — 201 |
-| GET | `/accounts/:accountId` | Sim | Consulta uma conta — 200 |
-| PATCH | `/accounts/:accountId` | Sim | Atualiza dados da conta — 200 |
-| PATCH | `/accounts/:accountId/status` | Sim | Ativa ou desativa uma conta — 200 |
+| Método | Rota                          | Auth | Resultado                           |
+| ------ | ----------------------------- | ---- | ----------------------------------- |
+| GET    | `/accounts`                   | Sim  | Lista as contas e seus saldos — 200 |
+| POST   | `/accounts`                   | Sim  | Cria uma conta — 201                |
+| GET    | `/accounts/:accountId`        | Sim  | Consulta uma conta — 200            |
+| PATCH  | `/accounts/:accountId`        | Sim  | Atualiza dados da conta — 200       |
+| PATCH  | `/accounts/:accountId/status` | Sim  | Ativa ou desativa uma conta — 200   |
 
 ### Category Management
 
-| Método | Rota | Auth | Resultado |
-| ---| ---| ---| --- |
-| GET | `/categories` | Sim | Lista categorias; aceita filtro por `type` e `isActive` — 200 |
-| POST | `/categories` | Sim | Cria uma categoria personalizada — 201 |
-| GET | `/categories/:categoryId` | Sim | Consulta uma categoria — 200 |
-| PATCH | `/categories/:categoryId` | Sim | Atualiza uma categoria personalizada — 200 |
-| PATCH | `/categories/:categoryId/status` | Sim | Ativa ou desativa uma categoria — 200 |
+| Método | Rota                             | Auth | Resultado                                                     |
+| ------ | -------------------------------- | ---- | ------------------------------------------------------------- |
+| GET    | `/categories`                    | Sim  | Lista categorias; aceita filtro por `type` e `isActive` — 200 |
+| POST   | `/categories`                    | Sim  | Cria uma categoria personalizada — 201                        |
+| GET    | `/categories/:categoryId`        | Sim  | Consulta uma categoria — 200                                  |
+| PATCH  | `/categories/:categoryId`        | Sim  | Atualiza uma categoria personalizada — 200                    |
+| PATCH  | `/categories/:categoryId/status` | Sim  | Ativa ou desativa uma categoria — 200                         |
 
 ### Transaction Management
 
-| Método | Rota | Auth | Resultado |
-| ---| ---| ---| --- |
-| GET | `/transactions` | Sim | Lista com paginação e filtros — 200 |
-| GET | `/transactions/:transactionId` | Sim | Consulta uma movimentação — 200 |
-| POST | `/transactions` | Sim | Registra receita ou despesa — 201 |
-| PATCH | `/transactions/:transactionId/status` | Sim | Confirma ou marca como pendente uma movimentação — 200 |
-| DELETE | `/transactions/:transactionId` | Sim | Realiza exclusão lógica — 204 |
+| Método | Rota                                  | Auth | Resultado                                              |
+| ------ | ------------------------------------- | ---- | ------------------------------------------------------ |
+| GET    | `/transactions`                       | Sim  | Lista com paginação e filtros — 200                    |
+| GET    | `/transactions/:transactionId`        | Sim  | Consulta uma movimentação — 200                        |
+| POST   | `/transactions`                       | Sim  | Registra receita ou despesa — 201                      |
+| PATCH  | `/transactions/:transactionId/status` | Sim  | Confirma ou marca como pendente uma movimentação — 200 |
+| DELETE | `/transactions/:transactionId`        | Sim  | Realiza exclusão lógica — 204                          |
 
 Filtros previstos em **GET /transactions**: `competence`, `startDate`, `endDate`, `type`, `status`, `accountId`, `categoryId`, `search`, `page`, `pageSize`, `sortBy` e `sortOrder`.
 
 ### Recurring Transaction Management
 
-| Método | Rota | Auth | Resultado |
-| ---| ---| ---| --- |
-| GET | `/recurring-transactions` | Sim | Lista regras recorrentes — 200 |
-| POST | `/recurring-transactions` | Sim | Cria uma regra recorrente — 201 |
-| GET | `/recurring-transactions/:recurringId` | Sim | Consulta uma regra — 200 |
-| PATCH | `/recurring-transactions/:recurringId` | Sim | Atualiza lançamentos futuros — 200 |
-| PATCH | `/recurring-transactions/:recurringId/status` | Sim | Ativa ou desativa a regra — 200 |
+| Método | Rota                                          | Auth | Resultado                          |
+| ------ | --------------------------------------------- | ---- | ---------------------------------- |
+| GET    | `/recurring-transactions`                     | Sim  | Lista regras recorrentes — 200     |
+| POST   | `/recurring-transactions`                     | Sim  | Cria uma regra recorrente — 201    |
+| GET    | `/recurring-transactions/:recurringId`        | Sim  | Consulta uma regra — 200           |
+| PATCH  | `/recurring-transactions/:recurringId`        | Sim  | Atualiza lançamentos futuros — 200 |
+| PATCH  | `/recurring-transactions/:recurringId/status` | Sim  | Ativa ou desativa a regra — 200    |
 
 O processamento das recorrências é executado por um scheduler interno que chama diretamente o caso de uso. Não deve existir uma rota pública sem proteção para disparar esse processamento.
 
 ### Dashboard & Financial Analytics
 
-| Método | Rota | Auth | Resultado |
-| ---| ---| ---| --- |
-| GET | `/dashboard?competence=YYYY-MM` | Sim | Retorna indicadores e agregações do mês — 200 |
+| Método | Rota                            | Auth | Resultado                                     |
+| ------ | ------------------------------- | ---- | --------------------------------------------- |
+| GET    | `/dashboard?competence=YYYY-MM` | Sim  | Retorna indicadores e agregações do mês — 200 |
 
 ## Convencções:
 *   Todo o projeto em inglês
