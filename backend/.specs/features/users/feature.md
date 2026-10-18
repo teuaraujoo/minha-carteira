@@ -160,10 +160,13 @@ log.
 - role permanece no usuário como enum `USER` ou `ADMIN`;
 - cadastro público sempre cria role `USER`;
 - capabilities continuam como enum, sem tabelas associativas;
+- `username` não pode conter `@`, para distinguir username de e-mail no login;
 - imagens usam uma entidade genérica vinculada por contexto;
 - a entidade genérica pertence ao módulo `storage`;
 - upload de imagem exige usuário autenticado;
 - telefone não é único;
+- atualização de perfil autenticado permite alterar somente nome e telefone
+  nesta etapa;
 - e-mail e nome de usuário são únicos sem diferenciar maiúsculas de minúsculas;
 - o módulo `storage` usa Cloudflare R2 e possui uma especificação própria;
 - autenticação pode aceitar e-mail ou nome de usuário;
@@ -175,7 +178,6 @@ log.
 ## Decisões pendentes
 
 - regras finais de formato de `phone`;
-- campos de perfil que poderão ser alterados inicialmente;
 - confirmação de e-mail antes do primeiro acesso;
 - endpoint e autorização para alterar capabilities em uma especificação futura;
 - política de remoção dos objetos de imagem após exclusão definitiva;

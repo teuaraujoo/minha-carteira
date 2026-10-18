@@ -18,7 +18,11 @@ export type LogEvent =
   | "http.request.failed"
   | "server.started"
   | "server.failed"
-  | "users.profile-image.uploaded";
+  | "users.profile-image.uploaded"
+  | "auth.password-reset.requested"
+  | "auth.password-reset.email-failed"
+  | "auth.password-reset.completed"
+  | "auth.password-reset.notification-failed";
 
 export interface ApprovedLogContext {
   operation?: string;

@@ -45,6 +45,8 @@ function setup(options: {
       calls.push({ method: "findActiveUserById", input: userId });
       return options.user === undefined ? activeUser : options.user;
     },
+    async findActivePasswordResetRecipient() { return null; },
+    async findActivePasswordResetRecipientById() { return null; },
     async changePasswordHash() { throw new Error("Não esperado."); },
   };
   const passwordHasher: PasswordHasher = {

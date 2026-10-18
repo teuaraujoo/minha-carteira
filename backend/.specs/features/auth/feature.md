@@ -101,14 +101,18 @@ O sistema DEVE aceitar um e-mail e responder de forma neutra, exista ou não um
 usuário correspondente. Quando aplicável, deve gerar um token aleatório, salvar
 somente seu hash em um `Challenge` vinculado à `PasswordResetRequest` e enviar
 um link pelo Resend. Falhas de entrega também não podem alterar a resposta
-pública neutra.
+pública neutra. O servidor limita solicitações por e-mail normalizado e por IP,
+independentemente de a conta existir. Ao exceder o limite, mantém a resposta
+neutra e não envia outro e-mail.
 
 ### AUTH-RF-008 — Confirmação da recuperação
 
 O sistema DEVE aceitar `token`, `password` e `passwordConfirmation`. Deve
 validar igualdade, política de senha, expiração, uso único e vínculo do token
 antes de trocar o hash. A validação usa o `Challenge` e resolve sua
-`PasswordResetRequest` associada.
+`PasswordResetRequest` associada. O token identifica o desafio e contém um
+segredo; cada segredo inválido incrementa `attempts`. Após três falhas, o
+desafio recebe status `FAILED`.
 
 ### AUTH-RF-009 — Pós-recuperação
 
@@ -153,9 +157,16 @@ comparação futura sem interferir no comportamento atual.
 - [x] Logout usa access ou refresh válido para localizar a sessão e sempre limpa
   cookies, mesmo sem credenciais válidas.
 - [ ] Solicitação de reset produz resposta indistinguível para e-mail ausente.
-- [ ] Falha do Resend não muda status, código ou mensagem da solicitação.
+- [ ] Falha do Resend marca a solicitação e o desafio como `FAILED`, sem mudar
+  status, código ou mensagem da resposta pública.
 - [ ] O e-mail do Resend contém link com token, sem código numérico.
-- [ ] Apenas o hash do token de reset é persistido.
+- [ ] O token usa `challengeId.secret`, expira em 15 minutos e só seu segredo
+  é persistido como hash.
+- [ ] A terceira validação inválida marca o desafio como `FAILED`.
+- [ ] A senha redefinida segue a mesma política do cadastro.
+- [ ] O limitador aplica três solicitações por e-mail normalizado e dez por IP
+  em janela móvel de uma hora, em memória no processo.
+- [ ] Exceder o limite mantém a resposta neutra 202 e não envia e-mail.
 - [ ] Solicitação e desafio persistem metadata de auditoria sem alterar o
   resultado do fluxo.
 - [ ] A aplicação não trata localização, IP, `userAgent` ou `deviceId` como
@@ -164,6 +175,8 @@ comparação futura sem interferir no comportamento atual.
 - [ ] Redefinição válida revoga todas as sessões e não autentica
   automaticamente.
 - [ ] Token, senha, cookies e conteúdo do e-mail não aparecem em logs.
+- [ ] Metadata permanece enquanto existir seu registro e é removida com ele;
+  desafios polimórficos vinculados são excluídos na mesma transação.
 - [x] `auth` não acessa diretamente o repository de `users`.
 
 ## Dependências
@@ -201,13 +214,30 @@ comparação futura sem interferir no comportamento atual.
 - os motivos de revogação são `LOGOUT`, `PASSWORD_RESET`,
   `USER_DEACTIVATED`, `ADMINISTRATIVE_ACTION` e `SECURITY_EVENT`;
 - recuperação usa `PasswordResetRequest` vinculada a um `Challenge` genérico;
+- o token de reset contém `challengeId.secret`; somente o hash do segredo é
+  persistido;
+- o token de reset expira 15 minutos após a emissão e permite três tentativas
+  inválidas por desafio;
+- a senha redefinida segue a mesma política do cadastro, que atualmente exige
+  no mínimo oito caracteres e não aplica `trim`;
+- solicitações de reset têm limite móvel de três por e-mail normalizado e dez
+  por IP, por hora, em memória no processo do servidor;
+- o limitador mantém no máximo 10.000 chaves ativas. Ao atingir o teto, nega
+  novas chaves internamente até expirarem entradas; a resposta continua neutra
+  e chaves já existentes continuam sujeitas aos limites por e-mail e IP;
+- o limitador é por processo, perde seus contadores após reinício e pressupõe
+  uma única instância da aplicação nesta versão;
+- exceder o limite não revela a existência da conta, não envia e-mail e não
+  bloqueia o usuário;
+- falha ao enviar o link marca a solicitação e o desafio como `FAILED`; o
+  sistema não reprocessa automaticamente e mantém a resposta pública neutra;
 - `PasswordResetRequest` e `Challenge` guardam metadata para auditoria;
 - metadata não participa de decisões de segurança nesta versão;
-- a metadata terá política de retenção;
+- metadata permanece enquanto existir o registro que a contém e é removida
+  junto com ele, sem prazo separado;
 - logout revoga a sessão;
 - recuperação é usada por pessoa deslogada;
-- recuperação usa somente token no link enviado por e-mail, mas permanece
-  bloqueada até que as políticas de reset sejam definidas;
+- recuperação usa somente token no link enviado por e-mail;
 - envio de e-mail utiliza Resend;
 - após redefinir, o frontend redireciona para login;
 - não há login automático após redefinição;
@@ -218,13 +248,10 @@ comparação futura sem interferir no comportamento atual.
 
 ## Decisões pendentes
 
-- duração do reset token e dos demais desafios;
 - domínio e remetente verificados no Resend;
 - URL pública do frontend usada no link;
-- limites e janela de proteção contra abuso;
-- política final de complexidade da senha;
-- política de reprocessamento quando o Resend falhar;
-- prazo e mecanismo da política de retenção da metadata de auditoria;
+- configuração segura de proxy/origem do IP caso a aplicação seja executada
+  atrás de um proxy confiável;
 
 ## Backlog de segurança contextual
 

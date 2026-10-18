@@ -76,6 +76,8 @@ function setup(options: {
         status: options.activeUser === "INACTIVE" ? UserStatus.INACTIVE : UserStatus.ACTIVE,
       };
     },
+    async findActivePasswordResetRecipient() { return null; },
+    async findActivePasswordResetRecipientById() { return null; },
     async changePasswordHash() { throw new Error("Não esperado."); },
   };
   const clock: ClockProvider = { now: () => now };

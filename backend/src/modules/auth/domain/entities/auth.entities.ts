@@ -8,6 +8,8 @@ import {
 
 export const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 export const REFRESH_TOKEN_TTL_MS = 5 * 24 * 60 * 60 * 1000;
+export const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+export const PASSWORD_RESET_MAX_ATTEMPTS = 3;
 
 export interface RequestMetadata {
   location: { latitude: number; longitude: number } | null;

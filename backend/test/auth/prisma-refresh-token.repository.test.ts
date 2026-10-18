@@ -103,7 +103,7 @@ test("gateway público revoga sessões por desativação sem expor o repository"
     },
   } as Pick<RefreshTokenRepository, "revokeAllFromUser"> as RefreshTokenRepository;
   const clock: ClockProvider = { now: () => at };
-  const gateway: RefreshTokensGateway = new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
+  const gateway: RefreshTokensGateway = new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
 
   await gateway.revokeAllFromUser("user-1");
   assert.deepEqual(call, {

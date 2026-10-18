@@ -884,6 +884,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@stablelib/base64@npm:^1.0.0":
+  version: 1.0.1
+  resolution: "@stablelib/base64@npm:1.0.1"
+  checksum: 10c0/6330720f021819d19cecfe274111b79a256caa81df478d6b0ae7effc8842b96915b6aeed85926ff05b4d48ec1fc78ad043d928b730ee4e6cc6e8cba6aa097bed
+  languageName: node
+  linkType: hard
+
 "@standard-schema/spec@npm:^1.0.0":
   version: 1.1.0
   resolution: "@standard-schema/spec@npm:1.1.0"
@@ -1400,6 +1407,7 @@ __metadata:
     pino-http: "npm:^11.0.0"
     pino-pretty: "npm:^13.1.3"
     prisma: "npm:7.10.0"
+    resend: "npm:^6.34.1"
     slugify: "npm:^1.6.9"
     tsx: "npm:^4.23.13"
     typescript: "npm:^6"
@@ -2173,6 +2181,13 @@ __metadata:
   version: 2.1.1
   resolution: "fast-safe-stringify@npm:2.1.1"
   checksum: 10c0/d90ec1c963394919828872f21edaa3ad6f1dddd288d2bd4e977027afff09f5db40f94e39536d4646f7e01761d704d72d51dce5af1b93717f3489ef808f5f4e4d
+  languageName: node
+  linkType: hard
+
+"fast-sha256@npm:^1.3.0":
+  version: 1.3.0
+  resolution: "fast-sha256@npm:1.3.0"
+  checksum: 10c0/87f9e4baa7639576cf60a2b6235c9f436e1a1c52323abbd8a705b5bea8355500acf176f2aed0c14f2ecd6d6007e26151461bab2f27b8953bcca8d9d6b76a86e4
   languageName: node
   linkType: hard
 
@@ -3104,6 +3119,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"postal-mime@npm:2.7.6":
+  version: 2.7.6
+  resolution: "postal-mime@npm:2.7.6"
+  checksum: 10c0/7932b9b5c82e9d3f25607d9f07eba92414b42a304592f8cd03f9df058311af8d5df091ea8ef05ce5f20f052cbd858bdda8df0903d547a54953814ca57a68df03
+  languageName: node
+  linkType: hard
+
 "postgres-array@npm:3.0.4":
   version: 3.0.4
   resolution: "postgres-array@npm:3.0.4"
@@ -3302,6 +3324,21 @@ __metadata:
   version: 2.0.2
   resolution: "require-from-string@npm:2.0.2"
   checksum: 10c0/aaa267e0c5b022fc5fd4eef49d8285086b15f2a1c54b28240fdf03599cbd9c26049fee3eab894f2e1f6ca65e513b030a7c264201e3f005601e80c49fb2937ce2
+  languageName: node
+  linkType: hard
+
+"resend@npm:^6.34.1":
+  version: 6.34.1
+  resolution: "resend@npm:6.34.1"
+  dependencies:
+    postal-mime: "npm:2.7.6"
+    standardwebhooks: "npm:1.1.1"
+  peerDependencies:
+    "@react-email/render": "*"
+  peerDependenciesMeta:
+    "@react-email/render":
+      optional: true
+  checksum: 10c0/f53cc2f4f1bc999c632b258149b6d0fabacd110b1d604cf0d973f20c68a9e4c4597c45954340418adf3c074459bb0ca17782933dbf52b4db87c55833a2774f80
   languageName: node
   linkType: hard
 
@@ -3537,6 +3574,16 @@ __metadata:
   version: 2.3.3
   resolution: "sqlstring@npm:2.3.3"
   checksum: 10c0/3b5dd7badb3d6312f494cfa6c9a381ee630fbe3dbd571c4c9eb8ecdb99a7bf5a1f7a5043191d768797f6b3c04eed5958ac6a5f948b998f0a138294c6d3125fbd
+  languageName: node
+  linkType: hard
+
+"standardwebhooks@npm:1.1.1":
+  version: 1.1.1
+  resolution: "standardwebhooks@npm:1.1.1"
+  dependencies:
+    "@stablelib/base64": "npm:^1.0.0"
+    fast-sha256: "npm:^1.3.0"
+  checksum: 10c0/6971c8f12a718c26779f03219db62ca7af9f6f584f6810a0d5288cb19946777968f4e3bc2fd71d8e1bf11b5f423c48b6a83f762093a4db4d68ba2cc12095fd4f
   languageName: node
   linkType: hard
 

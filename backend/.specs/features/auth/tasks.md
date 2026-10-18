@@ -44,8 +44,9 @@ T8 → T11
 T2 → T11
 ```
 
-T8–T11 permanecem bloqueadas até aprovar as políticas de recuperação. T9 também
-depende de autorização para instalar o SDK Resend.
+As políticas de recuperação estão aprovadas. T8 pode iniciar; T9 depende da
+autorização para instalar o SDK Resend e da configuração externa. T10 e T11
+seguem após as dependências indicadas.
 
 ### Fase 4 — Rotas, frontend e documentação
 
@@ -109,7 +110,7 @@ autenticado, sem dependência de bibliotecas externas no domínio.
 
 ### T3: [AUTH-03] Implementar persistência de refresh tokens
 
-**Status:** Concluída; migration pendente
+**Status:** Concluída; validação PostgreSQL pendente
 **What:** Implementar repository Prisma e gateway público de revogação de
 sessões, mantendo integração PostgreSQL adiada até configurar a URL.
 **Where:** infraestrutura e contratos públicos de `auth`; testes sem banco.
@@ -123,11 +124,11 @@ sessões, mantendo integração PostgreSQL adiada até configurar a URL.
 - [x] Sessão expira em cinco dias e consultas ignoram sessões expiradas ou
       revogadas.
 - [x] Revogação individual e de todas as sessões usa operações tipadas.
-- [ ] Migration é preparada/revisada em código, mas não aplicada.
+- [x] Migration é preparada/revisada em código, mas não aplicada.
 - [x] Testes sem banco passam; teste PostgreSQL fica registrado como pendente.
 
-Integração PostgreSQL e migration permanecem pendentes até a configuração de
-`DATABASE_URL`; nenhuma migration foi aplicada.
+Integração PostgreSQL permanece pendente até a configuração de `DATABASE_URL`;
+a migration foi preparada em código e não foi aplicada.
 
 **Tests:** unit
 **Gate:** full
@@ -216,7 +217,7 @@ O caso de uso não controla cookies; essa responsabilidade pertence à rota HTTP
 
 ### T8: [AUTH-08] Implementar persistência da recuperação
 
-**Status:** Bloqueada pelas políticas de recuperação
+**Status:** Implementada; teste PostgreSQL pendente de configuração do banco
 **What:** Implementar repositories de solicitações e desafios, metadata tipada
 e consumo atômico do desafio.
 **Where:** infraestrutura de `auth`, com testes sem banco.
@@ -225,11 +226,18 @@ e consumo atômico do desafio.
 
 **Done when:**
 
-- [ ] Somente hash do segredo é persistido; busca por token puro não é possível.
-- [ ] Desafio só é consumido uma vez, inclusive sob confirmações concorrentes.
-- [ ] Metadata é persistida como JSON sem tipo Prisma fora da infraestrutura.
-- [ ] Migrations são preparadas em código e não aplicadas.
-- [ ] Testes sem banco passam; PostgreSQL fica pendente de `DATABASE_URL`.
+- [x] Somente hash do segredo é persistido; busca por token puro não é possível.
+- [x] O token identifica o desafio com `challengeId.secret`; somente `secret`
+      é comparado com o hash persistido.
+- [x] Desafios de reset expiram em 15 minutos e permitem três tentativas
+      inválidas; a terceira falha marca o desafio como `FAILED`.
+- [x] Desafio só é consumido uma vez por atualização condicional; teste de uso
+      concorrente cobre uma única confirmação bem-sucedida.
+- [x] Metadata é persistida como JSON sem tipo Prisma fora da infraestrutura.
+- [x] A exclusão de uma solicitação também remove seus desafios polimórficos
+      na mesma transação.
+- [x] Migrations são preparadas em código e não aplicadas.
+- [x] Testes sem banco passam; PostgreSQL fica pendente de `DATABASE_URL`.
 
 **Tests:** unit
 **Gate:** full
@@ -237,7 +245,7 @@ e consumo atômico do desafio.
 
 ### T9: [AUTH-09] Integrar o Resend
 
-**Status:** Bloqueada por autorização de instalação e configuração externa
+**Status:** Implementada; envio real não executado
 **What:** Implementar `EmailProvider` com SDK oficial Resend, leitura segura de
 configuração e logs sanitizados.
 **Where:** adapter de e-mail de `auth`, com client simulado.
@@ -246,10 +254,11 @@ configuração e logs sanitizados.
 
 **Done when:**
 
-- [ ] SDK só é instalado após autorização explícita.
-- [ ] Adapter envia recuperação e aviso de alteração.
-- [ ] Falhas não vazam token, link, destinatário ou conteúdo nos logs.
-- [ ] Testes cobrem sucesso e falha com client simulado.
+- [x] SDK foi instalado após autorização explícita do usuário.
+- [x] Adapter envia recuperação e aviso de alteração.
+- [x] Falhas não expõem token, link ou conteúdo ao erro público; logs são
+      sanitizados e não incluem destinatário, link ou conteúdo.
+- [x] Testes cobrem sucesso e falha com client simulado.
 
 **Tests:** unit
 **Gate:** quick
@@ -257,7 +266,7 @@ configuração e logs sanitizados.
 
 ### T10: [AUTH-10] Implementar solicitação de recuperação
 
-**Status:** Bloqueada pelas políticas de recuperação
+**Status:** Implementada; validação HTTP pendente no ambiente atual
 **What:** Gerar desafio seguro, registrar auditoria, enviar link e sempre
 responder de forma neutra.
 **Where:** caso de uso e testes de `auth`.
@@ -266,11 +275,20 @@ responder de forma neutra.
 
 **Done when:**
 
-- [ ] E-mail existente, ausente ou inativo resulta na mesma resposta 202.
-- [ ] Token é criptograficamente seguro e somente seu hash é persistido.
-- [ ] Metadata é apenas auditoria; falha de envio não muda a resposta.
-- [ ] Proteção contra abuso e política de reprocessamento são aprovadas antes
-      de disponibilizar o endpoint.
+- [x] E-mail existente, ausente ou inativo resulta na mesma resposta 202.
+- [x] Token é criptograficamente seguro e somente seu hash é persistido.
+- [x] Metadata é apenas auditoria; falha de envio não muda a resposta.
+- [x] O limitador em memória aplica no máximo três solicitações por e-mail
+      normalizado e dez por IP, em janela móvel de uma hora.
+- [x] Limite excedido não envia e-mail, não bloqueia a conta e mantém a mesma
+      resposta neutra 202.
+- [x] Falha do Resend marca solicitação e desafio como `FAILED`, sem nova
+      tentativa automática e sem alterar a resposta pública.
+- [x] Testes cobrem limites, expiração das janelas e o teto de 10.000 chaves;
+      o contador é por processo e reinicia junto com ele.
+- [x] Ao atingir o teto, novas chaves são negadas internamente; a resposta
+      pública permanece neutra e chaves existentes continuam sujeitas aos
+      limites individuais.
 
 **Tests:** unit
 **Gate:** quick
@@ -278,7 +296,7 @@ responder de forma neutra.
 
 ### T11: [AUTH-11] Implementar confirmação da recuperação
 
-**Status:** Bloqueada pelas políticas de recuperação
+**Status:** Implementada; PostgreSQL e HTTP pendentes de validação ambiental
 **What:** Validar desafio e senha e atualizar atomicamente senha, solicitação,
 desafio e sessões.
 **Where:** caso de uso, unidade de trabalho e testes de `auth`.
@@ -287,10 +305,12 @@ desafio e sessões.
 
 **Done when:**
 
-- [ ] Senha e confirmação obedecem a política aprovada.
-- [ ] Token inválido, expirado ou reutilizado não altera a senha.
-- [ ] Troca de hash, consumo, conclusão e revogação ocorrem na mesma transação.
-- [ ] Nenhuma sessão nova é criada; falha de notificação não desfaz a troca.
+- [x] Senha e confirmação obedecem à mesma política do cadastro.
+- [x] Token inválido, expirado ou reutilizado não altera a senha.
+- [x] Token é válido por 15 minutos; a terceira validação inválida marca o
+      desafio como `FAILED`.
+- [x] Troca de hash, consumo, conclusão e revogação ocorrem na mesma transação.
+- [x] Nenhuma sessão nova é criada; falha de notificação não desfaz a troca.
 
 **Tests:** unit e integration
 **Gate:** full
@@ -298,7 +318,7 @@ desafio e sessões.
 
 ### T12: [AUTH-12A] Compor rotas centrais de autenticação
 
-**Status:** Concluída
+**Status:** Implementada; execução dos testes HTTP bloqueada por EACCES no ambiente
 **What:** Compor rotas de cadastro, login, refresh, logout e contexto de sessão,
 com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
 **Where:** apresentação e composition root de `auth`, com testes HTTP.
@@ -316,7 +336,8 @@ com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
       validados nas requisições mutáveis.
 - [x] `/auth/register` delega cadastro ao caso de uso público de `users`.
 - [x] `/auth/me` retorna somente `userId` e `sessionId`.
-- [x] Testes HTTP cobrem fluxos, atributos de cookies e CSRF.
+- [ ] Testes HTTP cobrem os fluxos, mas não puderam ser executados: o sandbox
+      bloqueou conexões locais em `127.0.0.1` com `EACCES`.
 
 **Tests:** e2e
 **Gate:** full
@@ -324,7 +345,7 @@ com cookies `SameSite=None; Secure` e defesa CSRF aprovada.
 
 ### T13: [AUTH-12B] Compor rotas de recuperação
 
-**Status:** Bloqueada por T8–T11 e políticas de recuperação
+**Status:** Implementada; testes HTTP escritos, execução bloqueada por EACCES
 **What:** Expor endpoints de solicitar e confirmar reset sem alterar contratos
 HTTP compartilhados fora da proposta aprovada.
 **Where:** controllers, schemas, rotas e composition root de `auth`.
@@ -333,10 +354,11 @@ HTTP compartilhados fora da proposta aprovada.
 
 **Done when:**
 
-- [ ] Rotas respondem conforme os status neutros definidos na feature.
-- [ ] Respostas não permitem enumeração de e-mail.
-- [ ] Tokens, senhas, cookies e conteúdo do e-mail não aparecem em logs.
-- [ ] Testes HTTP cobrem recuperação e erros documentados.
+- [x] Rotas respondem conforme os status neutros definidos na feature.
+- [x] Respostas não permitem enumeração de e-mail.
+- [x] Tokens, senhas, cookies e conteúdo do e-mail não aparecem em logs.
+- [ ] Testes HTTP foram escritos, mas a execução local falhou porque o sandbox
+      bloqueou conexões em `127.0.0.1` com `EACCES`.
 
 **Tests:** e2e
 **Gate:** full
@@ -427,13 +449,12 @@ Testes de integração PostgreSQL ficam adiados até a configuração de
 
 - Configurar `FRONTEND_ORIGINS` (origens separadas por vírgula) em cada
   ambiente; `FRONTEND_URL` permanece como compatibilidade para uma única origem.
-- Definir duração e política da senha no reset; até lá, T8–T11 e T13 ficam
-  bloqueadas conforme decisão do usuário.
-- Autorizar instalação do SDK `resend` antes de T9.
-- Configurar `RESEND_FROM_EMAIL` e `FRONTEND_URL` para validar envio real.
-- Definir limite contra abuso, política de retry de e-mail e retenção de
-  metadata antes de disponibilizar reset.
-- Configurar `DATABASE_URL` para validar migrations e integração PostgreSQL.
+- Envio real pelo Resend permanece pendente de validação operacional, embora o
+  adapter e suas configurações estejam implementados.
+- Configurar e validar o endereço IP quando houver proxy confiável; não confiar
+  em cabeçalhos encaminhados por clientes não confiáveis.
+- Configurar `DATABASE_URL` para validar migrations e integração PostgreSQL;
+  nenhuma migration foi aplicada nesta implementação.
 - Validar rotas autenticadas contra PostgreSQL após configurar o banco local;
   os testes atuais usam portas locais e dependências simuladas.
 - T16 permanece em backlog até aprovação do mecanismo de agendamento.

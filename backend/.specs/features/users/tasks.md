@@ -193,7 +193,7 @@ expor o repository de `users`.
 
 ### T7: [USR-04] Implementar perfil autenticado
 
-**Status:** Bloqueada por auth
+**Status:** Implementada para nome e telefone; execução HTTP pendente no ambiente
 **What:** Consultar e atualizar o próprio perfil a partir do contexto autenticado.
 **Where:** aplicação e apresentação de `users`, incluindo testes.
 **Depends on:** T3 e middleware de autenticação da spec `auth`.
@@ -201,12 +201,12 @@ expor o repository de `users`.
 
 **Done when:**
 
-- [ ] O identificador vem exclusivamente de `request.auth`.
-- [ ] Campos internos são rejeitados; somente campos editáveis aprovados são
+- [x] O identificador vem exclusivamente de `request.auth`.
+- [x] Campos internos são rejeitados; somente campos editáveis aprovados são
       alterados.
-- [ ] Respostas seguras cobrem sucesso, usuário inexistente/inativo e tentativa
-      de IDOR.
-- [ ] A atualização só é concluída após definir os campos editáveis pendentes.
+- [x] Respostas seguras cobrem sucesso e usuário inexistente/inativo; a
+      identidade não é aceita do cliente, prevenindo IDOR nesse fluxo.
+- [x] Os campos autorizados para esta etapa são `name` e `phone`.
 
 **Tests:** unit e e2e
 **Gate:** full
@@ -214,7 +214,7 @@ expor o repository de `users`.
 
 ### T8: [USR-05] Integrar upload ao contexto autenticado
 
-**Status:** Bloqueada por T7 e STR-04
+**Status:** Implementada; execução HTTP pendente no ambiente
 **What:** Associar upload à identidade autenticada e integrar pelo contrato
 público de `storage`.
 **Where:** caso de uso e controller de imagem de perfil em `users`, incluindo
@@ -224,13 +224,14 @@ testes.
 
 **Done when:**
 
-- [ ] Cliente não escolhe `userId`, `contextId` ou `ownerUserId`.
-- [ ] Usuário autenticado é confirmado como existente e ativo antes de chamar
+- [x] Cliente não escolhe `userId`, `contextId` ou `ownerUserId`.
+- [x] Usuário autenticado é confirmado como existente e ativo antes de chamar
       `storage`.
-- [ ] Validações de arquivo e logs em português permanecem aplicadas, sem dados
+- [x] Validações de arquivo e logs em português permanecem aplicadas, sem dados
       sensíveis.
-- [ ] Testes cobrem arquivo ausente, tipo/tamanho inválido, usuário inativo e
-      sucesso associado ao próprio usuário.
+- [x] Testes unitários cobrem arquivo ausente, tipo/tamanho inválido e sucesso
+      associado ao próprio usuário; a validação HTTP aguarda permissão de rede
+      local no ambiente de execução.
 
 **Tests:** unit e e2e
 **Gate:** full
@@ -328,9 +329,8 @@ validado no PowerShell.
 
 ## Pending Decisions and Blockers
 
-- Aprovar o formato final de `phone` antes de fechar a validação de cadastro.
-- Definir se `username` pode conter `@` antes de fechar a identificação por
-  username ou e-mail.
+- `phone` não é único; definir apenas o formato aceito antes de fechar sua
+  validação de cadastro.
 - Aprovar campos editáveis antes de concluir T7.
 - Definir quem pode reativar usuários antes de expor essa rota em T9.
 - Aprovar mecanismo de agendamento, retenção dos dados financeiros e política

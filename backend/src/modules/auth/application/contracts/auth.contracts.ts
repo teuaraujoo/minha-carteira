@@ -34,3 +34,25 @@ export interface AuthenticatedContext {
   userId: string;
   sessionId: string;
 }
+
+export interface TokenGenerator {
+  generate(): string;
+}
+
+export interface PasswordResetEmail {
+  email: string;
+  resetUrl: string;
+}
+
+export interface PasswordChangedEmail {
+  email: string;
+}
+
+export interface EmailProvider {
+  sendPasswordReset(input: PasswordResetEmail): Promise<void>;
+  sendPasswordChanged(input: PasswordChangedEmail): Promise<void>;
+}
+
+export interface PasswordResetRateLimiter {
+  consume(normalizedEmail: string, ipAddress: string, at: Date): boolean;
+}

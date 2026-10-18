@@ -119,6 +119,16 @@ test("changes the password hash without exposing it in serialized output", () =>
   assert.equal(JSON.stringify(user).includes("new-hash"), false);
 });
 
+test("updates only approved profile fields and preserves the hash", () => {
+  const user = createUser();
+  user.updateProfile({ name: "Nome Atualizado", phone: "+5585888888888" }, new Date("2026-01-02T00:00:00.000Z"));
+
+  assert.equal(user.name, "Nome Atualizado");
+  assert.equal(user.phone, "+5585888888888");
+  assert.equal(user.passwordHash, "hash");
+  assert.equal(user.updatedAt.toISOString(), "2026-01-02T00:00:00.000Z");
+});
+
 test("rejects invalid fields, enums, dates, lifecycle timestamps, and capabilities", () => {
   assert.throws(() => createUser({ id: " " }), TypeError);
   assert.throws(() => createUser({ username: "user@domain" }), /Nome de usuário não pode conter @/);

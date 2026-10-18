@@ -85,6 +85,8 @@ function setup(options: {
           status: options.activeUser.status === "ACTIVE" ? UserStatus.ACTIVE : UserStatus.INACTIVE,
         };
     },
+    async findActivePasswordResetRecipient() { return null; },
+    async findActivePasswordResetRecipientById() { return null; },
     async changePasswordHash() { throw new Error("Não esperado."); },
   };
   const tokenHasher: TokenHasher = {

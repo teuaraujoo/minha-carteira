@@ -63,6 +63,8 @@ function createDependencies(overrides: Partial<AuthRoutesDependencies> = {}): Au
   const usersAuthGateway: UsersAuthGateway = {
     findCredentialsByIdentifier: async () => ({ id: user.id, passwordHash: "password-hash", status: UserStatus.ACTIVE }),
     findActiveUserById: async () => user,
+    findActivePasswordResetRecipient: async () => null,
+    findActivePasswordResetRecipientById: async () => null,
     changePasswordHash: async () => undefined,
   };
   const usersRegistrationGateway: UsersRegistrationGateway = {
@@ -89,6 +91,8 @@ function createDependencies(overrides: Partial<AuthRoutesDependencies> = {}): Au
       login: async () => ({ user, accessToken: "access-token", refreshToken: "refresh-token" }),
       refresh: async () => ({ accessToken: "access-refreshed" }),
       logout: async () => undefined,
+      requestPasswordReset: async () => undefined,
+      confirmPasswordReset: async () => undefined,
     },
     usersRegistrationGateway,
     jwtProvider,
@@ -132,6 +136,50 @@ test("GET /csrf define cookie seguro e retorna token para header", async () => {
     const result = await issueCsrf(baseUrl);
     assert.equal(result.token.length, 43);
   });
+});
+
+test("solicitação de reset exige CSRF e responde 202 com mensagem neutra", async () => {
+  const defaults = createDependencies();
+  let received: { email: string; metadata: { location: { latitude: number; longitude: number } | null; userAgent: string | null; ipAddress: string | null; deviceId: string | null } } | undefined;
+  const authService = {
+    ...defaults.authService,
+    requestPasswordReset: async (input: typeof received extends infer T ? Exclude<T, undefined> : never) => { received = input; },
+  };
+  await withServer(async (baseUrl) => {
+    const csrf = await issueCsrf(baseUrl);
+    const response = await fetch(`${baseUrl}/password-reset`, {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json", Cookie: csrf.cookie, "X-CSRF-Token": csrf.token, "User-Agent": "Teste HTTP" },
+      body: JSON.stringify({ email: "TECO@example.com", metadata: { location: { latitude: -3.7, longitude: -38.5 }, deviceId: "navegador-1" } }),
+    });
+    assert.equal(response.status, 202);
+    assert.match(JSON.stringify(await response.json()), /Se o e-mail estiver cadastrado/);
+    assert.equal(received?.email, "teco@example.com");
+    assert.deepEqual(received?.metadata.location, { latitude: -3.7, longitude: -38.5 });
+    assert.equal(received?.metadata.deviceId, "navegador-1");
+    assert.equal(received?.metadata.userAgent, "Teste HTTP");
+    assert.equal(received?.metadata.ipAddress, "127.0.0.1");
+  }, { authService });
+});
+
+test("confirmação de reset valida os dados, responde 204 e não inicia sessão", async () => {
+  const defaults = createDependencies();
+  let receivedToken: string | undefined;
+  const authService = {
+    ...defaults.authService,
+    confirmPasswordReset: async (input: { token: string }) => { receivedToken = input.token; },
+  };
+  await withServer(async (baseUrl) => {
+    const csrf = await issueCsrf(baseUrl);
+    const response = await fetch(`${baseUrl}/password-reset/confirm`, {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json", Cookie: csrf.cookie, "X-CSRF-Token": csrf.token },
+      body: JSON.stringify({ token: "challenge.secret", password: "senha-nova-segura", passwordConfirmation: "senha-nova-segura" }),
+    });
+    assert.equal(response.status, 204);
+    assert.equal(receivedToken, "challenge.secret");
+    assert.equal(response.headers.get("set-cookie"), null);
+  }, { authService });
 });
 
 test("login valida CSRF, define cookies de autenticação e não expõe tokens no JSON", async () => {
@@ -241,7 +289,7 @@ test("/me retorna apenas contexto autenticado e logout limpa cookies", async () 
 
 test("logout inválido ainda limpa cookies sem revogar uma sessão desconhecida", async () => {
   let revokedSessionId: string | null | undefined;
-  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; } };
+  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; }, requestPasswordReset: async () => undefined, confirmPasswordReset: async () => undefined };
   await withServer(async (baseUrl) => {
     const csrf = await issueCsrf(baseUrl);
     const response = await fetch(`${baseUrl}/logout`, {
@@ -268,7 +316,7 @@ test("logout usa refresh válido quando o access token expirou", async () => {
     verifyAccessToken: async () => { throw new Error("Token expirado."); },
     verifyRefreshToken: async () => verified("refresh"),
   };
-  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; } };
+  const authService = { login: async () => { throw new Error("Não esperado."); }, refresh: async () => ({ accessToken: "unused" }), logout: async (input: { sessionId: string | null }) => { revokedSessionId = input.sessionId; }, requestPasswordReset: async () => undefined, confirmPasswordReset: async () => undefined };
   await withServer(async (baseUrl) => {
     const csrf = await issueCsrf(baseUrl);
     const response = await fetch(`${baseUrl}/logout`, {
@@ -305,6 +353,8 @@ test("refresh e logout também bloqueiam operações sem CSRF", async () => {
       login: async () => { throw new Error("Não esperado."); },
       refresh: async () => { refreshCalls += 1; return { accessToken: "access" }; },
       logout: async () => { logoutCalls += 1; },
+      requestPasswordReset: async () => undefined,
+      confirmPasswordReset: async () => undefined,
     },
   });
 });

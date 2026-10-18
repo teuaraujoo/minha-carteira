@@ -3,18 +3,19 @@ import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-er
 import { sendCreated, sendNoContent, sendSuccess } from "../../../../shared/presentation/http/success-response.js";
 import type { RegisterUserInput } from "../../../users/index.js";
 import type { TokenHasher } from "../../application/contracts/auth.contracts.js";
+import type { RequestMetadata } from "../../domain/entities/auth.entities.js";
 import { mapLoginOutput } from "../../application/dto/login.dto.js";
 import type { AuthService } from "../../application/services/auth.service.js";
 import { createAuthenticationMiddleware } from "../middlewares/authentication.middleware.js";
 import { createCsrfToken, createCsrfValidationMiddleware, createOriginValidationMiddleware } from "../middlewares/csrf.middleware.js";
 import { createUserSchema } from "../../../users/presentation/schemas/users.schemas.js";
-import { loginSchema } from "../schemas/auth.schemas.js";
+import { confirmPasswordResetSchema, loginSchema, requestPasswordResetSchema } from "../schemas/auth.schemas.js";
 import { AUTH_COOKIE_NAMES, CSRF_COOKIE_OPTIONS, clearAuthenticationCookies, setAuthenticationCookies } from "../security/auth-cookies.js";
 import type { AuthenticationMiddlewareDependencies } from "../middlewares/authentication.middleware.js";
 import type { UsersRegistrationGateway } from "../../../users/index.js";
 
 export interface AuthRoutesDependencies extends AuthenticationMiddlewareDependencies {
-  authService: Pick<AuthService, "login" | "refresh" | "logout">;
+  authService: Pick<AuthService, "login" | "refresh" | "logout" | "requestPasswordReset" | "confirmPasswordReset">;
   usersRegistrationGateway: UsersRegistrationGateway;
   allowedOrigins: readonly string[];
   tokenHasher: TokenHasher;
@@ -70,6 +71,28 @@ export function createAuthRouter(dependencies: AuthRoutesDependencies): Router {
     sendNoContent(response);
   });
 
+  router.post("/password-reset", validateCsrf, async (request, response) => {
+    const parsed = requestPasswordResetSchema.safeParse(request.body);
+    if (!parsed.success) throw validationError("Dados para recuperação de senha inválidos.", parsed.error);
+    await dependencies.authService.requestPasswordReset({
+      email: parsed.data.email,
+      metadata: buildRequestMetadata(parsed.data.metadata, request),
+    });
+    response.status(202).json({ data: { message: "Se o e-mail estiver cadastrado, você receberá as instruções para redefinir sua senha." } });
+  });
+
+  router.post("/password-reset/confirm", validateCsrf, async (request, response) => {
+    const parsed = confirmPasswordResetSchema.safeParse(request.body);
+    if (!parsed.success) throw validationError("Dados para redefinição de senha inválidos.", parsed.error);
+    await dependencies.authService.confirmPasswordReset({
+      token: parsed.data.token,
+      password: parsed.data.password,
+      passwordConfirmation: parsed.data.passwordConfirmation,
+      metadata: buildRequestMetadata(parsed.data.metadata, request),
+    });
+    sendNoContent(response);
+  });
+
   router.get("/me", authenticate, (request, response) => {
     const context = request.auth;
     if (!context) throw new AppError({ status: 401, code: ErrorCode.UNAUTHORIZED, message: "Autenticação obrigatória." });
@@ -77,6 +100,18 @@ export function createAuthRouter(dependencies: AuthRoutesDependencies): Router {
   });
 
   return router;
+}
+
+function buildRequestMetadata(
+  input: { location?: { latitude: number; longitude: number } | null | undefined; deviceId?: string | null | undefined } | undefined,
+  request: Request,
+): RequestMetadata {
+  return {
+    location: input?.location ?? null,
+    deviceId: input?.deviceId ?? null,
+    userAgent: request.get("user-agent") ?? null,
+    ipAddress: request.ip ?? null,
+  };
 }
 
 async function resolveLogoutSessionId(

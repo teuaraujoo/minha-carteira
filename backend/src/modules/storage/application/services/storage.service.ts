@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { StoredFile } from "../../domain/entities/stored-file.entity.js";
-import type { StorageOperations, StoredFileInput, StoredFileOutput, ObjectStorageProvider } from "../../domain/interfaces/storage.interfaces.js";
-import { StorageProvider, StorageStatus } from "../../domain/enums/storage.enums.js";
+import type { StorageOperations, StoredFileInput, StoredFileOutput, StoredFileUrlOutput, ObjectStorageProvider } from "../../domain/interfaces/storage.interfaces.js";
+import { StorageContextType, StorageProvider, StorageStatus } from "../../domain/enums/storage.enums.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import { validateStoredFile } from "../../domain/validation/file-validation.js";
 import { buildStorageKey } from "../utils/storage.utils.js";
@@ -27,6 +27,15 @@ export class StorageService implements StorageOperations {
 
   getPresignedUrl(key: string, expiresInSeconds = 30 * 60): Promise<string> {
     return this.objectStorage.getPresignedUrl(key, expiresInSeconds);
+  }
+
+  async getActiveFileUrl(contextType: StorageContextType, contextId: string): Promise<StoredFileUrlOutput | null> {
+    const file = await this.repository.findActiveByContext(contextType, contextId);
+    if (!file) return null;
+
+    const expiresAt = new Date(this.now().getTime() + PRESIGNED_URL_EXPIRATION_SECONDS * 1000);
+    const url = await this.getPresignedUrl(file.storageKey, PRESIGNED_URL_EXPIRATION_SECONDS);
+    return { url, expiresAt };
   }
 
   async replaceFileContent(input: StoredFileInput): Promise<StoredFileOutput> {

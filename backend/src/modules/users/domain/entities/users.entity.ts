@@ -217,6 +217,17 @@ export class User {
     this.touch(at);
   }
 
+  updateProfile(input: { name?: string; phone?: string }, at: Date = new Date()): void {
+    const name = input.name === undefined ? this.userName : User.normalizeRequired(input.name, "Nome");
+    const phone = input.phone === undefined ? this.userPhone : User.normalizeRequired(input.phone, "Telefone");
+    if (name === this.userName && phone === this.userPhone) return;
+
+    this.validateMutationDate(at);
+    this.userName = name;
+    this.userPhone = phone;
+    this.touch(at);
+  }
+
   private validateMutationDate(at: Date): void {
     const timestamp = at instanceof Date ? at.getTime() : Number.NaN;
     if (!Number.isFinite(timestamp)) {

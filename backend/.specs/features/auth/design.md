@@ -174,10 +174,50 @@ Na recuperação de senha, `subjectType` recebe `PASSWORD_RESET_REQUEST` e
 durante a geração do link. Banco, logs e eventos armazenam somente
 `secretHash` ou identificadores técnicos.
 
+O link usa o formato `challengeId.secret`. O ID permite localizar o desafio;
+ele não é um segredo. O servidor compara o hash da parte `secret` e atualiza
+`attempts` de forma atômica quando o segredo está incorreto. Na terceira falha,
+marca o desafio como `FAILED`. Para reset de senha, `expiresAt` é definido para
+15 minutos após a emissão e `maxAttempts` recebe `3`. A senha nova deve seguir
+as mesmas validações do cadastro.
+
+Tokens malformados ou com ID de desafio inexistente recebem erro genérico e não
+alteram um desafio. O limitador por IP também protege esse caminho.
+
 O vínculo `subjectType + subjectId` é polimórfico e não pode ter uma foreign key
 convencional para todos os destinos no PostgreSQL. O caso de uso deve validar o
 alvo pelo contrato do módulo proprietário e impedir desafios órfãos. A política
 de limpeza desses registros deve ser definida antes da migration.
+
+### Limitação de solicitações de reset
+
+O endpoint mantém janelas móveis em memória no processo do servidor:
+
+- no máximo três solicitações por e-mail normalizado em uma hora;
+- no máximo dez solicitações por IP em uma hora.
+
+O contador usa o endereço informado mesmo quando não existe usuário associado,
+para que o limite não revele a existência da conta. Ao exceder qualquer limite,
+o servidor não envia e-mail, mas mantém a resposta neutra `202`. O limitador não
+bloqueia a conta do usuário.
+
+As entradas expiradas devem ser removidas e o armazenamento em memória deve
+permanecer limitado. Os contadores são locais a cada processo e zeram quando o
+servidor reinicia; portanto, esta configuração pressupõe uma única instância.
+O IP vem da conexão ou de proxies explicitamente confiáveis, nunca de um
+cabeçalho encaminhado arbitrariamente pelo cliente.
+
+### Retenção da metadata e dos registros
+
+A metadata é armazenada no próprio registro e permanece enquanto esse registro
+existir; não há prazo de retenção separado para a metadata. Apagar o registro
+remove também sua metadata. O job de expiração muda status para `EXPIRED`, mas
+não apaga registros.
+
+Como `Challenge` referencia `PasswordResetRequest` por campos polimórficos e
+não possui foreign key, o repository deve apagar os desafios vinculados junto
+com a solicitação, na mesma transação. Isso também deve ser respeitado quando a
+exclusão do usuário remover solicitações por cascade.
 
 ## Claims dos tokens
 
@@ -311,9 +351,10 @@ padrão double-submit; a defesa também exige `Origin` exato na allowlist. O
 backend compara header e cookie em tempo constante. A allowlist é lida de
 `FRONTEND_ORIGINS`, com origens separadas
 por vírgula; `FRONTEND_URL` é aceita como fallback de origem única. Sem origem
-configurada, operações CSRF são negadas. O reset de senha não deve ser
-implementado até que suas políticas sejam definidas. O access token expira em
-15 minutos e o refresh token em cinco dias.
+configurada, operações CSRF são negadas. O reset de senha é composto no
+Composition Root e depende de `RESEND_API_KEY`, `RESEND_FROM_EMAIL` e
+`FRONTEND_URL`; nenhuma dessas configurações deve ser registrada em logs. O
+access token expira em 15 minutos e o refresh token em cinco dias.
 
 ## Fluxos
 
@@ -361,25 +402,27 @@ implementado até que suas políticas sejam definidas. O access token expira em
 
 1. **Input:** recebe `email`.
 2. **Validação:** Zod normaliza o endereço e valida a metadata aceita; a camada
-   HTTP confirma IP e `userAgent`; a resposta pública é sempre neutra.
+   HTTP confirma IP e `userAgent`; aplica os limites por endereço e IP antes de
+   consultar a conta. A resposta pública é sempre neutra.
 3. **Use case:** localiza o usuário elegível por contrato público.
 4. **Módulos:** gera token criptograficamente seguro, calcula hash e monta URL
    com a origem do frontend configurada.
 5. **Persistência:** salva `PasswordResetRequest` e `Challenge` vinculados,
    persiste metadata para auditoria e guarda somente o hash do segredo no
    desafio.
-6. **Resposta:** solicita o envio ao `EmailProvider` e devolve sempre o mesmo
-   202.
-   Falha do Resend é registrada de forma sanitizada e segue a política de
-   reprocessamento aprovada, sem alterar a resposta pública.
+6. **E-mail:** solicita o envio ao `EmailProvider`. Se o envio falhar, marca a
+   solicitação e o desafio como `FAILED`; não tenta reenviar automaticamente.
+7. **Resposta:** devolve sempre a mesma resposta neutra 202, inclusive para
+   e-mail inexistente, limite excedido ou falha do Resend.
 
 ### Fluxo — redefinir senha
 
-1. **Input:** recebe token, nova senha e confirmação.
-2. **Validação:** confere igualdade e política de senha; a camada HTTP monta a
-   metadata da requisição de consumo.
-3. **Use case:** calcula o hash do token, consome o desafio utilizável e resolve
-   a solicitação vinculada.
+1. **Input:** recebe `challengeId.secret`, nova senha e confirmação.
+2. **Validação:** confere igualdade e aplica a mesma política de senha do
+   cadastro; a camada HTTP monta a metadata da requisição de consumo.
+3. **Use case:** localiza o desafio pelo ID, compara o hash do segredo e resolve
+   a solicitação vinculada. Segredo inválido incrementa `attempts`; a terceira
+   falha marca o desafio como `FAILED`. O desafio expira após 15 minutos.
 4. **Módulos:** gera novo hash de senha pelo `PasswordHasher` e chama
    `UsersAuthGateway`.
 5. **Persistência:** `PasswordResetUnitOfWork` registra
@@ -387,8 +430,8 @@ implementado até que suas políticas sejam definidas. O access token expira em
    troca o hash da senha e revoga todos os refresh tokens na mesma transação
    PostgreSQL.
 6. **Resposta:** responde 204 e solicita a notificação de senha alterada. Falha
-   de envio segue a política de reprocessamento e não desfaz a troca concluída;
-   o frontend redireciona para login.
+   nessa notificação é registrada em log sanitizado, não desfaz a troca e não
+   gera reenvio automático. O frontend redireciona para login.
 
 ## Adapter do Resend
 
@@ -408,7 +451,7 @@ O adapter deve enviar `from`, `to`, `subject` e conteúdo HTML ou texto. O ID da
 mensagem pode ser registrado para diagnóstico, mas destinatário, token, link e
 conteúdo integral não devem aparecer em logs.
 
-## Rotas propostas
+## Rotas
 
 | Método | Rota | Auth | Resultado |
 | --- | --- | --- | --- |
@@ -436,13 +479,13 @@ sem tentar revogar uma sessão desconhecida. A resposta de `GET /csrf` usa
 - `VALIDATION_ERROR`: entrada inválida;
 - `UNAUTHORIZED`: credenciais ou sessão inválidas;
 - `FORBIDDEN`: operação autorizada para um usuário, mas não permitida;
-- `INVALID_OR_EXPIRED_TOKEN`: proposta para token de recuperação inválido,
-  expirado ou usado.
+- `VALIDATION_ERROR`: usado nesta implementação para token de recuperação
+  inválido, expirado ou usado, pois o contrato HTTP compartilhado ainda não
+  define um código mais específico.
 
-O código proposto ainda não existe no contrato HTTP compartilhado e deve ser
-adicionado ou mapeado para um código existente em AUTH-12. Login nunca deve usar
-`FORBIDDEN` para distinguir usuário inativo. Falha do Resend não muda a resposta
-202 da solicitação. Mensagens de login e recuperação devem evitar enumeração.
+Login nunca deve usar `FORBIDDEN` para distinguir usuário inativo. Falha do
+Resend não muda a resposta 202 da solicitação. Mensagens de login e recuperação
+devem evitar enumeração.
 
 ## Segurança e logs
 
@@ -481,8 +524,9 @@ As relações obrigatórias de `RefreshToken` e `PasswordResetRequest` com `User
 usam `onDelete: Cascade`. A exclusão definitiva do usuário remove esses
 registros. `Challenge` permanece polimórfico e não possui foreign key direta.
 
-A metadata terá política de retenção. O prazo, a anonimização e o mecanismo de
-remoção devem ser definidos antes da disponibilização pública.
+Metadata acompanha a vida do registro em que está armazenada. A exclusão do
+registro também remove a metadata; desafios polimórficos vinculados a uma
+solicitação devem ser apagados explicitamente na mesma transação.
 
 ## Ordem das migrations
 

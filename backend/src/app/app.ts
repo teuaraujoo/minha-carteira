@@ -18,6 +18,7 @@ import type { Router } from "express";
 export interface CreateAppOptions {
   logger?: AppLogger;
   authRouter?: Router;
+  usersRouter?: Router;
   allowedOrigins?: readonly string[];
 }
 
@@ -39,6 +40,7 @@ export const createApp = (options: CreateAppOptions = {}) => {
   );
 
   if (options.authRouter) app.use("/api/v1/auth", options.authRouter);
+  if (options.usersRouter) app.use("/api/v1/users", options.usersRouter);
 
   app.get("/", (_request, response) => {
     response.status(200).send("Hello, World!");

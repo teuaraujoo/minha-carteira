@@ -118,6 +118,7 @@ test("controller normalizes req.file and delegates profile replacement to storag
   const calls: StoredFileInput[] = [];
   const storageProvider: StorageOperations = {
     async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
+    async getActiveFileUrl() { return null; },
     async replaceFileContent(input): Promise<StoredFileOutput> {
       calls.push(input);
       return { file: {} as never, url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") };
@@ -145,7 +146,7 @@ test("controller normalizes req.file and delegates profile replacement to storag
 
 test("controller rejects missing files and invalid image data before storage", async () => {
   let replacements = 0;
-  const storageProvider: StorageOperations = { async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; }, async replaceFileContent() { replacements++; throw new Error("Não deveria ser chamado."); } };
+  const storageProvider: StorageOperations = { async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; }, async getActiveFileUrl() { return null; }, async replaceFileContent() { replacements++; throw new Error("Não deveria ser chamado."); } };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => createProfile() });
   const controller = new UserController(createUserService(repository, storageProvider, noopLogger));
   for (const request of [
@@ -160,6 +161,7 @@ test("controller rejects missing files and invalid image data before storage", a
 test("controller rejects requests without the authenticated context", async () => {
   const storageProvider: StorageOperations = {
     async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
+    async getActiveFileUrl() { return null; },
     async replaceFileContent() { throw new Error("Não deveria ser chamado."); },
   };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => createProfile() });
@@ -174,6 +176,7 @@ test("controller rejects requests without the authenticated context", async () =
 test("controller maps storage file validation failures to HTTP validation errors", async () => {
   const storageProvider: StorageOperations = {
     async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
+    async getActiveFileUrl() { return null; },
     async replaceFileContent() { throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "O conteúdo do arquivo está corrompido." }); },
   };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => createProfile() });
@@ -194,6 +197,7 @@ test("controller maps storage file validation failures to HTTP validation errors
 test("controller maps missing users to an HTTP not-found error", async () => {
   const storageProvider: StorageOperations = {
     async upload() { }, async delete() { }, async getPresignedUrl() { return "unused"; },
+    async getActiveFileUrl() { return null; },
     async replaceFileContent() { throw new Error("Não deveria ser chamado."); },
   };
   const repository = createUsersRepositoryDouble({ findActiveById: async () => null });

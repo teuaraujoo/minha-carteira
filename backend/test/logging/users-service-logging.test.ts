@@ -50,6 +50,7 @@ test("UserService logs the confirmed upload with request context and approved fi
     upload: async () => undefined,
     delete: async () => undefined,
     getPresignedUrl: async () => "https://storage.example/profile.png",
+    getActiveFileUrl: async () => null,
     replaceFileContent: async () => { await uploaded; return { file: {} as never, url: "https://storage.example/profile.png", expiresAt: new Date("2026-01-01T00:30:00Z") }; },
   };
   const service = createUserService(repository(createProfile()), storageProvider, logContext);
@@ -82,6 +83,7 @@ test("HTTP middleware and service share the same contextual requestId", async ()
     upload: async () => undefined,
     delete: async () => undefined,
     getPresignedUrl: async () => "unused",
+    getActiveFileUrl: async () => null,
     replaceFileContent: async () => ({ file: {} as never, url: "unused", expiresAt: new Date() }),
   };
   const service = createUserService(repository(createProfile()), storageProvider, logContext);
@@ -109,6 +111,7 @@ test("UserService does not log upload success when the user is absent", async ()
     upload: async () => undefined,
     delete: async () => undefined,
     getPresignedUrl: async () => "unused",
+    getActiveFileUrl: async () => null,
     replaceFileContent: async () => { replacements++; return { file: {} as never, url: "unused", expiresAt: new Date() }; },
   };
   const service = createUserService(repository(null), storageProvider, new LogContext(logger));
@@ -125,6 +128,7 @@ test("UserService propagates upload failures without a success log", async () =>
     upload: async () => undefined,
     delete: async () => undefined,
     getPresignedUrl: async () => "unused",
+    getActiveFileUrl: async () => null,
     replaceFileContent: async () => { throw failure; },
   };
   const service = createUserService(repository(createProfile()), storageProvider, new LogContext(logger));

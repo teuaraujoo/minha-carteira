@@ -38,5 +38,11 @@ export const uploadProfileImageSchema = z.object({
   }).strict().refine((image) => image.content.length === image.size, "Tamanho da imagem inválido."),
 }).strict();
 
+export const updateUserProfileSchema = z.object({
+  name: z.string({ error: "Nome deve ser uma string." }).trim().min(5, "Nome deve possuir pelo menos 5 caracteres.").optional(),
+  phone: z.string({ error: "Telefone deve ser uma string." }).trim().min(11, "Telefone deve possuir pelo menos 11 caracteres.").optional(),
+}).strict().refine((input) => input.name !== undefined || input.phone !== undefined, "Informe ao menos um campo para atualizar.");
+
 export type CreateUserRequestDto = z.infer<typeof createUserSchema>;
 export type UploadProfileImageRequestDto = z.infer<typeof uploadProfileImageSchema>;
+export type UpdateUserProfileRequestDto = z.infer<typeof updateUserProfileSchema>;

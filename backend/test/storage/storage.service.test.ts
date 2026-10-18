@@ -139,6 +139,17 @@ test("storage creates the first file when the context has no previous file", asy
   assert.equal(result.file.status, StorageStatus.COMPLETED);
 });
 
+test("storage returns a fresh temporary URL and expiration for the active context file", async () => {
+  const state = setup({ previous: existingFile() });
+  const result = await state.service.getActiveFileUrl(StorageContextType.USER_PROFILE, ownerUserId);
+
+  assert.deepEqual(result, {
+    url: "https://storage.example/file",
+    expiresAt: new Date("2026-10-17T10:30:00.000Z"),
+  });
+  assert.deepEqual(state.calls, ["find", "url:1800"]);
+});
+
 test("storage marks the new attempt as failed and preserves the previous file when R2 rejects the upload", async () => {
   const failure = new Error("Falha simulada no R2.");
   const previous = existingFile();

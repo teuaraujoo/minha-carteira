@@ -25,7 +25,7 @@ function setup() {
   } as RefreshTokenRepository;
   const clock: ClockProvider = { now: () => revokedAt };
   return {
-    service: new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }),
+    service: new AuthService(repository, clock, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" }),
     calls,
     alreadyRevoked,
     get effectiveRevocations() { return effectiveRevocations; },
@@ -59,7 +59,7 @@ test("propaga falhas de persistência para que a camada HTTP não confirme falso
   const repository = {
     async revoke() { throw expectedError; },
   } as Pick<RefreshTokenRepository, "revoke"> as RefreshTokenRepository;
-  const service = new AuthService(repository, { now: () => revokedAt }, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
+  const service = new AuthService(repository, { now: () => revokedAt }, { hash: async () => "", matches: async () => false }, { hash: async () => "", compare: async () => false }, { findCredentialsByIdentifier: async () => null, findActiveUserById: async () => null, findActivePasswordResetRecipient: async () => null, findActivePasswordResetRecipientById: async () => null, changePasswordHash: async () => undefined }, { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } }, { generate: () => "" });
 
   await assert.rejects(service.logout({ sessionId: "session-1" }), error => error === expectedError);
 });

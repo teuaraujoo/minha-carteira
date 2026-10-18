@@ -12,3 +12,8 @@ export interface AuthUserCredentials {
   passwordHash: string;
   status: UserStatus;
 }
+
+export interface PasswordResetRecipient {
+  id: string;
+  email: string;
+}

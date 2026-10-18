@@ -1,8 +1,8 @@
 import type { Request, Response } from "express";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
-import { sendSuccess } from "../../../../shared/presentation/http/success-response.js";
+import { sendNoContent, sendSuccess } from "../../../../shared/presentation/http/success-response.js";
 import type { UserService } from "../../application/services/users.service.js";
-import { uploadProfileImageSchema } from "../schemas/users.schemas.js";
+import { updateUserProfileSchema, uploadProfileImageSchema } from "../schemas/users.schemas.js";
 
 type AuthenticatedRequest = Request & {
   auth?: { userId: string; sessionId: string };
@@ -13,11 +13,26 @@ export class UserController {
     private readonly userService: UserService,
   ) { }
 
-  async uploadProfileImage(request: Request, response: Response): Promise<void> {
-    const userId = (request as AuthenticatedRequest).auth?.userId;
-    if (!userId) {
-      throw new AppError({ status: 401, code: ErrorCode.UNAUTHORIZED, message: "Autenticação obrigatória." });
+  async getMyProfile(request: Request, response: Response): Promise<void> {
+    const userId = requireUserId(request);
+    sendSuccess(response, await this.userService.getMyProfile(userId));
+  }
+
+  async updateMyProfile(request: Request, response: Response): Promise<void> {
+    const userId = requireUserId(request);
+    const parsed = updateUserProfileSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Dados do perfil inválidos.", cause: parsed.error });
     }
+    sendSuccess(response, await this.userService.updateMyProfile({
+      userId,
+      ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+      ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone } : {}),
+    }));
+  }
+
+  async uploadProfileImage(request: Request, response: Response): Promise<void> {
+    const userId = requireUserId(request);
 
     if (!request.file) {
       throw new AppError({ status: 400, code: ErrorCode.VALIDATION_ERROR, message: "Imagem de perfil obrigatória." });
@@ -37,4 +52,10 @@ export class UserController {
     const result = await this.userService.uploadProfileImage({ userId, ...parsed.data });
     sendSuccess(response, result);
   };
+}
+
+function requireUserId(request: Request): string {
+  const userId = (request as AuthenticatedRequest).auth?.userId;
+  if (!userId) throw new AppError({ status: 401, code: ErrorCode.UNAUTHORIZED, message: "Autenticação obrigatória." });
+  return userId;
 }

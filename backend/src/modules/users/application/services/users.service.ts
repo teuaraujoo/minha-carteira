@@ -1,5 +1,5 @@
 import type { IUsersRepository } from "../../domain/interfaces/users-repository.interface.js";
-import type { UploadProfileImageInput, UploadProfileImageResult } from "../@types/users.types.js";
+import type { UploadProfileImageInput, UploadProfileImageResult, UpdateUserProfileInput, UserProfileOutput } from "../@types/users.types.js";
 import type { AppLogger } from "../../../../shared/application/logging/app-logger.js";
 import { StorageContextType } from "../../../storage/domain/enums/storage.enums.js";
 import type { StorageOperations } from "../../../storage/domain/interfaces/storage.interfaces.js";
@@ -9,7 +9,7 @@ import type { ClockProvider } from "../../../../shared/application/clock-provide
 import type { RegisterUserInput, RegisterUserOutput } from "../dto/register-user.dto.js";
 import { User } from "../../domain/entities/users.entity.js";
 import { mapRegisterUserOutput } from "../mappers/register-user.mapper.js";
-import type { AuthUser, AuthUserCredentials } from "../../domain/interfaces/users.interfaces.js";
+import type { AuthUser, AuthUserCredentials, PasswordResetRecipient } from "../../domain/interfaces/users.interfaces.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 
 
@@ -22,6 +22,26 @@ export class UserService {
     private readonly idGenerator: IdGenerator,
     private readonly clock: ClockProvider,
   ) { }
+
+  async getMyProfile(userId: string): Promise<UserProfileOutput> {
+    const user = await this.userRepository.findActiveById(userId);
+    if (!user) throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado." });
+
+    const profileImage = await this.storageProvider.getActiveFileUrl(StorageContextType.USER_PROFILE, userId);
+    return { ...user.toJSON(), profileImage };
+  }
+
+  async updateMyProfile(input: UpdateUserProfileInput): Promise<UserProfileOutput> {
+    const user = await this.userRepository.findActiveById(input.userId);
+    if (!user) throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado." });
+
+    user.updateProfile({
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    }, this.clock.now());
+    await this.userRepository.save(user);
+    return this.getMyProfile(input.userId);
+  }
 
   async uploadProfileImage(input: UploadProfileImageInput): Promise<UploadProfileImageResult> {
     const profile = await this.userRepository.findActiveById(input.userId);
@@ -93,6 +113,18 @@ export class UserService {
       capabilities: user.capabilities,
       status: user.status,
     };
+  }
+
+  async findActivePasswordResetRecipient(email: string): Promise<PasswordResetRecipient | null> {
+    const user = await this.userRepository.findByEmail(email.trim().toLowerCase());
+    if (!user || !user.isActive()) return null;
+    return { id: user.id, email: user.email };
+  }
+
+  async findActivePasswordResetRecipientById(userId: string): Promise<PasswordResetRecipient | null> {
+    const user = await this.userRepository.findActiveById(userId);
+    if (!user) return null;
+    return { id: user.id, email: user.email };
   }
 
   async changePasswordHash(userId: string, passwordHash: string): Promise<void> {

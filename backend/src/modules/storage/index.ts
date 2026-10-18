@@ -3,6 +3,7 @@ export type {
   ObjectStorageProvider,
   StoredFileInput,
   StoredFileOutput,
+  StoredFileUrlOutput,
 } from "./domain/interfaces/storage.interfaces.js";
 export { StoredFile } from "./domain/entities/stored-file.entity.js";
 export type { StoredFileProperties } from "./domain/entities/stored-file.entity.js";

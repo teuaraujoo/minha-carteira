@@ -16,6 +16,11 @@ export interface StoredFileOutput {
   expiresAt: Date;
 }
 
+export interface StoredFileUrlOutput {
+  url: string;
+  expiresAt: Date;
+}
+
 export interface ObjectStorageProvider {
   upload(key: string, body: Buffer, contentType: string): Promise<void>;
   delete(key: string): Promise<void>;
@@ -26,5 +31,6 @@ export interface StorageOperations {
   upload(key: string, body: Buffer, contentType: string): Promise<void>;
   delete(key: string): Promise<void>;
   getPresignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
+  getActiveFileUrl(contextType: StorageContextType, contextId: string): Promise<StoredFileUrlOutput | null>;
   replaceFileContent(input: StoredFileInput): Promise<StoredFileOutput>;
 }
