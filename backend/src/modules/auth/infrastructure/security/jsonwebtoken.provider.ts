@@ -5,11 +5,8 @@ import type {
   TokenSubject,
   VerifiedToken,
 } from "../../application/contracts/auth.contracts.js";
-import {
-  ACCESS_TOKEN_TTL_MS,
-  REFRESH_TOKEN_TTL_MS,
-} from "../../domain/entities/auth.entities.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
+import { ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../domain/constants/auth.constants.js";
 
 const JWT_ALGORITHM = "HS256" as const;
 

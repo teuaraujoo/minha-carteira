@@ -13,12 +13,10 @@ import { createAuthRouter } from "../modules/auth/presentation/routes/auth.route
 import { createUsersRouter } from "../modules/users/presentation/routes/users.routes.js";
 import { createPinoAppLogger } from "../shared/infrastructure/logging/pino-app-logger.js";
 import { createApp } from "./app.js";
-import { ResendEmailProvider } from "../modules/auth/infrastructure/providers/resend-email.provider.js";
-import { PrismaPasswordResetUnitOfWork } from "../modules/auth/infrastructure/repositories/password-reset.unit-of-work.js";
+import { ResendEmailProvider } from "../shared/infrastructure/providers/email/resend-email.provider.js";
 import { CryptoTokenGenerator } from "../modules/auth/infrastructure/security/crypto-token.generator.js";
 import { InMemoryPasswordResetRateLimiter } from "../modules/auth/infrastructure/security/in-memory-password-reset-rate-limiter.js";
 import { PrismaChallengeRepository } from "../modules/auth/infrastructure/repositories/challenge.repository.js";
-import { PrismaAccountSessionCoordinator } from "../modules/auth/infrastructure/repositories/prisma-account-session-coordinator.js";
 
 export function createCompositionRoot() {
   const logger = createPinoAppLogger();
@@ -27,7 +25,6 @@ export function createCompositionRoot() {
   const passwordHasher = new BcryptPasswordHasher(Number(process.env.BCRYPT_SALT_ROUNDS ?? 12));
   const usersRepository = new PrismaUsersRepository(prisma);
   const refreshTokenRepository = new PrismaRefreshTokenRepository(prisma);
-  const accountSessionCoordinator = new PrismaAccountSessionCoordinator(prisma);
   const r2 = createR2Client({
     accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ?? "",
     secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ID ?? "",
@@ -35,28 +32,15 @@ export function createCompositionRoot() {
     bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME ?? "",
   });
   const storageService = new StorageService(new PrismaStoredFileRepository(), new R2StorageService(r2.client, r2.bucket));
-  const usersService = new UserService(usersRepository, storageService, logger, passwordHasher, idGenerator, clock, accountSessionCoordinator);
+  const usersService = new UserService(usersRepository, storageService, logger, passwordHasher, idGenerator, clock, prisma);
   const jwtProvider = new JsonWebTokenProvider(process.env.JWT_SECRET);
   const tokenHasher = new Sha256TokenHasher();
   const allowedOrigins = configuredOrigins();
-  const passwordResetUnitOfWork = new PrismaPasswordResetUnitOfWork(
-    prisma,
-    (transaction) => new UserService(
-      new PrismaUsersRepository(transaction),
-      storageService,
-      logger,
-      passwordHasher,
-      idGenerator,
-      clock,
-      accountSessionCoordinator,
-    ),
-  );
   const emailProvider = new ResendEmailProvider(
     new Resend(requiredEnvironment("RESEND_API_KEY")),
     requiredEnvironment("RESEND_FROM_EMAIL"),
   );
-  const authService = new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersService, jwtProvider, idGenerator, accountSessionCoordinator, {
-    unitOfWork: passwordResetUnitOfWork,
+  const authService = new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersService, jwtProvider, idGenerator, prisma, {
     challengeRepository: new PrismaChallengeRepository(prisma),
     emailProvider,
     tokenGenerator: new CryptoTokenGenerator(),

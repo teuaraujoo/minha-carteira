@@ -1,3 +1,10 @@
+export type { EmailProvider } from "../../../../shared/application/contracts/email-provider.contract.js";
+export type {
+  AccountReactivationEmail,
+  PasswordChangedEmail,
+  PasswordResetEmail,
+} from "../../../../shared/application/interfaces/auth-emails.interfaces.js";
+
 export interface TokenSubject {
   userId: string;
   sessionId: string;
@@ -33,26 +40,6 @@ export interface AuthenticatedContext {
 
 export interface TokenGenerator {
   generate(): string;
-}
-
-export interface PasswordResetEmail {
-  email: string;
-  resetUrl: string;
-}
-
-export interface PasswordChangedEmail {
-  email: string;
-}
-
-export interface AccountReactivationEmail {
-  email: string;
-  reactivationUrl: string;
-}
-
-export interface EmailProvider {
-  sendPasswordReset(input: PasswordResetEmail): Promise<void>;
-  sendPasswordChanged(input: PasswordChangedEmail): Promise<void>;
-  sendAccountReactivation(input: AccountReactivationEmail): Promise<void>;
 }
 
 export interface PasswordResetRateLimiter {

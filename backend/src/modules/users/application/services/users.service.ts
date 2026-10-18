@@ -10,9 +10,17 @@ import type { RegisterUserInput, RegisterUserOutput } from "../dto/register-user
 import { User } from "../../domain/entities/users.entity.js";
 import { mapRegisterUserOutput } from "../mappers/register-user.mapper.js";
 import type { AccountReactivationRecipient, AuthUser, AuthUserCredentials, PasswordResetRecipient } from "../../domain/interfaces/users.interfaces.js";
-import type { AccountSessionCoordinator } from "../../../auth/index.js";
-import { UserRoles } from "../../domain/enums/users.enums.js";
+import { UserRoles, UserStatus } from "../../domain/enums/users.enums.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
+import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client.js";
+import {
+  ChallengePurpose as PrismaChallengePurpose,
+  ChallengeStatus as PrismaChallengeStatus,
+  ChallengeSubjectType as PrismaChallengeSubjectType,
+  UserStatus as PrismaUserStatus,
+} from "../../../../../generated/prisma/enums.js";
+import { RefreshTokenRevokeReason } from "../../../auth/domain/enums/auth.enums.js";
+import { PrismaRefreshTokenRepository } from "../../../auth/infrastructure/repositories/refresh-token.repository.js";
 
 
 export class UserService {
@@ -23,12 +31,29 @@ export class UserService {
     private readonly passwordHasher: PasswordHasher,
     private readonly idGenerator: IdGenerator,
     private readonly clock: ClockProvider,
-    private readonly accountSessionCoordinator: AccountSessionCoordinator,
+    private readonly prisma: PrismaClient,
   ) { }
 
   async deactivateMyAccount(userId: string): Promise<void> {
     const deactivatedAt = this.clock.now();
-    if (!await this.accountSessionCoordinator.deactivateAccountAndRevokeSessions(userId, deactivatedAt)) {
+    const deactivated = await this.prisma.$transaction(async (transaction) => {
+      const [account] = await this.lockAccount(transaction, userId);
+      if (!account || account.status !== UserStatus.ACTIVE) return false;
+
+      const updated = await transaction.user.updateMany({
+        where: { id: userId, status: PrismaUserStatus.ACTIVE },
+        data: { status: PrismaUserStatus.INACTIVE, inactivatedAt: deactivatedAt, updatedAt: deactivatedAt },
+      });
+      if (updated.count !== 1) return false;
+
+      await new PrismaRefreshTokenRepository(transaction).revokeAllFromUser(
+        userId,
+        deactivatedAt,
+        RefreshTokenRevokeReason.USER_DEACTIVATED,
+      );
+      return true;
+    });
+    if (!deactivated) {
       throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado ou já inativo." });
     }
     this.logger.info({
@@ -40,7 +65,38 @@ export class UserService {
   }
 
   async reactivateUserById(userId: string): Promise<boolean> {
-    const result = await this.accountSessionCoordinator.reactivateAccountAndRevokeSessions(userId, this.clock.now());
+    const reactivatedAt = this.clock.now();
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const [account] = await this.lockAccount(transaction, userId);
+      if (!account) return { found: false, reactivated: false };
+
+      const reactivated = account.status === UserStatus.INACTIVE;
+      if (reactivated) {
+        const updated = await transaction.user.updateMany({
+          where: { id: userId, status: PrismaUserStatus.INACTIVE },
+          data: { status: PrismaUserStatus.ACTIVE, inactivatedAt: null, updatedAt: reactivatedAt },
+        });
+        if (updated.count !== 1) return { found: false, reactivated: false };
+
+        await new PrismaRefreshTokenRepository(transaction).revokeAllFromUser(
+          userId,
+          reactivatedAt,
+          RefreshTokenRevokeReason.USER_DEACTIVATED,
+        );
+      }
+
+      await transaction.challenge.updateMany({
+        where: {
+          purpose: PrismaChallengePurpose.ACCOUNT_REACTIVATION,
+          subjectType: PrismaChallengeSubjectType.USER,
+          subjectId: userId,
+          status: PrismaChallengeStatus.REQUESTED,
+        },
+        data: { status: PrismaChallengeStatus.FAILED, updatedAt: reactivatedAt },
+      });
+
+      return { found: true, reactivated };
+    });
     if (!result.found) return false;
 
     if (result.reactivated) {
@@ -180,5 +236,17 @@ export class UserService {
     if (!user) throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado." });
     user.changePasswordHash(passwordHash, this.clock.now());
     await this.userRepository.save(user);
+  }
+
+  private lockAccount(
+    transaction: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<Array<{ status: string }>> {
+    return transaction.$queryRaw<Array<{ status: string }>>`
+      SELECT status::text AS status
+      FROM users
+      WHERE id = ${userId}::uuid
+      FOR UPDATE
+    `;
   }
 }

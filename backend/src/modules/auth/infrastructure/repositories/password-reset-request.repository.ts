@@ -1,11 +1,11 @@
 import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client.js";
-import { PasswordResetRequest } from "../../domain/entities/auth.entities.js";
+import { PasswordResetRequest } from "../../domain/entities/password-reset-request.entity.js";
 import { PasswordResetRequestStatus as PrismaPasswordResetRequestStatus } from "../../../../../generated/prisma/enums.js";
 import { ChallengeSubjectType as PrismaChallengeSubjectType } from "../../../../../generated/prisma/enums.js";
 import { ChallengePurpose as PrismaChallengePurpose } from "../../../../../generated/prisma/enums.js";
 import { ChallengeStatus as PrismaChallengeStatus } from "../../../../../generated/prisma/enums.js";
-import type { RequestMetadata } from "../../domain/entities/auth.entities.js";
-import type { PasswordResetRequestRepository } from "../../domain/interfaces/password-reset-request-repository.interface.js";
+import type { RequestMetadata } from "../../domain/interfaces/auth.interfaces.js";
+import type { IPasswordResetRequestRepository } from "../../domain/interfaces/password-reset-request-repository.interface.js";
 
 type PrismaResetClient = Pick<PrismaClient, "passwordResetRequest" | "challenge">;
 
@@ -22,7 +22,7 @@ interface PasswordResetRequestRecord {
   updatedAt: Date;
 }
 
-export class PrismaPasswordResetRequestRepository implements PasswordResetRequestRepository {
+export class PrismaPasswordResetRequestRepository implements IPasswordResetRequestRepository {
   constructor(private readonly prisma: PrismaResetClient) { }
 
   async save(request: PasswordResetRequest): Promise<void> {

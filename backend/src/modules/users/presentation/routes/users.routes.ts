@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { ClockProvider } from "../../../../shared/application/clock-provider.js";
 import type { JwtProvider } from "../../../auth/application/contracts/auth.contracts.js";
-import type { RefreshTokenRepository } from "../../../auth/domain/interfaces/refresh-tokens-repository.interface.js";
+import type { IRefreshTokenRepository } from "../../../auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { createAuthenticationMiddleware } from "../../../auth/presentation/middlewares/authentication.middleware.js";
 import { createCsrfValidationMiddleware } from "../../../auth/presentation/middlewares/csrf.middleware.js";
 import { AUTH_COOKIE_NAMES } from "../../../auth/presentation/security/auth-cookies.js";
@@ -13,7 +13,7 @@ import type { UsersAuthGateway } from "../../index.js";
 export interface UsersRoutesDependencies {
   userService: UserService;
   jwtProvider: JwtProvider;
-  refreshTokenRepository: RefreshTokenRepository;
+  refreshTokenRepository: IRefreshTokenRepository;
   usersAuthGateway: UsersAuthGateway;
   clock: ClockProvider;
   allowedOrigins: readonly string[];

@@ -3,7 +3,7 @@ import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-er
 import { sendCreated, sendNoContent, sendSuccess } from "../../../../shared/presentation/http/success-response.js";
 import type { RegisterUserInput } from "../../../users/index.js";
 import type { TokenHasher } from "../../application/contracts/auth.contracts.js";
-import type { RequestMetadata } from "../../domain/entities/auth.entities.js";
+import type { RequestMetadata } from "../../domain/interfaces/auth.interfaces.js";
 import { mapLoginOutput } from "../../application/dto/login.dto.js";
 import type { AuthService } from "../../application/services/auth.service.js";
 import { createAuthenticationMiddleware } from "../middlewares/authentication.middleware.js";

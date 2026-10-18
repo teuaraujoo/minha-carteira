@@ -1,6 +1,7 @@
-import type { Challenge, ChallengeMetadata } from "../entities/auth.entities.js";
+import type { Challenge } from "../entities/challenge.entity.js";
+import type { ChallengeMetadata } from "./auth.interfaces.js";
 
-export interface ChallengeRepository {
+export interface IChallengeRepository {
   save(challenge: Challenge): Promise<void>;
   findById(id: string): Promise<Challenge | null>;
   registerInvalidAttempt(id: string, attemptedAt: Date): Promise<boolean>;

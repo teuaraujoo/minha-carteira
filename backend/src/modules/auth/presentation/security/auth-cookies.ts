@@ -1,5 +1,5 @@
 import type { CookieOptions, Response } from "express";
-import { ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../domain/entities/auth.entities.js";
+import { ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../domain/constants/auth.constants.js";
 
 export const AUTH_COOKIE_NAMES = {
   access: "__Secure-mc_access",

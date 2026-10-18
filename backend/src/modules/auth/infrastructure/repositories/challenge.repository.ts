@@ -1,13 +1,13 @@
 import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client.js";
-import { Challenge } from "../../domain/entities/auth.entities.js";
+import { Challenge } from "../../domain/entities/challenge.entity.js";
 import {
   ChallengePurpose as PrismaChallengePurpose,
   ChallengeStatus as PrismaChallengeStatus,
   ChallengeSubjectType as PrismaChallengeSubjectType,
 } from "../../../../../generated/prisma/enums.js";
-import type { ChallengeMetadata } from "../../domain/entities/auth.entities.js";
+import type { ChallengeMetadata } from "../../domain/interfaces/auth.interfaces.js";
 import { ChallengePurpose, ChallengeSubjectType } from "../../domain/enums/auth.enums.js";
-import type { ChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
+import type { IChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
 
 type PrismaChallengeClient = Pick<PrismaClient, "challenge">;
 
@@ -27,7 +27,7 @@ interface ChallengeRecord {
   updatedAt: Date;
 }
 
-export class PrismaChallengeRepository implements ChallengeRepository {
+export class PrismaChallengeRepository implements IChallengeRepository {
   constructor(private readonly prisma: PrismaChallengeClient) { }
 
   async save(challenge: Challenge): Promise<void> {

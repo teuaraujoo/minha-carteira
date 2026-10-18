@@ -1,19 +1,17 @@
-import type { IdGenerator } from './../../../../shared/application/id-generator.js';
-import type { JwtProvider, TokenHasher, LogoutSessionInput, RefreshSessionInput, RefreshSessionOutput } from '../contracts/auth.contracts.js';
-import type { RefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
-import type { AccountSessionCoordinator } from "../contracts/account-session-coordinator.js";
+import type { IdGenerator } from "../../../../shared/application/id-generator.js";
+import type { JwtProvider, PasswordResetRateLimiter, TokenGenerator, TokenHasher, LogoutSessionInput, RefreshSessionInput, RefreshSessionOutput } from "../contracts/auth.contracts.js";
+import type { IRefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
 import {
-  Challenge,
   ACCOUNT_REACTIVATION_MAX_ATTEMPTS,
   ACCOUNT_REACTIVATION_TOKEN_TTL_MS,
   PASSWORD_RESET_MAX_ATTEMPTS,
   PASSWORD_RESET_TOKEN_TTL_MS,
-  PasswordResetRequest,
   REFRESH_TOKEN_TTL_MS,
-  RefreshToken,
-  type ChallengeMetadata,
-  type RequestMetadata,
-} from "../../domain/entities/auth.entities.js";
+} from "../../domain/constants/auth.constants.js";
+import { Challenge } from "../../domain/entities/challenge.entity.js";
+import { PasswordResetRequest } from "../../domain/entities/password-reset-request.entity.js";
+import { RefreshToken } from "../../domain/entities/refresh-token.entity.js";
+import type { ChallengeMetadata, RequestMetadata } from "../../domain/interfaces/auth.interfaces.js";
 import type { LoginInput, LoginSessionResult } from "../dto/login.dto.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import { RefreshTokenRevokeReason } from "../../domain/enums/auth.enums.js";
@@ -21,10 +19,16 @@ import type { ClockProvider } from "../../../../shared/application/clock-provide
 import type { UsersAuthGateway } from "../../../users/index.js";
 import type { PasswordHasher } from "../../../../shared/application/security/password-hasher.js";
 import type { AppLogger } from "../../../../shared/application/logging/app-logger.js";
-import type { EmailProvider, PasswordResetRateLimiter, TokenGenerator } from "../contracts/auth.contracts.js";
-import type { ChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
-import type { PasswordResetUnitOfWork } from "../contracts/password-reset-unit-of-work.js";
+import type { EmailProvider } from "../../../../shared/application/contracts/email-provider.contract.js";
+import type { IChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
 import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, PasswordResetRequestStatus } from "../../domain/enums/auth.enums.js";
+import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client.js";
+import { UserStatus as PrismaUserStatus } from "../../../../../generated/prisma/enums.js";
+import { PrismaRefreshTokenRepository } from "../../infrastructure/repositories/refresh-token.repository.js";
+import { PrismaChallengeRepository } from "../../infrastructure/repositories/challenge.repository.js";
+import { PrismaPasswordResetRequestRepository } from "../../infrastructure/repositories/password-reset-request.repository.js";
+
+const PASSWORD_RESET_CONCURRENCY_ERROR = Symbol("Falha de concorrência na redefinição de senha.");
 
 export interface RequestPasswordResetInput {
   email: string;
@@ -39,8 +43,7 @@ export interface ConfirmPasswordResetInput {
 }
 
 export interface AuthEmailDependencies {
-  unitOfWork: PasswordResetUnitOfWork;
-  challengeRepository: ChallengeRepository;
+  challengeRepository: IChallengeRepository;
   emailProvider: EmailProvider;
   tokenGenerator: TokenGenerator;
   rateLimiter: PasswordResetRateLimiter;
@@ -48,18 +51,16 @@ export interface AuthEmailDependencies {
   logger: AppLogger;
 }
 
-class PasswordResetConcurrencyError extends Error { }
-
 export class AuthService {
   constructor(
-    private readonly refreshTokenRepository: RefreshTokenRepository,
+    private readonly refreshTokenRepository: IRefreshTokenRepository,
     private readonly clock: ClockProvider,
     private readonly tokenHasher: TokenHasher,
     private readonly passwordHasher: PasswordHasher,
     private readonly usersAuthGateway: UsersAuthGateway,
     private readonly jwtProvider: JwtProvider,
     private idGenerator: IdGenerator,
-    private readonly accountSessionCoordinator: AccountSessionCoordinator,
+    private readonly prisma: PrismaClient,
     private readonly emailFlows?: AuthEmailDependencies,
   ) { }
 
@@ -106,9 +107,9 @@ export class AuthService {
       updatedAt: now,
     });
 
-    await dependencies.unitOfWork.execute(async (transaction) => {
-      await transaction.requests.save(resetRequest);
-      await transaction.challenges.save(challenge);
+    await this.prisma.$transaction(async (transaction) => {
+      await new PrismaPasswordResetRequestRepository(transaction).save(resetRequest);
+      await new PrismaChallengeRepository(transaction).save(challenge);
     });
 
     const resetUrl = new URL("/reset-password", dependencies.frontendUrl);
@@ -123,9 +124,9 @@ export class AuthService {
       });
     } catch {
       try {
-        await dependencies.unitOfWork.execute(async (transaction) => {
-          await transaction.requests.markFailed(requestId, this.clock.now());
-          await transaction.challenges.markFailed(challengeId, this.clock.now());
+        await this.prisma.$transaction(async (transaction) => {
+          await new PrismaPasswordResetRequestRepository(transaction).markFailed(requestId, this.clock.now());
+          await new PrismaChallengeRepository(transaction).markFailed(challengeId, this.clock.now());
         });
       } catch {
         dependencies.logger.error({
@@ -160,31 +161,41 @@ export class AuthService {
 
     let changedEmail: string | null = null;
     try {
-      changedEmail = await dependencies.unitOfWork.execute(async (transaction) => {
-        const challenge = await transaction.challenges.findById(challengeId);
+      changedEmail = await this.prisma.$transaction(async (transaction) => {
+        const challenges = new PrismaChallengeRepository(transaction);
+        const requests = new PrismaPasswordResetRequestRepository(transaction);
+        const refreshTokens = new PrismaRefreshTokenRepository(transaction);
+        const challenge = await challenges.findById(challengeId);
         if (!challenge || challenge.purpose !== ChallengePurpose.PASSWORD_RESET
           || challenge.subjectType !== ChallengeSubjectType.PASSWORD_RESET_REQUEST
           || !challenge.isUsableAt(now)) return null;
 
         if (!await this.tokenHasher.matches(secret, challenge.secretHash)) {
-          await transaction.challenges.registerInvalidAttempt(challengeId, now);
+          await challenges.registerInvalidAttempt(challengeId, now);
           return null;
         }
 
-        const resetRequest = await transaction.requests.findById(challenge.subjectId);
+        const resetRequest = await requests.findById(challenge.subjectId);
         if (!resetRequest || resetRequest.userId.length === 0 || !resetRequest.isPendingAt(now)) return null;
-        const recipient = await transaction.users.findActivePasswordResetRecipientById(resetRequest.userId);
+        const recipient = await transaction.user.findFirst({
+          where: { id: resetRequest.userId, status: PrismaUserStatus.ACTIVE },
+          select: { email: true },
+        });
         if (!recipient) return null;
 
-        if (!await transaction.challenges.completeIfUsable(challengeId, {
+        if (!await challenges.completeIfUsable(challengeId, {
           issued: challenge.metadata.issued,
           consumed: consumedMetadata.consumed,
         }, now)) return null;
-        if (!await transaction.requests.complete(resetRequest.id, now)) throw new PasswordResetConcurrencyError();
+        if (!await requests.complete(resetRequest.id, now)) throw PASSWORD_RESET_CONCURRENCY_ERROR;
 
         const passwordHash = await this.passwordHasher.hash(input.password);
-        await transaction.users.changePasswordHash(resetRequest.userId, passwordHash);
-        await transaction.refreshTokens.revokeAllFromUser(
+        const updatedUser = await transaction.user.updateMany({
+          where: { id: resetRequest.userId, status: PrismaUserStatus.ACTIVE },
+          data: { passwordHash, updatedAt: now },
+        });
+        if (updatedUser.count !== 1) throw PASSWORD_RESET_CONCURRENCY_ERROR;
+        await refreshTokens.revokeAllFromUser(
           resetRequest.userId,
           now,
           RefreshTokenRevokeReason.PASSWORD_RESET,
@@ -192,7 +203,7 @@ export class AuthService {
         return recipient.email;
       });
     } catch (error) {
-      if (error instanceof PasswordResetConcurrencyError) throw invalidResetToken();
+      if (error === PASSWORD_RESET_CONCURRENCY_ERROR) throw invalidResetToken();
       throw error;
     }
 
@@ -379,7 +390,7 @@ export class AuthService {
       createdAt: now,
       updatedAt: now,
     });
-    if (!await this.accountSessionCoordinator.createSessionIfAccountActive(session)) {
+    if (!await this.createSessionIfAccountActive(session)) {
       throw invalidCredentials();
     }
 
@@ -422,6 +433,21 @@ export class AuthService {
     await this.refreshTokenRepository.registerUse(session.id, now);
 
     return { accessToken };
+  }
+
+  private createSessionIfAccountActive(session: RefreshToken): Promise<boolean> {
+    return this.prisma.$transaction(async (transaction) => {
+      const [account] = await transaction.$queryRaw<Array<{ status: string }>>`
+        SELECT status::text AS status
+        FROM users
+        WHERE id = ${session.userId}::uuid
+        FOR UPDATE
+      `;
+      if (!account || account.status !== "ACTIVE") return false;
+
+      await new PrismaRefreshTokenRepository(transaction).save(session);
+      return true;
+    });
   }
 
 }

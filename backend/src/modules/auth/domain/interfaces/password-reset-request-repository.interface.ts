@@ -1,6 +1,6 @@
-import type { PasswordResetRequest } from "../entities/auth.entities.js";
+import type { PasswordResetRequest } from "../entities/password-reset-request.entity.js";
 
-export interface PasswordResetRequestRepository {
+export interface IPasswordResetRequestRepository {
   save(request: PasswordResetRequest): Promise<void>;
   findById(id: string): Promise<PasswordResetRequest | null>;
   complete(id: string, completedAt: Date): Promise<boolean>;
