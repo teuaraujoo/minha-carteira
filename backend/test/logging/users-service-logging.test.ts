@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import type { NextFunction, Request, Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { createApp } from "../../src/app/app.js";
 import { createUserService } from "../users/user-service.test-support.js";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
@@ -137,8 +137,7 @@ test("UserService propagates upload failures without a success log", async () =>
   assert.deepEqual(logger.logs, []);
 });
 
-test("createApp preserves logger-only and default composition options", () => {
+test("createApp accepts explicit composition dependencies", () => {
   const logger = new CapturingLogger();
-  assert.equal(typeof createApp({ logger }).listen, "function");
-  assert.equal(typeof createApp().listen, "function");
+  assert.equal(typeof createApp({ logger, authRouter: Router(), usersRouter: Router(), allowedOrigins: [] }).listen, "function");
 });

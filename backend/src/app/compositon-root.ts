@@ -89,6 +89,10 @@ function requiredFrontendUrl(): string {
 }
 
 function configuredOrigins(): string[] {
-  const value = process.env.FRONTEND_ORIGINS ?? process.env.FRONTEND_URL ?? "";
-  return value.split(",").map((origin) => origin.trim()).filter(Boolean);
+  const value = requiredEnvironment("FRONTEND_ORIGINS");
+  const origins = value.split(",").map((origin) => origin.trim()).filter(Boolean);
+  if (origins.length === 0) {
+    throw new Error("A variável de ambiente FRONTEND_ORIGINS deve conter ao menos uma origem.");
+  }
+  return origins;
 }

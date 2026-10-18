@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
-import express from "express";
+import express, { Router } from "express";
+import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
 import type { Express, NextFunction, Request, Response } from "express";
 import { createApp } from "../../src/app/app.js";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
@@ -79,7 +80,7 @@ test("real HTTP rejects repeated, malformed and overflowing pagination and inter
 });
 
 test("createApp keeps infrastructure endpoints intact and integrates 400/413/404 after routes", async () => {
-  await withServer(createApp(), async (url) => {
+  await withServer(createApp({ logger: noopLogger, authRouter: Router(), usersRouter: Router(), allowedOrigins: [] }), async (url) => {
     assert.equal(await (await fetch(url)).text(), "Hello, World!");
     assert.deepEqual(await (await fetch(`${url}/health`)).json(), { status: "ok" });
     const missing = await fetch(`${url}/api/v1/missing`);

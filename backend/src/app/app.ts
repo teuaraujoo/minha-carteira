@@ -3,7 +3,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import { noopLogger, type AppLogger } from "../shared/application/logging/app-logger.js";
+import type { AppLogger } from "../shared/application/logging/app-logger.js";
 import { LogContext } from "../shared/infrastructure/logging/log-context.js";
 import {
   bodyParserErrorHandler,
@@ -16,16 +16,16 @@ import { createRequestLoggingMiddleware } from "../shared/presentation/middlewar
 import type { Router } from "express";
 
 export interface CreateAppOptions {
-  logger?: AppLogger;
-  authRouter?: Router;
-  usersRouter?: Router;
-  allowedOrigins?: readonly string[];
+  logger: AppLogger;
+  authRouter: Router;
+  usersRouter: Router;
+  allowedOrigins: string[];
 }
 
-export const createApp = (options: CreateAppOptions = {}) => {
+export function createApp(options: CreateAppOptions) {
   const app = express();
-  const logContext = new LogContext(options.logger ?? noopLogger);
-  const allowedOrigins = new Set(options.allowedOrigins ?? configuredOrigins());
+  const logContext = new LogContext(options.logger);
+  const allowedOrigins = new Set(options.allowedOrigins);
 
   app.use(createRequestLoggingMiddleware(logContext));
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
@@ -39,8 +39,8 @@ export const createApp = (options: CreateAppOptions = {}) => {
     }),
   );
 
-  if (options.authRouter) app.use("/api/v1/auth", options.authRouter);
-  if (options.usersRouter) app.use("/api/v1/users", options.usersRouter);
+  app.use("/api/v1/auth", options.authRouter);
+  app.use("/api/v1/users", options.usersRouter);
 
   app.get("/", (_request, response) => {
     response.status(200).send("Hello, World!");
@@ -56,9 +56,4 @@ export const createApp = (options: CreateAppOptions = {}) => {
   app.use(terminateStartedResponse);
 
   return app;
-};
-
-function configuredOrigins(): string[] {
-  const value = process.env.FRONTEND_ORIGINS ?? process.env.FRONTEND_URL ?? "";
-  return value.split(",").map((origin) => origin.trim()).filter(Boolean);
 }

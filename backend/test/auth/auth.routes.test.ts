@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Router } from "express";
+import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
 import type { AddressInfo } from "node:net";
 import type { AuthUser, RegisterUserInput, UsersAuthGateway, UsersRegistrationGateway } from "../../src/modules/users/index.js";
 import { UserStatus, UserRoles } from "../../src/modules/users/domain/enums/users.enums.js";
@@ -16,7 +18,7 @@ const now = new Date("2026-10-17T12:00:00.000Z");
 
 async function withServer(run: (baseUrl: string) => Promise<void>, overrides: Partial<AuthRoutesDependencies> = {}): Promise<void> {
   const dependencies = createDependencies(overrides);
-  const app = createApp({ authRouter: createAuthRouter(dependencies), allowedOrigins: [origin] });
+  const app = createApp({ authRouter: createAuthRouter(dependencies), usersRouter: Router(), logger: noopLogger, allowedOrigins: [origin] });
   const server = app.listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address() as AddressInfo;

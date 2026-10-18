@@ -1,26 +1,45 @@
+import { createLogErrorDiagnostic } from "./shared/infrastructure/logging/log-sanitizer.js";
 import { createCompositionRoot } from "./app/compositon-root.js";
-import { startServer } from "./app/start-server.js";
-import { createPinoAppLogger } from "./shared/infrastructure/logging/pino-app-logger.js";
 
 try {
   const { app, logger } = createCompositionRoot();
-  const port = process.env.PORT ?? 3000;
-  const { shutdown } = startServer(app, logger, port);
+  const PORT = process.env.PORT ?? 3000;
 
-  process.once("SIGINT", () => void shutdown());
-  process.once("SIGTERM", () => void shutdown());
-} catch (error) {
-  const fallbackLogger = createPinoAppLogger({
-    level: "fatal",
-    environment: { NODE_ENV: "production" },
-    destination: process.stderr,
+  const server = app.listen(PORT, () => {
+    logger.info({
+      event: "server.started",
+      module: "server",
+      message: `Servidor rodando na porta ${PORT}`,
+    });
   });
-  fallbackLogger.fatal({
+
+  server.on("error", (error) => {
+    logger.fatal({
+      event: "server.failed",
+      module: "server",
+      message: "Falha ao iniciar o servidor",
+      error,
+    });
+    process.exitCode = 1;
+    void logger.close();
+  });
+
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    server.close(() => void logger.close());
+  };
+
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+} catch (error) {
+  process.stderr.write(`${JSON.stringify({
+    level: "fatal",
     event: "server.failed",
     module: "server",
     message: "Falha ao configurar o servidor",
-    error,
-  });
+    error: { ...createLogErrorDiagnostic(error), stack: "[Pilha indisponível]" },
+  })}\n`);
   process.exitCode = 1;
-  void fallbackLogger.close();
 }

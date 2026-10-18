@@ -4,7 +4,7 @@ import { Writable } from "node:stream";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
-import express from "express";
+import express, { Router } from "express";
 import type { AppLogger, LogInput } from "../../src/shared/application/logging/app-logger.js";
 import { createApp } from "../../src/app/app.js";
 import { LogContext } from "../../src/shared/infrastructure/logging/log-context.js";
@@ -57,7 +57,7 @@ function fixtureApp(logger: AppLogger): Express {
 
 test("HTTP middleware generates an internal UUID and logs one completed summary", async () => {
   const logger = new CapturingLogger();
-  await withServer(createApp({ logger }), async (url) => {
+  await withServer(createApp({ logger, authRouter: Router(), usersRouter: Router(), allowedOrigins: [] }), async (url) => {
     const response = await fetch(`${url}/health?token=synthetic-secret`, { headers: { "x-request-id": "client-controlled" } });
     assert.equal(response.status, 200);
   });
@@ -106,7 +106,7 @@ test("expected and unexpected failures log one diagnostic plus one summary at ce
 
 test("malformed JSON is normalized before logging and does not expose the submitted body", async () => {
   const logger = new CapturingLogger();
-  await withServer(createApp({ logger }), async (url) => {
+  await withServer(createApp({ logger, authRouter: Router(), usersRouter: Router(), allowedOrigins: [] }), async (url) => {
     const response = await fetch(`${url}/health`, {
       method: "POST",
       headers: { "content-type": "application/json" },
