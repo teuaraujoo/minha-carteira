@@ -1,0 +1,22 @@
+name: Auth Profile Local
+values:
+  - key: base_url
+    value: ''
+    enabled: true
+    type: default
+    description: 'Endereço do backend acessível pelo desktop, com transporte compatível com cookies Secure; configure seu endpoint HTTPS.'
+  - key: frontend_origin
+    value: ''
+    enabled: true
+    type: default
+    description: 'Origem exata presente em FRONTEND_ORIGINS, sem caminho nem barra final.'
+  - key: test_username
+    value: ''
+    enabled: true
+    type: default
+    description: 'Username ou e-mail de uma conta de teste ativa já cadastrada.'
+  - key: test_password
+    value: ''
+    enabled: true
+    type: secret
+    description: 'Preencha somente no ambiente local do Postman ou use Vault. Nunca versione o valor.'

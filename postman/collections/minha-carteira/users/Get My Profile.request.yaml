@@ -20,7 +20,7 @@ scripts:
         pm.expect(user).not.to.have.property('password');
         pm.expect(user).not.to.have.property('passwordHash');
       });
-      pm.test('Perfil da sessão atual', () => pm.expect(pm.response.json().data.id).to.equal(pm.variables.get('user_id')));
+      pm.test('Perfil da sessão atual', () => pm.expect(pm.response.json().data.id).to.equal(pm.variables.replaceIn('{{user_id}}')));
       pm.test('Imagem do perfil', () => {
         const image = pm.response.json().data.profileImage;
         if (image !== null) {

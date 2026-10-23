@@ -1,19 +1,21 @@
-$kind: "http-request"
-method: "GET"
+$kind: http-request
+method: GET
 url: "{{base_url}}/api/v1/auth/csrf"
+body:
+  type: json
+  content: ""
 order: 1000
-description: "Obtém o cookie CSRF e captura data.token em csrf_token. Origin é herdado do script da collection."
+description: Obtém o cookie CSRF e captura data.token em csrf_token. Origin é herdado do script da collection.
 scripts:
-  - type: "beforeRequest"
-    language: "text/javascript"
+  - type: beforeRequest
     code: |-
       function clearRuntime(key) {
         pm.variables.set(key, '');
         pm.collectionVariables.unset(key);
       }
       clearRuntime('csrf_token');
-  - type: "afterResponse"
-    language: "text/javascript"
+    language: text/javascript
+  - type: afterResponse
     code: |-
       function setRuntime(key, value) {
         pm.variables.set(key, value);
@@ -30,3 +32,4 @@ scripts:
         pm.expect(decodeURIComponent(cookie.value.split(';')[0].split('=').slice(1).join('='))).to.equal(token);
         setRuntime('csrf_token', token);
       });
+    language: text/javascript
