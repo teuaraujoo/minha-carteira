@@ -1,0 +1,28 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/users/:userId/reactivate"
+order: 3000
+description: "Reativa target_user_id usando a sessão administrativa. O cadastro comum não concede permissão administrativa."
+headers:
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+pathVariables:
+  - key: "userId"
+    value: "{{admin_target_user_id}}"
+    description: "UUID configurado ou capturado na desativação atual."
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function fail(message) {
+        pm.execution.skipRequest();
+        throw new Error(message);
+      }
+      const target = pm.variables.get('target_user_id') || pm.variables.get('deactivated_user_id');
+      if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(target || '')) fail('Configure target_user_id com um UUID válido ou execute a desativação nesta execução.');
+      pm.variables.set('admin_target_user_id', target);
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 204', () => pm.expect(pm.response.code).to.equal(204));
+      pm.test('Resposta sem corpo', () => pm.expect(pm.response.text()).to.equal(''));

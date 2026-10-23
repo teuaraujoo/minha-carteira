@@ -1,0 +1,34 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/users/me/deactivate"
+order: 4000
+description: "Opcional: run_account_deactivation=true. Revoga todas as sessões da conta. Captura deactivated_user_id como alvo padrão da posterior reativação administrativa; target_user_id permite escolher outro alvo."
+headers:
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      if (String(pm.variables.get('run_account_deactivation')) !== 'true') {
+        console.warn('Desativação: etapa opcional não habilitada.');
+        pm.execution.skipRequest();
+      }
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      function clearRuntime(key) {
+        pm.variables.set(key, '');
+        pm.collectionVariables.unset(key);
+      }
+      function setRuntime(key, value) {
+        pm.variables.set(key, value);
+        pm.collectionVariables.set(key, value);
+      }
+      pm.test('Status HTTP esperado: 204', () => pm.expect(pm.response.code).to.equal(204));
+      pm.test('Resposta sem corpo', () => pm.expect(pm.response.text()).to.equal(''));
+      if (pm.response.code === 204) {
+        setRuntime('deactivated_user_id', pm.variables.get('user_id'));
+        clearRuntime('user_id');
+        clearRuntime('session_id');
+      }

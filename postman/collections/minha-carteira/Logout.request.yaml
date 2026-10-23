@@ -1,0 +1,28 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/auth/logout"
+order: 7000
+description: "Última etapa. Revoga a sessão atual (usuário ou administrador) e remove os cookies de acesso, refresh e CSRF."
+headers:
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+scripts:
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      function clearRuntime(key) {
+        pm.variables.set(key, '');
+        pm.collectionVariables.unset(key);
+      }
+      pm.test('Status HTTP esperado: 204', () => pm.expect(pm.response.code).to.equal(204));
+      pm.test('Resposta sem corpo', () => pm.expect(pm.response.text()).to.equal(''));
+      pm.test('Cookies de autenticação removidos', () => {
+        for (const name of ['__Secure-mc_access', '__Secure-mc_refresh', '__Secure-mc_csrf']) {
+          const cookie = pm.response.headers.all().find(header => header.key.toLowerCase() === 'set-cookie' && header.value.startsWith(name + '='));
+          pm.expect(cookie, 'Cookie removido pelo logout').to.exist;
+          pm.expect(cookie.value).to.match(/expires=Thu, 01 Jan 1970/i);
+        }
+      });
+      if (pm.response.code === 204) {
+        for (const key of ['csrf_token', 'user_id', 'session_id']) clearRuntime(key);
+      }

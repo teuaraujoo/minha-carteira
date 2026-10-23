@@ -1,0 +1,73 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/auth/register"
+order: 2000
+description: "Cria uma conta USER de teste com identidade única e captura registered_user_id. Um e-mail fixo existente gera 409."
+headers:
+  - key: "Content-Type"
+    value: "application/json"
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+body:
+  type: "json"
+  content: |-
+    {
+      "username": "{{test_username}}",
+      "name": "Usuário de Teste",
+      "email": "{{test_email}}",
+      "phone": "+5511987654321",
+      "password": "{{test_password}}"
+    }
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function clearRuntime(key) {
+        pm.variables.set(key, '');
+        pm.collectionVariables.unset(key);
+      }
+      function setRuntime(key, value) {
+        pm.variables.set(key, value);
+        pm.collectionVariables.set(key, value);
+      }
+      const suffix = pm.variables.replaceIn('{{$guid}}').replace(/-/g, '');
+      setRuntime('test_username', 'test_' + suffix);
+      setRuntime('test_email', pm.variables.get('registration_email') || 'test_' + suffix + '@example.com');
+      setRuntime('test_password', pm.variables.replaceIn('{{$guid}}') + '!Aa9');
+      clearRuntime('registered_user_id');
+      clearRuntime('deactivated_user_id');
+      clearRuntime('user_id');
+      function resolveBody(value) {
+        if (typeof value === 'string') return pm.variables.replaceIn(value);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveBody(item)]));
+        return value;
+      }
+      pm.request.body.update(JSON.stringify(resolveBody({"username":"{{test_username}}","name":"Usuário de Teste","email":"{{test_email}}","phone":"+5511987654321","password":"{{test_password}}"})));
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      function setRuntime(key, value) {
+        pm.variables.set(key, value);
+        pm.collectionVariables.set(key, value);
+      }
+      pm.test('Status HTTP esperado: 201', () => pm.expect(pm.response.code).to.equal(201));
+      pm.test('Contrato público de usuário', () => {
+        const user = pm.response.json().data;
+        pm.expect(user.id).to.match(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+        for (const field of ['username', 'name', 'email', 'phone']) pm.expect(user[field]).to.be.a('string');
+        pm.expect(user.role).to.be.oneOf(['USER', 'ADMIN']);
+        pm.expect(user.status).to.equal('ACTIVE');
+        pm.expect(user.capabilities).to.be.an('array');
+        pm.expect(user.inactivatedAt).to.equal(null);
+        for (const field of ['createdAt', 'updatedAt']) pm.expect(Number.isNaN(Date.parse(user[field]))).to.equal(false);
+        pm.expect(user).not.to.have.property('password');
+        pm.expect(user).not.to.have.property('passwordHash');
+      });
+      pm.test('Cadastro usa os parâmetros enviados', () => {
+        const user = pm.response.json().data;
+        pm.expect(user.username).to.equal(String(pm.variables.get('test_username')).trim().toLowerCase());
+        pm.expect(user.email).to.equal(String(pm.variables.get('test_email')).trim().toLowerCase());
+        pm.expect(user.role).to.equal('USER');
+        pm.expect(user.capabilities).to.deep.equal([]);
+        setRuntime('registered_user_id', user.id);
+      });

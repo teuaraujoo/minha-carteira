@@ -1,0 +1,62 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/auth/login"
+order: 3500
+description: "Antes da desativação opcional, abre nova sessão com a senha atual; recuperação de senha pode revogar a sessão anterior."
+headers:
+  - key: "Content-Type"
+    value: "application/json"
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+body:
+  type: "json"
+  content: |-
+    {
+      "identifier": "{{test_username}}",
+      "password": "{{test_password}}"
+    }
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function fail(message) {
+        pm.execution.skipRequest();
+        throw new Error(message);
+      }
+      if (String(pm.variables.get('run_account_deactivation')) !== 'true') {
+        console.warn('Nova sessão para desativação: etapa opcional não habilitada.');
+        pm.execution.skipRequest();
+      }
+      else {
+        for (const key of ["test_username","test_password"]) {
+        if (!String(pm.variables.get(key) || '').trim()) fail('Configure o parâmetro obrigatório: ' + key);
+      }
+      }
+      function resolveBody(value) {
+        if (typeof value === 'string') return pm.variables.replaceIn(value);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveBody(item)]));
+        return value;
+      }
+      pm.request.body.update(JSON.stringify(resolveBody({"identifier":"{{test_username}}","password":"{{test_password}}"})));
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      function setRuntime(key, value) {
+        pm.variables.set(key, value);
+        pm.collectionVariables.set(key, value);
+      }
+      pm.test('Status HTTP esperado: 200', () => pm.expect(pm.response.code).to.equal(200));
+      pm.test('Sessão autenticada e cookies seguros', () => {
+        const user = pm.response.json().data.user;
+        pm.expect(user.id).to.match(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+        pm.expect(user.status).to.equal('ACTIVE');
+        pm.expect(user.capabilities).to.be.an('array');
+        pm.expect(user).not.to.have.property('passwordHash');
+        for (const name of ['__Secure-mc_access', '__Secure-mc_refresh']) {
+          const cookie = pm.response.headers.all().find(header => header.key.toLowerCase() === 'set-cookie' && header.value.startsWith(name + '='));
+          pm.expect(cookie, 'Cookie de autenticação obrigatório').to.exist;
+          pm.expect(cookie.value).to.match(/;\s*Secure/i);
+          pm.expect(cookie.value).to.match(/;\s*HttpOnly/i);
+        }
+        setRuntime('user_id', user.id);
+      });

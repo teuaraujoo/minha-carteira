@@ -1,0 +1,41 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/users/me/profile-image"
+order: 3000
+description: "Opcional: run_upload=true e profile_image_path. Envia multipart com profileImage, JPEG/PNG/WebP de até 10 MiB."
+headers:
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+body:
+  type: "formdata"
+  content:
+    - key: "profileImage"
+      type: "file"
+      src: "{{profile_image_path}}"
+      description: "Arquivo local JPEG, PNG ou WebP de até 10 MiB."
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function fail(message) {
+        pm.execution.skipRequest();
+        throw new Error(message);
+      }
+      if (String(pm.variables.get('run_upload')) !== 'true') {
+        console.warn('Upload: etapa opcional não habilitada.');
+        pm.execution.skipRequest();
+      }
+      else {
+        for (const key of ["profile_image_path"]) {
+        if (!String(pm.variables.get(key) || '').trim()) fail('Configure o parâmetro obrigatório: ' + key);
+      }
+      }
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 200', () => pm.expect(pm.response.code).to.equal(200));
+      pm.test('URL e validade da imagem', () => {
+        const image = pm.response.json().data;
+        pm.expect(image.url).to.be.a('string').and.not.empty;
+        pm.expect(Number.isNaN(Date.parse(image.expiresAt))).to.equal(false);
+      });

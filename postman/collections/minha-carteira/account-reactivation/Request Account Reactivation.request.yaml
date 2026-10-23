@@ -1,0 +1,42 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/auth/account-reactivation"
+order: 1000
+description: "Solicita o envio por e-mail. 202 não comprova existência da conta nem entrega da mensagem."
+headers:
+  - key: "Content-Type"
+    value: "application/json"
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+body:
+  type: "json"
+  content: |-
+    {
+      "email": "{{flow_email}}",
+      "metadata": {
+        "location": null,
+        "deviceId": null
+      }
+    }
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function fail(message) {
+        pm.execution.skipRequest();
+        throw new Error(message);
+      }
+      const email = pm.variables.get('email_flow_email') || pm.variables.get('test_email');
+      if (!email) fail('Configure email_flow_email ou execute o cadastro.');
+      pm.variables.set('flow_email', email);
+      function resolveBody(value) {
+        if (typeof value === 'string') return pm.variables.replaceIn(value);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveBody(item)]));
+        return value;
+      }
+      pm.request.body.update(JSON.stringify(resolveBody({"email":"{{flow_email}}","metadata":{"location":null,"deviceId":null}})));
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 202', () => pm.expect(pm.response.code).to.equal(202));
+      pm.test('Mensagem genérica de solicitação', () => pm.expect(pm.response.json().data.message).to.be.a('string').and.not.empty);

@@ -1,0 +1,11 @@
+$kind: "http-request"
+method: "GET"
+url: "{{base_url}}/"
+order: 200
+description: "Verifica a resposta da rota raiz."
+scripts:
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 200', () => pm.expect(pm.response.code).to.equal(200));
+      pm.test('Texto da raiz', () => pm.expect(pm.response.text()).to.equal('Hello, World!'));

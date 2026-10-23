@@ -1,0 +1,12 @@
+$kind: "collection"
+name: "Admin"
+order: 6000
+description: "Opcional: run_admin_reactivation=true, admin_identifier e admin_password locais, target_user_id de conta alvo. Login próprio de administrador ativo; substitui a sessão do cookie jar."
+scripts:
+  - type: "http:beforeRequest"
+    language: "text/javascript"
+    code: |-
+      if (String(pm.variables.get('run_admin_reactivation')) !== 'true') {
+        console.warn('Administração: etapa opcional não habilitada.');
+        pm.execution.skipRequest();
+      }

@@ -1,0 +1,4 @@
+$kind: "collection"
+name: "Auth"
+order: 1000
+description: "Cadastro, login e consulta da sessão. Cookies são mantidos pelo cookie jar."

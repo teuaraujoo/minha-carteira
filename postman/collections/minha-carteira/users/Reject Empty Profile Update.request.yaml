@@ -1,0 +1,32 @@
+$kind: "http-request"
+method: "PATCH"
+url: "{{base_url}}/api/v1/users/me"
+order: 1500
+description: "Espera 400 ao enviar perfil sem name nem phone."
+headers:
+  - key: "Content-Type"
+    value: "application/json"
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+body:
+  type: "json"
+  content: "{}"
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function resolveBody(value) {
+        if (typeof value === 'string') return pm.variables.replaceIn(value);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveBody(item)]));
+        return value;
+      }
+      pm.request.body.update(JSON.stringify(resolveBody({})));
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 400', () => pm.expect(pm.response.code).to.equal(400));
+      pm.test('Contrato de erro', () => {
+        const error = pm.response.json();
+        pm.expect(error.status).to.equal(400);
+        pm.expect(error.message).to.be.a('string').and.not.empty;
+      });

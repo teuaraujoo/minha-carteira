@@ -1,0 +1,17 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/auth/refresh"
+order: 4000
+description: "Usa o cookie de refresh e renova o cookie de acesso; não retorna tokens no corpo."
+headers:
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+scripts:
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 204', () => pm.expect(pm.response.code).to.equal(204));
+      pm.test('Resposta sem corpo', () => pm.expect(pm.response.text()).to.equal(''));
+      pm.test('Cookie de acesso renovado', () => {
+        pm.expect(pm.response.headers.all().some(header => header.key.toLowerCase() === 'set-cookie' && header.value.startsWith('__Secure-mc_access='))).to.equal(true);
+      });

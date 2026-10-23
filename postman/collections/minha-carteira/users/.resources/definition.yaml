@@ -1,0 +1,4 @@
+$kind: "collection"
+name: "Users"
+order: 2000
+description: "Perfil da conta autenticada. Upload é opcional."

@@ -1,0 +1,48 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/auth/account-reactivation/confirm"
+order: 2000
+description: "Configure account_reactivation_token no ambiente local com o token recebido por e-mail (challengeId.secret). Sem token, a etapa é pulada."
+headers:
+  - key: "Content-Type"
+    value: "application/json"
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+body:
+  type: "json"
+  content: |-
+    {
+      "token": "{{account_reactivation_token}}",
+      "metadata": {
+        "location": null,
+        "deviceId": null
+      }
+    }
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function fail(message) {
+        pm.execution.skipRequest();
+        throw new Error(message);
+      }
+      const token = String(pm.variables.get('account_reactivation_token') || '').trim();
+      if (!token) {
+        console.warn('Confirmação pulada: configure account_reactivation_token com o token recebido por e-mail.');
+        pm.execution.skipRequest();
+      } else {
+        if (!/^[^.]+\.[^.]+$/.test(token)) fail('Token deve seguir o formato challengeId.secret.');
+        pm.variables.set('account_reactivation_token', token);
+        
+      }
+      function resolveBody(value) {
+        if (typeof value === 'string') return pm.variables.replaceIn(value);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveBody(item)]));
+        return value;
+      }
+      pm.request.body.update(JSON.stringify(resolveBody({"token":"{{account_reactivation_token}}","metadata":{"location":null,"deviceId":null}})));
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 204', () => pm.expect(pm.response.code).to.equal(204));
+      pm.test('Resposta sem corpo', () => pm.expect(pm.response.text()).to.equal(''));

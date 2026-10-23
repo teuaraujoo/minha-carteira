@@ -1,0 +1,12 @@
+$kind: "collection"
+name: "Password Reset"
+order: 3000
+description: "Opcional. Solicite o e-mail, obtenha o token fora da API e execute a confirmação separadamente. Configure email_flow_email para a conta correta."
+scripts:
+  - type: "http:beforeRequest"
+    language: "text/javascript"
+    code: |-
+      if (String(pm.variables.get('run_password_reset')) !== 'true') {
+        console.warn('Password Reset: etapa opcional não habilitada.');
+        pm.execution.skipRequest();
+      }

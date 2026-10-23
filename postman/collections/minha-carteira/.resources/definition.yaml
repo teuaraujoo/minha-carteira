@@ -1,0 +1,94 @@
+$kind: "collection"
+name: "Minha Carteira API"
+description: |-
+  Collection de desenvolvimento e testes; a execução cria uma conta e atualiza seu perfil.
+  Configure base_url e frontend_origin (uma origem exata de FRONTEND_ORIGINS, sem caminho). O backend emite cookies Secure; use um endpoint HTTPS confiável com encaminhamento ao backend e mantenha o cookie jar habilitado. O servidor Express não oferece TLS por conta própria.
+  Ordem: saúde, autenticação, perfil, recuperação opcional, nova sessão, desativação opcional, reativação por e-mail opcional, administrador opcional e logout.
+  O cadastro gera username e e-mail únicos por execução; para receber e-mails, configure registration_email antes do cadastro e email_flow_email para uma conta adequada. Para repetir com um e-mail fixo existente, execute Login e os passos desejados individualmente.
+  Tokens de e-mail não são devolvidos pela API: forneça password_reset_token ou account_reactivation_token no ambiente local. Execute solicitação e confirmação separadamente; solicitar um novo token pode invalidar o anterior. Sem token, a confirmação é pulada com aviso.
+  Configure as flags run_* como texto true para habilitar passos opcionais. Upload exige profile_image_path absoluto e arquivo JPEG, PNG ou WebP de até 10 MiB. Desativação revoga todas as sessões. Administração usa login próprio e exige role ADMIN; não há promoção automática.
+  Forneça admin_identifier e admin_password apenas em ambiente local/Vault, nunca em arquivo versionado. Tokens, senhas e IDs capturados são dados de execução; não os publique nem versione após executar. Etapas puladas não representam testes aprovados.
+variables:
+  - key: "base_url"
+    value: "http://localhost:3000"
+    description: "Endereço do backend; cookies Secure exigem transporte compatível. Configure HTTPS no ambiente."
+  - key: "frontend_origin"
+    value: "http://localhost:3001"
+    description: "Substitua por uma origem exata de FRONTEND_ORIGINS."
+  - key: "registration_email"
+    value: ""
+    description: "Opcional: e-mail real da conta de teste; vazio gera endereço único example.com."
+  - key: "email_flow_email"
+    value: ""
+    description: "E-mail da conta ativa para recuperação ou inativa para reativação; vazio usa o e-mail cadastrado."
+  - key: "profile_image_path"
+    value: ""
+    description: "Caminho absoluto com barras / para arquivo local."
+  - key: "run_upload"
+    value: "false"
+    description: "Habilite explicitamente com true; requer os parâmetros descritos na collection."
+  - key: "run_password_reset"
+    value: "false"
+    description: "Habilite explicitamente com true; requer os parâmetros descritos na collection."
+  - key: "run_account_deactivation"
+    value: "false"
+    description: "Habilite explicitamente com true; requer os parâmetros descritos na collection."
+  - key: "run_account_reactivation"
+    value: "false"
+    description: "Habilite explicitamente com true; requer os parâmetros descritos na collection."
+  - key: "run_admin_reactivation"
+    value: "false"
+    description: "Habilite explicitamente com true; requer os parâmetros descritos na collection."
+  - key: "target_user_id"
+    value: ""
+    description: "UUID alvo da reativação administrativa; após desativar, capturado automaticamente se não configurado."
+  - key: "csrf_token"
+    value: ""
+    description: "Capturado durante a execução. Não publique os valores preenchidos."
+  - key: "test_username"
+    value: ""
+    description: "Capturado durante a execução. Não publique os valores preenchidos."
+  - key: "test_email"
+    value: ""
+    description: "Capturado durante a execução. Não publique os valores preenchidos."
+  - key: "test_password"
+    value: ""
+    description: "Capturado durante a execução. Não publique os valores preenchidos."
+  - key: "registered_user_id"
+    value: ""
+    description: "Capturado durante a execução. Não publique os valores preenchidos."
+  - key: "user_id"
+    value: ""
+    description: "Capturado durante a execução. Não publique os valores preenchidos."
+  - key: "session_id"
+    value: ""
+    description: "Capturado durante a execução. Não publique os valores preenchidos."
+  - key: "password_reset_token"
+    value: ""
+    description: "Forneça em ambiente local/Vault. Nunca versione valores sensíveis."
+  - key: "account_reactivation_token"
+    value: ""
+    description: "Forneça em ambiente local/Vault. Nunca versione valores sensíveis."
+  - key: "new_password"
+    value: ""
+    description: "Forneça em ambiente local/Vault. Nunca versione valores sensíveis."
+  - key: "admin_identifier"
+    value: ""
+    description: "Forneça em ambiente local/Vault. Nunca versione valores sensíveis."
+  - key: "admin_password"
+    value: ""
+    description: "Forneça em ambiente local/Vault. Nunca versione valores sensíveis."
+scripts:
+  - type: "http:beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function fail(message) {
+        pm.execution.skipRequest();
+        throw new Error(message);
+      }
+      const origin = String(pm.variables.get('frontend_origin') || '').trim();
+      if (!/^https?:\/\/[^/]+$/.test(origin)) fail('Configure frontend_origin como uma origem HTTP(S) sem caminho.');
+      pm.request.headers.upsert({key: 'Origin', value: origin});
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(pm.request.method) && !pm.variables.get('csrf_token')) {
+        fail('Execute Get CSRF Token antes das operações protegidas.');
+      }

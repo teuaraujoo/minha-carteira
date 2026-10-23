@@ -1,0 +1,32 @@
+$kind: "http-request"
+method: "POST"
+url: "{{base_url}}/api/v1/users/:userId/reactivate"
+order: 2500
+description: "Espera 403 para a conta USER criada no cadastro. Não altera o alvo porque a autorização é verificada primeiro."
+headers:
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+pathVariables:
+  - key: "userId"
+    value: "{{registered_user_id}}"
+    description: "UUID capturado no cadastro."
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function fail(message) {
+        pm.execution.skipRequest();
+        throw new Error(message);
+      }
+      for (const key of ["registered_user_id"]) {
+        if (!String(pm.variables.get(key) || '').trim()) fail('Configure o parâmetro obrigatório: ' + key);
+      }
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 403', () => pm.expect(pm.response.code).to.equal(403));
+      pm.test('Contrato de erro', () => {
+        const error = pm.response.json();
+        pm.expect(error.status).to.equal(403);
+        pm.expect(error.message).to.be.a('string').and.not.empty;
+      });

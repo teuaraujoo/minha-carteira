@@ -1,0 +1,4 @@
+$kind: "collection"
+name: "Validation"
+order: 1500
+description: "Cenários negativos sem alteração de contas. Origin e CSRF são removidos somente nas requisições que verificam essas proteções."

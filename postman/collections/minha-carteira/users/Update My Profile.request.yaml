@@ -1,0 +1,49 @@
+$kind: "http-request"
+method: "PATCH"
+url: "{{base_url}}/api/v1/users/me"
+order: 2000
+description: "Atualiza name e phone e verifica os valores retornados."
+headers:
+  - key: "Content-Type"
+    value: "application/json"
+  - key: "X-CSRF-Token"
+    value: "{{csrf_token}}"
+body:
+  type: "json"
+  content: |-
+    {
+      "name": "Usuário de Teste Atualizado",
+      "phone": "+5511987654321"
+    }
+scripts:
+  - type: "beforeRequest"
+    language: "text/javascript"
+    code: |-
+      function resolveBody(value) {
+        if (typeof value === 'string') return pm.variables.replaceIn(value);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveBody(item)]));
+        return value;
+      }
+      pm.request.body.update(JSON.stringify(resolveBody({"name":"Usuário de Teste Atualizado","phone":"+5511987654321"})));
+  - type: "afterResponse"
+    language: "text/javascript"
+    code: |-
+      pm.test('Status HTTP esperado: 200', () => pm.expect(pm.response.code).to.equal(200));
+      pm.test('Contrato público de usuário', () => {
+        const user = pm.response.json().data;
+        pm.expect(user.id).to.match(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+        for (const field of ['username', 'name', 'email', 'phone']) pm.expect(user[field]).to.be.a('string');
+        pm.expect(user.role).to.be.oneOf(['USER', 'ADMIN']);
+        pm.expect(user.status).to.equal('ACTIVE');
+        pm.expect(user.capabilities).to.be.an('array');
+        pm.expect(user.inactivatedAt).to.equal(null);
+        for (const field of ['createdAt', 'updatedAt']) pm.expect(Number.isNaN(Date.parse(user[field]))).to.equal(false);
+        pm.expect(user).not.to.have.property('password');
+        pm.expect(user).not.to.have.property('passwordHash');
+      });
+      pm.test('Campos atualizados', () => {
+        const sent = JSON.parse(pm.variables.replaceIn(pm.request.body.raw));
+        const user = pm.response.json().data;
+        pm.expect(user.id).to.equal(pm.variables.get('user_id'));
+        for (const key of ['name', 'phone']) if (sent[key] !== undefined) pm.expect(user[key]).to.equal(sent[key].trim());
+      });
