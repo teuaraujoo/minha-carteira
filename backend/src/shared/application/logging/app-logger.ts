@@ -1,6 +1,7 @@
 export const LOG_MODULES = [
   "http",
   "server",
+  "database",
   "auth",
   "accounts",
   "categories",
@@ -18,6 +19,10 @@ export type LogEvent =
   | "http.request.failed"
   | "server.started"
   | "server.failed"
+  | "database.seed.completed"
+  | "database.seed.failed"
+  | "database.reset.completed"
+  | "database.reset.failed"
   | "users.profile-image.uploaded"
   | "users.account.deactivated"
   | "users.account.reactivated"
