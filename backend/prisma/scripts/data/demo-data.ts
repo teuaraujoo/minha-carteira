@@ -6,10 +6,10 @@ import type { PasswordHasher } from "../../../src/shared/application/security/pa
 import { createUserSchema } from "../../../src/modules/users/presentation/schemas/users.schemas.js";
 
 export const DEMO_USERS = [
-  { id: "71000000-0000-4000-8000-000000000001", username: "seed_admin", name: "Administrador de Demonstração", email: "seed.admin@example.com", role: UserRoles.ADMIN, capabilities: [], status: UserStatus.ACTIVE },
-  { id: "71000000-0000-4000-8000-000000000002", username: "seed_user", name: "Usuário de Demonstração", email: "seed.user@example.com", role: UserRoles.USER, capabilities: [], status: UserStatus.ACTIVE },
-  { id: "71000000-0000-4000-8000-000000000003", username: "seed_telegram", name: "Usuário com Capacidade Telegram", email: "seed.telegram@example.com", role: UserRoles.USER, capabilities: [UserCapabilities.TELEGRAM_MESSAGES], status: UserStatus.ACTIVE },
-  { id: "71000000-0000-4000-8000-000000000004", username: "seed_inactive", name: "Usuário Inativo de Demonstração", email: "seed.inactive@example.com", role: UserRoles.USER, capabilities: [], status: UserStatus.INACTIVE },
+  { id: "71000000-0000-4000-8000-000000000001", username: "teste admin", name: "Administrador de Demonstração", email: "teste.admin@example.com", role: UserRoles.ADMIN, capabilities: [], status: UserStatus.ACTIVE },
+  { id: "71000000-0000-4000-8000-000000000002", username: "teste user", name: "Usuário de Demonstração", email: "teste.user@example.com", role: UserRoles.USER, capabilities: [], status: UserStatus.ACTIVE },
+  { id: "71000000-0000-4000-8000-000000000003", username: "teste telegram", name: "Usuário com Capacidade Telegram", email: "teste.telegram@example.com", role: UserRoles.USER, capabilities: [UserCapabilities.TELEGRAM_MESSAGES], status: UserStatus.ACTIVE },
+  { id: "71000000-0000-4000-8000-000000000004", username: "teste inactive", name: "Usuário Inativo de Demonstração", email: "teste.inactive@example.com", role: UserRoles.USER, capabilities: [], status: UserStatus.INACTIVE },
 ];
 
 export const DEMO_AVATAR = Buffer.from(

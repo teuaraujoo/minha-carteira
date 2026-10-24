@@ -34,7 +34,9 @@ try {
   });
   const storage = new R2StorageService(r2.client, r2.bucket);
   const pool = new Pool({ connectionString: target.connectionString });
-  const prisma = new PrismaClient({ adapter: new PrismaPg(pool, { schema: target.schema }) });
+  const prisma = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: target.connectionString }, { schema: target.schema }),
+  });
   try {
     const client = await pool.connect();
     try { await listApplicationTables(client, target.schema); } finally { client.release(); }
