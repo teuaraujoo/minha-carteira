@@ -4,8 +4,6 @@ import type { AppLogger } from "../../../../shared/application/logging/app-logge
 import { StorageContextType } from "../../../storage/domain/enums/storage.enums.js";
 import type { StorageOperations } from "../../../storage/domain/interfaces/storage.interfaces.js";
 import type { PasswordHasher } from "../../../../shared/application/security/password-hasher.js";
-import type { IdGenerator } from "../../../../shared/application/id-generator.js";
-import type { ClockProvider } from "../../../../shared/application/clock-provider.js";
 import type { RegisterUserInput, RegisterUserOutput } from "../dto/register-user.dto.js";
 import { User } from "../../domain/entities/users.entity.js";
 import { mapRegisterUserOutput } from "../mappers/register-user.mapper.js";
@@ -29,13 +27,11 @@ export class UserService {
     private readonly storageProvider: StorageOperations,
     private readonly logger: AppLogger,
     private readonly passwordHasher: PasswordHasher,
-    private readonly idGenerator: IdGenerator,
-    private readonly clock: ClockProvider,
     private readonly prisma: PrismaClient,
   ) { }
 
   async deactivateMyAccount(userId: string): Promise<void> {
-    const deactivatedAt = this.clock.now();
+    const deactivatedAt = new Date();
     const deactivated = await this.prisma.$transaction(async (transaction) => {
       const [account] = await this.lockAccount(transaction, userId);
       if (!account || account.status !== UserStatus.ACTIVE) return false;
@@ -65,7 +61,7 @@ export class UserService {
   }
 
   async reactivateUserById(userId: string): Promise<boolean> {
-    const reactivatedAt = this.clock.now();
+    const reactivatedAt = new Date();
     const result = await this.prisma.$transaction(async (transaction) => {
       const [account] = await this.lockAccount(transaction, userId);
       if (!account) return { found: false, reactivated: false };
@@ -136,7 +132,7 @@ export class UserService {
     user.updateProfile({
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
-    }, this.clock.now());
+    });
     await this.userRepository.save(user);
     return this.getMyProfile(input.userId);
   }
@@ -181,17 +177,16 @@ export class UserService {
       throw new TypeError("O hash da senha é obrigatório.");
     }
 
-    const user = User.create({
-      id: this.idGenerator.generate(),
+    const newUser = User.prepareCreation({
       username,
       name,
       email,
       phone: input.phone,
       passwordHash,
-      createdAt: this.clock.now(),
+      createdAt: new Date(),
     });
 
-    await this.userRepository.save(user);
+    const user = await this.userRepository.create(newUser);
 
     return mapRegisterUserOutput(user);
   }
@@ -234,7 +229,7 @@ export class UserService {
   async changePasswordHash(userId: string, passwordHash: string): Promise<void> {
     const user = await this.userRepository.findById(userId);
     if (!user) throw new AppError({ status: 404, code: ErrorCode.NOT_FOUND, message: "Usuário não encontrado." });
-    user.changePasswordHash(passwordHash, this.clock.now());
+    user.changePasswordHash(passwordHash);
     await this.userRepository.save(user);
   }
 

@@ -20,8 +20,6 @@ import { PrismaChallengeRepository } from "../modules/auth/infrastructure/reposi
 
 export function createCompositionRoot() {
   const logger = createPinoAppLogger();
-  const clock = { now: () => new Date() };
-  const idGenerator = { generate: () => randomUUID() };
   const passwordHasher = new BcryptPasswordHasher(Number(process.env.BCRYPT_SALT_ROUNDS ?? 12));
   const usersRepository = new PrismaUsersRepository(prisma);
   const refreshTokenRepository = new PrismaRefreshTokenRepository(prisma);
@@ -32,7 +30,7 @@ export function createCompositionRoot() {
     bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME ?? "",
   });
   const storageService = new StorageService(new PrismaStoredFileRepository(), new R2StorageService(r2.client, r2.bucket));
-  const usersService = new UserService(usersRepository, storageService, logger, passwordHasher, idGenerator, clock, prisma);
+  const userService = new UserService(usersRepository, storageService, logger, passwordHasher, prisma);
   const jwtProvider = new JsonWebTokenProvider(process.env.JWT_SECRET);
   const tokenHasher = new Sha256TokenHasher();
   const allowedOrigins = configuredOrigins();
@@ -40,7 +38,7 @@ export function createCompositionRoot() {
     new Resend(requiredEnvironment("RESEND_API_KEY")),
     requiredEnvironment("RESEND_FROM_EMAIL"),
   );
-  const authService = new AuthService(refreshTokenRepository, clock, tokenHasher, passwordHasher, usersService, jwtProvider, idGenerator, prisma, {
+  const authService = new AuthService(refreshTokenRepository, tokenHasher, passwordHasher, userService, jwtProvider, prisma, {
     challengeRepository: new PrismaChallengeRepository(prisma),
     emailProvider,
     tokenGenerator: new CryptoTokenGenerator(),
@@ -48,24 +46,20 @@ export function createCompositionRoot() {
     frontendUrl: requiredFrontendUrl(),
     logger,
   });
-  const authRouter = createAuthRouter({
+  const authRouter = createAuthRouter(
     authService,
-    usersRegistrationGateway: usersService,
-    jwtProvider,
-    refreshTokenRepository,
-    usersAuthGateway: usersService,
-    clock,
-    allowedOrigins,
     tokenHasher,
-  });
-  const usersRouter = createUsersRouter({
-    userService: usersService,
+    jwtProvider,
+    userService,
+    refreshTokenRepository,
+    allowedOrigins,
+  );
+  const usersRouter = createUsersRouter(
+    userService,
     jwtProvider,
     refreshTokenRepository,
-    usersAuthGateway: usersService,
-    clock,
     allowedOrigins,
-  });
+  );
   const app = createApp({ logger, authRouter, usersRouter, allowedOrigins });
 
   return { app, logger };

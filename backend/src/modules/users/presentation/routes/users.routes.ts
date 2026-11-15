@@ -1,5 +1,4 @@
 import { Router } from "express";
-import type { ClockProvider } from "../../../../shared/application/clock-provider.js";
 import type { JwtProvider } from "../../../auth/application/contracts/auth.contracts.js";
 import type { IRefreshTokenRepository } from "../../../auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { createAuthenticationMiddleware } from "../../../auth/presentation/middlewares/authentication.middleware.js";
@@ -8,25 +7,22 @@ import { AUTH_COOKIE_NAMES } from "../../../auth/presentation/security/auth-cook
 import type { UserService } from "../../application/services/users.service.js";
 import { UserController } from "../controllers/users.controller.js";
 import { profileImageUpload } from "../middlewares/image-upload.middleware.js";
-import type { UsersAuthGateway } from "../../index.js";
+import type { AuthService } from "../../../auth/application/services/auth.service.js";
 
-export interface UsersRoutesDependencies {
-  userService: UserService;
-  jwtProvider: JwtProvider;
-  refreshTokenRepository: IRefreshTokenRepository;
-  usersAuthGateway: UsersAuthGateway;
-  clock: ClockProvider;
-  allowedOrigins: readonly string[];
-}
 
-export function createUsersRouter(dependencies: UsersRoutesDependencies): Router {
+export function createUsersRouter(
+  userService: UserService,
+  jwtProvider: JwtProvider,
+  refreshTokenRepository: IRefreshTokenRepository,
+  allowedOrigins: string[]
+): Router {
   const router = Router();
-  const controller = new UserController(dependencies.userService);
+  const controller = new UserController(userService);
   const authenticate = createAuthenticationMiddleware(
-    dependencies,
-    (request) => request.cookies?.[AUTH_COOKIE_NAMES.access],
+    { jwtProvider, refreshTokenRepository, userService },
+      (request) => request.cookies?.[AUTH_COOKIE_NAMES.access],
   );
-  const validateCsrf = createCsrfValidationMiddleware(new Set(dependencies.allowedOrigins));
+  const validateCsrf = createCsrfValidationMiddleware(new Set(allowedOrigins));
 
   router.get("/me", authenticate, (request, response) => controller.getMyProfile(request, response));
   router.patch("/me", authenticate, validateCsrf, (request, response) => controller.updateMyProfile(request, response));

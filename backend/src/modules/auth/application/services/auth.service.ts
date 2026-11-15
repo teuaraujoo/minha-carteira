@@ -1,4 +1,3 @@
-import type { IdGenerator } from "../../../../shared/application/id-generator.js";
 import type { JwtProvider, PasswordResetRateLimiter, TokenGenerator, TokenHasher, LogoutSessionInput, RefreshSessionInput, RefreshSessionOutput } from "../contracts/auth.contracts.js";
 import type { IRefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
 import {
@@ -15,18 +14,18 @@ import type { ChallengeMetadata, RequestMetadata } from "../../domain/interfaces
 import type { LoginInput, LoginSessionResult } from "../dto/login.dto.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import { RefreshTokenRevokeReason } from "../../domain/enums/auth.enums.js";
-import type { ClockProvider } from "../../../../shared/application/clock-provider.js";
-import type { UsersAuthGateway } from "../../../users/index.js";
 import type { PasswordHasher } from "../../../../shared/application/security/password-hasher.js";
 import type { AppLogger } from "../../../../shared/application/logging/app-logger.js";
 import type { EmailProvider } from "../../../../shared/application/contracts/email-provider.contract.js";
 import type { IChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
 import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, PasswordResetRequestStatus } from "../../domain/enums/auth.enums.js";
-import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client.js";
+import type { PrismaClient } from "../../../../../generated/prisma/client.js";
 import { UserStatus as PrismaUserStatus } from "../../../../../generated/prisma/enums.js";
 import { PrismaRefreshTokenRepository } from "../../infrastructure/repositories/refresh-token.repository.js";
 import { PrismaChallengeRepository } from "../../infrastructure/repositories/challenge.repository.js";
 import { PrismaPasswordResetRequestRepository } from "../../infrastructure/repositories/password-reset-request.repository.js";
+import { randomUUID } from "node:crypto";
+import type { UserService } from "../../../users/application/services/users.service.js";
 
 const PASSWORD_RESET_CONCURRENCY_ERROR = Symbol("Falha de concorrência na redefinição de senha.");
 
@@ -54,12 +53,10 @@ export interface AuthEmailDependencies {
 export class AuthService {
   constructor(
     private readonly refreshTokenRepository: IRefreshTokenRepository,
-    private readonly clock: ClockProvider,
     private readonly tokenHasher: TokenHasher,
     private readonly passwordHasher: PasswordHasher,
-    private readonly usersAuthGateway: UsersAuthGateway,
+    private readonly userService: UserService,
     private readonly jwtProvider: JwtProvider,
-    private idGenerator: IdGenerator,
     private readonly prisma: PrismaClient,
     private readonly emailFlows?: AuthEmailDependencies,
   ) { }
@@ -67,15 +64,15 @@ export class AuthService {
   async requestPasswordReset(input: RequestPasswordResetInput): Promise<void> {
     const dependencies = this.requireEmailFlows();
     const normalizedEmail = input.email.trim().toLowerCase();
-    const now = this.clock.now();
+    const now = new Date();
     const metadata = snapshotMetadata(input.metadata);
     if (!dependencies.rateLimiter.consume(normalizedEmail, metadata.ipAddress ?? "desconhecido", now)) return;
 
-    const recipient = await this.usersAuthGateway.findActivePasswordResetRecipient(normalizedEmail);
+    const recipient = await this.userService.findActivePasswordResetRecipient(normalizedEmail);
     if (!recipient) return;
 
-    const requestId = this.idGenerator.generate();
-    const challengeId = this.idGenerator.generate();
+    const requestId = randomUUID();
+    const challengeId = randomUUID();
     const secret = dependencies.tokenGenerator.generate();
     const secretHash = await this.tokenHasher.hash(secret);
     const expiresAt = new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS);
@@ -124,9 +121,10 @@ export class AuthService {
       });
     } catch {
       try {
+        const now = new Date()
         await this.prisma.$transaction(async (transaction) => {
-          await new PrismaPasswordResetRequestRepository(transaction).markFailed(requestId, this.clock.now());
-          await new PrismaChallengeRepository(transaction).markFailed(challengeId, this.clock.now());
+          await new PrismaPasswordResetRequestRepository(transaction).markFailed(requestId, now);
+          await new PrismaChallengeRepository(transaction).markFailed(challengeId, now);
         });
       } catch {
         dependencies.logger.error({
@@ -153,7 +151,7 @@ export class AuthService {
     }
     const [challengeId, secret, ...extra] = input.token.split(".");
     if (!challengeId || !secret || extra.length > 0) throw invalidResetToken();
-    const now = this.clock.now();
+    const now = new Date();
     const consumedMetadata: ChallengeMetadata = {
       issued: snapshotMetadata(input.metadata),
       consumed: snapshotMetadata(input.metadata),
@@ -229,14 +227,14 @@ export class AuthService {
   async requestAccountReactivation(input: RequestPasswordResetInput): Promise<void> {
     const dependencies = this.requireEmailFlows();
     const normalizedEmail = input.email.trim().toLowerCase();
-    const now = this.clock.now();
+    const now = new Date();
     const metadata = snapshotMetadata(input.metadata);
     if (!dependencies.rateLimiter.consume(normalizedEmail, metadata.ipAddress ?? "desconhecido", now)) return;
 
-    const recipient = await this.usersAuthGateway.findInactiveAccountReactivationRecipient(normalizedEmail);
+    const recipient = await this.userService.findInactiveAccountReactivationRecipient(normalizedEmail);
     if (!recipient) return;
 
-    const challengeId = this.idGenerator.generate();
+    const challengeId = randomUUID();
     const secret = dependencies.tokenGenerator.generate();
     const secretHash = await this.tokenHasher.hash(secret);
     const expiresAt = new Date(now.getTime() + ACCOUNT_REACTIVATION_TOKEN_TTL_MS);
@@ -269,7 +267,8 @@ export class AuthService {
       });
     } catch {
       try {
-        await dependencies.challengeRepository.markFailed(challengeId, this.clock.now());
+        const failedAt = new Date()
+        await dependencies.challengeRepository.markFailed(challengeId, failedAt);
       } catch {
         dependencies.logger.error({
           event: "auth.account-reactivation.email-failed",
@@ -293,7 +292,7 @@ export class AuthService {
     const [challengeId, secret, ...extra] = input.token.split(".");
     if (!challengeId || !secret || extra.length > 0) throw invalidAccountReactivationToken();
 
-    const now = this.clock.now();
+    const now = new Date();
     const challenge = await dependencies.challengeRepository.findById(challengeId);
     if (!challenge || challenge.purpose !== ChallengePurpose.ACCOUNT_REACTIVATION
       || challenge.subjectType !== ChallengeSubjectType.USER || !challenge.isUsableAt(now)) {
@@ -326,7 +325,7 @@ export class AuthService {
       throw invalidAccountReactivationToken();
     }
 
-    if (!await this.usersAuthGateway.reactivateUserById(challenge.subjectId)) {
+    if (!await this.userService.reactivateUserById(challenge.subjectId)) {
       throw invalidAccountReactivationToken();
     }
 
@@ -352,7 +351,7 @@ export class AuthService {
     }
 
     const identifier = input.identifier.trim().toLowerCase();
-    const credentials = await this.usersAuthGateway.findCredentialsByIdentifier(identifier);
+    const credentials = await this.userService.findCredentialsByIdentifier(identifier);
     if (!credentials) throw invalidCredentials();
 
     const passwordMatches = await this.passwordHasher.compare(
@@ -361,11 +360,11 @@ export class AuthService {
     );
     if (!passwordMatches || credentials.status !== "ACTIVE") throw invalidCredentials();
 
-    const user = await this.usersAuthGateway.findActiveUserById(credentials.id);
+    const user = await this.userService.findActiveUserById(credentials.id);
     if (!user || user.status !== "ACTIVE") throw invalidCredentials();
 
-    const now = this.clock.now();
-    const sessionId = this.idGenerator.generate();
+    const now = new Date();
+    const sessionId = randomUUID();
     const tokenSubject = { userId: credentials.id, sessionId };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtProvider.signAccessToken(tokenSubject),
@@ -401,9 +400,10 @@ export class AuthService {
     const sessionId = input?.sessionId;
     if (typeof sessionId !== "string" || !sessionId.trim()) return;
 
+    const revokedAt = new Date();
     await this.refreshTokenRepository.revoke(
       sessionId,
-      this.clock.now(),
+      revokedAt,
       RefreshTokenRevokeReason.LOGOUT,
     );
   }
@@ -416,14 +416,14 @@ export class AuthService {
     const verified = await this.jwtProvider.verifyRefreshToken(input.refreshToken);
     if (verified.type !== "refresh") throw unauthorized();
 
-    const now = this.clock.now();
+    const now = new Date();
     const session = await this.refreshTokenRepository.findActiveById(verified.sessionId, now);
     if (!session || session.userId !== verified.userId
       || !await this.tokenHasher.matches(input.refreshToken, session.tokenHash)) {
       throw unauthorized();
     }
 
-    const user = await this.usersAuthGateway.findActiveUserById(verified.userId);
+    const user = await this.userService.findActiveUserById(verified.userId);
     if (!user || user.status !== "ACTIVE") throw unauthorized();
 
     const accessToken = await this.jwtProvider.signAccessToken({

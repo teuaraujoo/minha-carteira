@@ -1,17 +1,15 @@
 import type { Request, RequestHandler } from "express";
-import type { ClockProvider } from "../../../../shared/application/clock-provider.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
-import type { UsersAuthGateway } from "../../../users/index.js";
 import type { JwtProvider } from "../../application/contracts/auth.contracts.js";
 import type { IRefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
+import type { UserService } from "../../../users/application/services/users.service.js";
 
 export type AccessTokenResolver = (request: Request) => string | undefined;
 
 export interface AuthenticationMiddlewareDependencies {
   jwtProvider: JwtProvider;
   refreshTokenRepository: IRefreshTokenRepository;
-  usersAuthGateway: UsersAuthGateway;
-  clock: ClockProvider;
+  userService: UserService
 }
 
 export function createAuthenticationMiddleware(
@@ -28,11 +26,11 @@ export function createAuthenticationMiddleware(
 
       const session = await dependencies.refreshTokenRepository.findActiveById(
         verified.sessionId,
-        dependencies.clock.now(),
+        new Date()
       );
       if (!session || session.userId !== verified.userId) throw unauthorized();
 
-      const user = await dependencies.usersAuthGateway.findActiveUserById(verified.userId);
+      const user = await dependencies.userService.findActiveUserById(verified.userId);
       if (!user || user.status !== "ACTIVE") throw unauthorized();
 
       request.auth = { userId: verified.userId, sessionId: verified.sessionId };

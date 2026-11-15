@@ -1,4 +1,4 @@
-import { User } from "../../domain/entities/users.entity.js";
+import { type NewUserProps, User } from "../../domain/entities/users.entity.js";
 import { UserCapabilities, UserRoles, UserStatus } from "../../domain/enums/users.enums.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import type { IUsersRepository } from "../../domain/interfaces/users-repository.interface.js";
@@ -49,12 +49,24 @@ export class PrismaUsersRepository implements IUsersRepository {
     }) as UserRecord | null);
   }
 
-  async save(user: User): Promise<void> {
+  async create(data: NewUserProps): Promise<User> {
     try {
-      await this.prisma.user.upsert({
+      const created = await this.prisma.user.create({
+        data: data as unknown as Prisma.UserUncheckedCreateInput,
+      });
+      return this.toDomain(created as UserRecord)!;
+    } catch (error) {
+      const conflictField = this.identityConflictField(error);
+      if (conflictField) throw new AppError({ status: 409, code: ErrorCode.CONFLICT, message: "E-mail ou nome de usuário já está em uso.", cause: error });
+      throw error;
+    }
+  }
+
+  async save(user: User): Promise<User> {
+    try {
+      const updated = await this.prisma.user.update({
         where: { id: user.id },
-        create: this.toRecord(user) as unknown as Prisma.UserUncheckedCreateInput,
-        update: {
+        data: {
           username: user.username,
           name: user.name,
           email: user.email,
@@ -67,6 +79,7 @@ export class PrismaUsersRepository implements IUsersRepository {
           inactivatedAt: user.inactivatedAt,
         } as Prisma.UserUncheckedUpdateInput,
       });
+      return this.toDomain(updated as UserRecord)!;
     } catch (error) {
       const conflictField = this.identityConflictField(error);
       if (conflictField) throw new AppError({ status: 409, code: ErrorCode.CONFLICT, message: "E-mail ou nome de usuário já está em uso.", cause: error });
@@ -93,23 +106,6 @@ export class PrismaUsersRepository implements IUsersRepository {
   private toDomain(record: UserRecord | null): User | null {
     if (!record) return null;
     return new User({ ...record });
-  }
-
-  private toRecord(user: User): UserRecord {
-    return {
-      id: user.id,
-      username: user.username.trim().toLowerCase(),
-      name: user.name.trim(),
-      email: user.email.trim().toLowerCase(),
-      phone: user.phone,
-      role: user.role,
-      passwordHash: user.passwordHash,
-      capabilities: user.capabilities,
-      status: user.status,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      inactivatedAt: user.inactivatedAt,
-    };
   }
 
   private identityConflictField(error: unknown): "email" | "username" | null {

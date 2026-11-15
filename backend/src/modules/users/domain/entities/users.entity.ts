@@ -16,7 +16,6 @@ export interface UserProps {
 }
 
 export interface UserCreationProps {
-  id: string;
   username: string;
   name: string;
   email: string;
@@ -24,6 +23,8 @@ export interface UserCreationProps {
   passwordHash: string;
   createdAt: Date;
 }
+
+export type NewUserProps = Omit<UserProps, "id">;
 
 export class User {
   private readonly userId: string;
@@ -72,17 +73,29 @@ export class User {
     }
   }
 
-  static create(props: UserCreationProps): User {
+  static prepareCreation(props: UserCreationProps): NewUserProps {
+    const username = User.normalizeRequired(props.username, "Nome de usuário").toLowerCase();
+    if (username.includes("@")) {
+      throw new TypeError("Nome de usuário não pode conter @.");
+    }
+    const email = User.normalizeRequired(props.email, "E-mail").toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new TypeError("E-mail inválido.");
+    }
     const createdAt = User.copyValidDate(props.createdAt, "createdAt");
-    return new User({
-      ...props,
+    return {
+      username,
+      name: User.normalizeRequired(props.name, "Nome"),
+      email,
+      phone: User.normalizeBrazilianMobilePhone(props.phone),
+      passwordHash: User.normalizeRequired(props.passwordHash, "Hash da senha"),
       role: UserRoles.USER,
       capabilities: [],
       status: UserStatus.ACTIVE,
       createdAt,
       updatedAt: createdAt,
       inactivatedAt: null,
-    });
+    };
   }
 
   get id(): string {
