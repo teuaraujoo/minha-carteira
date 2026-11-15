@@ -381,38 +381,55 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
               <AccountMetricCard
                 surface="card"
                 label="Saldo atual"
-                value={formatDisplayCurrency(account.currentBalance, hideValues)}
+                value={account.currentBalance}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone="neutral"
               />
               <AccountMetricCard
                 surface="card"
                 label="Saldo inicial"
-                value={formatDisplayCurrency(account.initialBalance, hideValues)}
+                value={account.initialBalance}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone="neutral"
               />
               <AccountMetricCard
                 surface="card"
                 label="Entradas do mês"
-                value={formatDisplayCurrency(selectedMonthFlow.income, hideValues)}
+                value={selectedMonthFlow.income}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone="positive"
               />
               <AccountMetricCard
                 surface="card"
                 label="Saídas do mês"
-                value={formatDisplayCurrency(selectedMonthFlow.expense, hideValues)}
+                value={selectedMonthFlow.expense}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone="negative"
               />
               <AccountMetricCard
                 surface="card"
                 label="Resultado do mês"
-                value={formatDisplayCurrency(monthResult, hideValues)}
+                value={monthResult}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone={monthResult >= 0 ? "positive" : "negative"}
               />
               <AccountMetricCard
                 surface="card"
                 label="Mov. pendentes"
-                value={String(pendingTransactions.length)}
-                secondaryValue={`(${formatDisplayCurrency(pendingTotal, hideValues)})`}
+                value={pendingTransactions.length}
+                valueFormat="integer"
+                secondaryNumber={{
+                  value: pendingTotal,
+                  format: "currency",
+                  hidden: hideValues,
+                  prefix: "(",
+                  suffix: ")",
+                }}
                 tone="warning"
               />
             </div>

@@ -192,21 +192,25 @@ export default function CategoriesPage() {
               <div className="grid grid-cols-1 gap-3 @[360px]:grid-cols-2 @[760px]:grid-cols-4">
                 <AccountMetricCard
                   label="Total cadastradas"
-                  value={String(categories.length)}
+                  value={categories.length}
+                  valueFormat="integer"
                 />
                 <AccountMetricCard
                   label="Ativas"
-                  value={String(activeCount)}
+                  value={activeCount}
+                  valueFormat="integer"
                   tone="positive"
                 />
                 <AccountMetricCard
                   label="Inativas"
-                  value={String(inactiveCount)}
+                  value={inactiveCount}
+                  valueFormat="integer"
                   tone={inactiveCount > 0 ? "warning" : "neutral"}
                 />
                 <AccountMetricCard
                   label="Personalizadas"
-                  value={String(customCount)}
+                  value={customCount}
+                  valueFormat="integer"
                 />
               </div>
             </div>

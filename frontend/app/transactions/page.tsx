@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { formatDisplayCurrency } from "@/components/accounts/account-catalog";
 import { AccountMetricCard } from "@/components/accounts/account-metric-card";
 import {
   confirmMockTransaction,
@@ -342,28 +341,38 @@ export default function TransactionsPage() {
               <div className="grid grid-cols-1 gap-3 @[360px]:grid-cols-2 @[760px]:grid-cols-4">
                 <AccountMetricCard
                   label="Entradas"
-                  value={formatDisplayCurrency(metrics.totalIncome, hideValues)}
+                  value={metrics.totalIncome}
+                  valueFormat="currency"
+                  hideValue={hideValues}
                   tone="positive"
                 />
                 <AccountMetricCard
                   label="Saídas"
-                  value={formatDisplayCurrency(metrics.totalExpense, hideValues)}
+                  value={metrics.totalExpense}
+                  valueFormat="currency"
+                  hideValue={hideValues}
                   tone="negative"
                 />
                 <AccountMetricCard
                   label="Resultado"
-                  value={formatDisplayCurrency(metrics.netResult, hideValues)}
+                  value={metrics.netResult}
+                  valueFormat="currency"
+                  hideValue={hideValues}
                   tone={metrics.netResult >= 0 ? "positive" : "negative"}
                 />
                 <AccountMetricCard
                   label="Receitas pendentes"
-                  value={formatDisplayCurrency(
-                    metrics.pendingIncomeAmount,
-                    hideValues,
-                  )}
-                  secondaryValue={
+                  value={metrics.pendingIncomeAmount}
+                  valueFormat="currency"
+                  hideValue={hideValues}
+                  secondaryNumber={
                     metrics.pendingIncomeCount > 0
-                      ? `(${metrics.pendingIncomeCount})`
+                      ? {
+                          value: metrics.pendingIncomeCount,
+                          format: "integer",
+                          prefix: "(",
+                          suffix: ")",
+                        }
                       : undefined
                   }
                   tone={metrics.pendingIncomeCount > 0 ? "warning" : "neutral"}

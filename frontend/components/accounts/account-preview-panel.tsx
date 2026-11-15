@@ -111,22 +111,30 @@ export function AccountPreviewPanel({
             <div className="grid grid-cols-1 gap-3 @[300px]:grid-cols-2 @[660px]:grid-cols-4">
               <AccountMetricCard
                 label="Saldo atual"
-                value={formatDisplayCurrency(account.currentBalance, hideValues)}
+                value={account.currentBalance}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone="neutral"
               />
               <AccountMetricCard
                 label="Entradas do mês"
-                value={formatDisplayCurrency(account.monthlyIncome, hideValues)}
+                value={account.monthlyIncome}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone="positive"
               />
               <AccountMetricCard
                 label="Saídas do mês"
-                value={formatDisplayCurrency(account.monthlyExpense, hideValues)}
+                value={account.monthlyExpense}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone="negative"
               />
               <AccountMetricCard
                 label="Resultado do mês"
-                value={formatDisplayCurrency(monthlyResult, hideValues)}
+                value={monthlyResult}
+                valueFormat="currency"
+                hideValue={hideValues}
                 tone={monthlyResult >= 0 ? "positive" : "negative"}
               />
             </div>

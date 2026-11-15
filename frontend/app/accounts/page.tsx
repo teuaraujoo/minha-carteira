@@ -11,7 +11,6 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { formatDisplayCurrency } from "@/components/accounts/account-catalog";
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 import { AccountPreviewPanel } from "@/components/accounts/account-preview-panel";
 import { AccountWalletStack } from "@/components/accounts/account-wallet-stack";
@@ -21,6 +20,7 @@ import {
   type AccountItem,
 } from "@/components/accounts/accounts-mock-store";
 import { AppShell } from "@/components/app-shell";
+import { AnimatedMetricNumber } from "@/components/ui/animated-metric-number";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -98,7 +98,11 @@ export default function AccountsPage() {
 
               <div className="flex flex-wrap items-center gap-2.5">
                 <h2 className="text-2xl font-bold tracking-tight text-foreground tabular-nums sm:text-3xl">
-                  {formatDisplayCurrency(consolidatedActiveBalance, hideValues)}
+                  <AnimatedMetricNumber
+                    value={consolidatedActiveBalance}
+                    format="currency"
+                    hidden={hideValues}
+                  />
                 </h2>
                 <Button
                   type="button"

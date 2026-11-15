@@ -1,13 +1,21 @@
 "use client";
 
+import {
+  AnimatedMetricNumber,
+  type AnimatedMetricNumberProps,
+  type MetricNumberFormat,
+} from "@/components/ui/animated-metric-number";
 import { cn } from "@/lib/utils";
 
 export type AccountMetricTone = "neutral" | "positive" | "negative" | "warning";
 
 interface AccountMetricCardProps {
   label: string;
-  value: string;
+  value: number | string;
+  valueFormat?: MetricNumberFormat;
+  hideValue?: boolean;
   secondaryValue?: string;
+  secondaryNumber?: AnimatedMetricNumberProps;
   tone?: AccountMetricTone;
   surface?: "subtle" | "card";
   className?: string;
@@ -22,12 +30,15 @@ const TONE_VALUE_CLASSES: Record<AccountMetricTone, string> = {
 
 /**
  * Cartão padronizado de métrica financeira para garantir alinhamento em linha única,
- * escala tipográfica consistente e ausência de cortes/overflow nos painéis de conta.
+ * escala tipográfica consistente e animação numérica sincronizada nos painéis.
  */
 export function AccountMetricCard({
   label,
   value,
+  valueFormat = "currency",
+  hideValue = false,
   secondaryValue,
+  secondaryNumber,
   tone = "neutral",
   surface = "subtle",
   className,
@@ -51,8 +62,20 @@ export function AccountMetricCard({
           TONE_VALUE_CLASSES[tone],
         )}
       >
-        {value}
-        {secondaryValue ? (
+        {typeof value === "number" ? (
+          <AnimatedMetricNumber
+            value={value}
+            format={valueFormat}
+            hidden={hideValue}
+          />
+        ) : (
+          value
+        )}
+        {secondaryNumber ? (
+          <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+            <AnimatedMetricNumber {...secondaryNumber} />
+          </span>
+        ) : secondaryValue ? (
           <span className="ml-1.5 text-xs font-medium text-muted-foreground">
             {secondaryValue}
           </span>
