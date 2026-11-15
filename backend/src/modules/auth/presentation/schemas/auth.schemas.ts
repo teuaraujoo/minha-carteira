@@ -38,4 +38,15 @@ export const confirmAccountReactivationSchema = z.object({
   metadata: requestMetadataSchema,
 }).strict();
 
+export const requestMfaSchema = z.object({
+  email: z.string({ error: "E-mail deve ser um texto." }).trim().email("E-mail inválido.").toLowerCase(),
+  metadata: requestMetadataSchema,
+}).strict();
+
+export const validateMfaSchema = z.object({
+  challengeId: z.string({ error: "ID do desafio deve ser um texto." }).trim().uuid("ID do desafio inválido."),
+  code: z.string({ error: "Código deve ser um texto." }).trim().regex(/^\d{6}$/, "Código inválido."),
+  metadata: requestMetadataSchema,
+}).strict();
+
 export type LoginRequestDto = z.infer<typeof loginSchema>;

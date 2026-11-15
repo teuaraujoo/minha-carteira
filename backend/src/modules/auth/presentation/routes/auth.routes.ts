@@ -5,12 +5,28 @@ import type { RegisterUserInput } from "../../../users/index.js";
 import type { JwtProvider, TokenHasher } from "../../application/contracts/auth.contracts.js";
 import type { RequestMetadata } from "../../domain/interfaces/auth.interfaces.js";
 import { mapLoginOutput } from "../../application/dto/login.dto.js";
+import { mapRequestMfaOutput, mapValidateMfaOutput } from "../../application/dto/mfa.dto.js";
 import type { AuthService } from "../../application/services/auth.service.js";
 import { createAuthenticationMiddleware } from "../middlewares/authentication.middleware.js";
 import { createCsrfToken, createCsrfValidationMiddleware, createOriginValidationMiddleware } from "../middlewares/csrf.middleware.js";
 import { createUserSchema } from "../../../users/presentation/schemas/users.schemas.js";
-import { confirmAccountReactivationSchema, confirmPasswordResetSchema, loginSchema, requestAccountReactivationSchema, requestPasswordResetSchema } from "../schemas/auth.schemas.js";
-import { AUTH_COOKIE_NAMES, CSRF_COOKIE_OPTIONS, clearAuthenticationCookies, setAuthenticationCookies } from "../security/auth-cookies.js";
+import {
+  confirmAccountReactivationSchema,
+  confirmPasswordResetSchema,
+  loginSchema,
+  requestAccountReactivationSchema,
+  requestMfaSchema,
+  requestPasswordResetSchema,
+  validateMfaSchema,
+} from "../schemas/auth.schemas.js";
+import {
+  AUTH_COOKIE_NAMES,
+  CSRF_COOKIE_OPTIONS,
+  clearAuthenticationCookies,
+  clearOnboardingCookie,
+  setAuthenticationCookies,
+  setOnboardingCookie,
+} from "../security/auth-cookies.js";
 import type { UserService } from "../../../users/application/services/users.service.js";
 import type { IRefreshTokenRepository } from "../../domain/interfaces/refresh-tokens-repository.interface.js";
 
@@ -118,6 +134,33 @@ export function createAuthRouter(
     const context = request.auth;
     if (!context) throw new AppError({ status: 401, code: ErrorCode.UNAUTHORIZED, message: "Autenticação obrigatória." });
     sendSuccess(response, { userId: context.userId, sessionId: context.sessionId });
+  });
+
+  router.post("/request-mfa", validateCsrf, async (request, response) => {
+    const parsed = requestMfaSchema.safeParse(request.body);
+    if (!parsed.success) throw validationError("Dados para solicitação de código MFA inválidos.", parsed.error);
+    const result = await authService.requestMfa({
+      email: parsed.data.email,
+      metadata: buildRequestMetadata(parsed.data.metadata, request),
+    });
+    sendSuccess(response, mapRequestMfaOutput(result));
+  });
+
+  router.post("/validate-mfa", validateCsrf, async (request, response) => {
+    const parsed = validateMfaSchema.safeParse(request.body);
+    if (!parsed.success) throw validationError("Dados para validação do código MFA inválidos.", parsed.error);
+    const result = await authService.validateMfa({
+      challengeId: parsed.data.challengeId,
+      code: parsed.data.code,
+      metadata: buildRequestMetadata(parsed.data.metadata, request),
+    });
+    if (result.isRegistered) {
+      clearOnboardingCookie(response);
+      setAuthenticationCookies(response, result.accessToken, result.refreshToken);
+    } else {
+      setOnboardingCookie(response, result.accessToken);
+    }
+    sendSuccess(response, mapValidateMfaOutput(result));
   });
 
   

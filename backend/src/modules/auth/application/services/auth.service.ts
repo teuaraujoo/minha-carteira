@@ -3,14 +3,17 @@ import type { IRefreshTokenRepository } from "../../domain/interfaces/refresh-to
 import {
   ACCOUNT_REACTIVATION_MAX_ATTEMPTS,
   ACCOUNT_REACTIVATION_TOKEN_TTL_MS,
+  MFA_CODE_LENGTH,
   PASSWORD_RESET_MAX_ATTEMPTS,
   PASSWORD_RESET_TOKEN_TTL_MS,
   REFRESH_TOKEN_TTL_MS,
 } from "../../domain/constants/auth.constants.js";
+import { CHALLENGE_FLOW_POLICIES } from "../../domain/constants/challenge-policies.js";
 import { Challenge } from "../../domain/entities/challenge.entity.js";
 import { RefreshToken } from "../../domain/entities/refresh-token.entity.js";
-import type { ChallengeMetadata, RequestMetadata } from "../../domain/interfaces/auth.interfaces.js";
+import type { ChallengeMetadata, ChallengeTokenPayloadMetadata, RequestMetadata } from "../../domain/interfaces/auth.interfaces.js";
 import type { LoginInput, LoginSessionResult } from "../dto/login.dto.js";
+import type { RequestMfaInput, RequestMfaOutput, ValidateMfaInput, ValidateMfaOutput } from "../dto/mfa.dto.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import { RefreshTokenRevokeReason } from "../../domain/enums/auth.enums.js";
 import type { PasswordHasher } from "../../../../shared/application/security/password-hasher.js";
@@ -22,8 +25,9 @@ import type { PrismaClient } from "../../../../../generated/prisma/client.js";
 import { UserStatus as PrismaUserStatus } from "../../../../../generated/prisma/enums.js";
 import { PrismaRefreshTokenRepository } from "../../infrastructure/repositories/refresh-token.repository.js";
 import { PrismaChallengeRepository } from "../../infrastructure/repositories/challenge.repository.js";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import type { UserService } from "../../../users/application/services/users.service.js";
+import { UserStatus } from "../../../users/domain/enums/users.enums.js";
 
 export interface RequestPasswordResetInput {
   email: string;
@@ -137,7 +141,8 @@ export class AuthService {
       const challenges = new PrismaChallengeRepository(transaction);
       const refreshTokens = new PrismaRefreshTokenRepository(transaction);
       const challenge = await challenges.findById(challengeId);
-      if (!challenge || challenge.purpose !== ChallengePurpose.PASSWORD_RESET
+      const subjectId = challenge?.subjectId ?? null;
+      if (!challenge || !subjectId || challenge.purpose !== ChallengePurpose.PASSWORD_RESET
         || challenge.subjectType !== ChallengeSubjectType.USER
         || !challenge.isUsableAt(now)) return null;
 
@@ -147,7 +152,7 @@ export class AuthService {
       }
 
       const recipient = await transaction.user.findFirst({
-        where: { id: challenge.subjectId, status: PrismaUserStatus.ACTIVE },
+        where: { id: subjectId, status: PrismaUserStatus.ACTIVE },
         select: { email: true },
       });
       if (!recipient) return null;
@@ -159,12 +164,12 @@ export class AuthService {
 
       const passwordHash = await this.passwordHasher.hash(input.password);
       const updatedUser = await transaction.user.updateMany({
-        where: { id: challenge.subjectId, status: PrismaUserStatus.ACTIVE },
+        where: { id: subjectId, status: PrismaUserStatus.ACTIVE },
         data: { passwordHash, updatedAt: now },
       });
       if (updatedUser.count !== 1) throw invalidResetToken();
       await refreshTokens.revokeAllFromUser(
-        challenge.subjectId,
+        subjectId,
         now,
         RefreshTokenRevokeReason.PASSWORD_RESET,
       );
@@ -260,7 +265,8 @@ export class AuthService {
 
     const now = new Date();
     const challenge = await this.challengeRepository.findById(challengeId);
-    if (!challenge || challenge.purpose !== ChallengePurpose.ACCOUNT_REACTIVATION
+    const subjectId = challenge?.subjectId ?? null;
+    if (!challenge || !subjectId || challenge.purpose !== ChallengePurpose.ACCOUNT_REACTIVATION
       || challenge.subjectType !== ChallengeSubjectType.USER || !challenge.isUsableAt(now)) {
       throw invalidAccountReactivationToken();
     }
@@ -291,7 +297,7 @@ export class AuthService {
       throw invalidAccountReactivationToken();
     }
 
-    if (!await this.userService.reactivateUserById(challenge.subjectId)) {
+    if (!await this.userService.reactivateUserById(subjectId)) {
       throw invalidAccountReactivationToken();
     }
 
@@ -299,7 +305,7 @@ export class AuthService {
       event: "auth.account-reactivation.completed",
       module: "auth",
       message: "Conta reativada pelo link de confirmação; o usuário deverá entrar novamente",
-      context: { operation: "confirmAccountReactivation", userId: challenge.subjectId },
+      context: { operation: "confirmAccountReactivation", userId: subjectId },
     });
   }
 
@@ -401,6 +407,258 @@ export class AuthService {
     return { accessToken };
   }
 
+  async requestMfa(input: RequestMfaInput): Promise<RequestMfaOutput> {
+    const dependencies = this.requireEmailFlows();
+    const policy = CHALLENGE_FLOW_POLICIES[ChallengePurpose.EMAIL_VERIFICATION];
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const now = new Date();
+    const metadata = snapshotMetadata(input.metadata);
+    const challengeId = randomUUID();
+    const code = generateNumericOtp(MFA_CODE_LENGTH);
+    const secretHash = await this.tokenHasher.hash(`${challengeId}:${code}`);
+    const expiresAt = new Date(now.getTime() + policy.codeTtlMs);
+    const rateLimitWindowMs = policy.rateLimitWindowMs!;
+    const resendCooldownMs = policy.resendCooldownMs!;
+    const maxRequestsInWindow = policy.maxRequestsInWindow!;
+
+    const nextAttemptAt = await this.prisma.$transaction(async (transaction) => {
+      // Serializa solicitações concorrentes para o mesmo e-mail garantindo a contagem da janela.
+      await transaction.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${`email_mfa:${normalizedEmail}`}))
+      `;
+      const challenges = new PrismaChallengeRepository(transaction);
+      const latest = await challenges.findLatestByPurposeAndEmail(
+        ChallengePurpose.EMAIL_VERIFICATION,
+        normalizedEmail,
+      );
+      if (latest && !latest.isResendAllowedAt(now)) {
+        throw mfaRateLimitExceeded("Aguarde antes de solicitar um novo código de verificação.", latest.nextAttemptAt);
+      }
+
+      const windowStart = new Date(now.getTime() - rateLimitWindowMs);
+      const recentCount = await challenges.countByPurposeAndEmailSince(
+        ChallengePurpose.EMAIL_VERIFICATION,
+        normalizedEmail,
+        windowStart,
+      );
+      if (recentCount >= maxRequestsInWindow) {
+        throw mfaRateLimitExceeded("Limite de solicitações de código atingido. Tente novamente em alguns minutos.", null);
+      }
+
+      const calculatedNextAttemptAt = new Date(
+        now.getTime() + (recentCount + 1 >= maxRequestsInWindow ? rateLimitWindowMs : resendCooldownMs),
+      );
+
+      await challenges.invalidateOpenByPurposeAndEmail(
+        ChallengePurpose.EMAIL_VERIFICATION,
+        normalizedEmail,
+        now,
+      );
+
+      const challenge = new Challenge({
+        id: challengeId,
+        purpose: ChallengePurpose.EMAIL_VERIFICATION,
+        subjectType: ChallengeSubjectType.EMAIL,
+        subjectId: null,
+        targetEmail: normalizedEmail,
+        secretHash,
+        status: ChallengeStatus.REQUESTED,
+        attempts: 0,
+        maxAttempts: policy.maxAttempts,
+        nextAttemptAt: calculatedNextAttemptAt,
+        metadata: { issued: metadata, consumed: null },
+        expiresAt,
+        consumedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await challenges.save(challenge);
+      return calculatedNextAttemptAt;
+    });
+
+    try {
+      await dependencies.emailProvider.sendMfaCode({
+        email: normalizedEmail,
+        code,
+        expiresInMinutes: Math.max(1, Math.round(policy.codeTtlMs / 60_000)),
+      });
+      dependencies.logger.info({
+        event: "auth.mfa.requested",
+        module: "auth",
+        message: "Código MFA enviado por e-mail",
+        context: { operation: "requestMfa", challengeId },
+      });
+    } catch (error) {
+      try {
+        await this.challengeRepository.markFailed(challengeId, new Date());
+      } catch {
+        dependencies.logger.error({
+          event: "auth.mfa.email-failed",
+          module: "auth",
+          message: "Falha ao registrar erro no envio do código MFA",
+          context: { operation: "requestMfa", challengeId },
+        });
+      }
+      if (error instanceof AppError) throw error;
+      throw new AppError({
+        status: 502,
+        code: ErrorCode.INTERNAL_ERROR,
+        message: "Não foi possível enviar o código de verificação.",
+        cause: error,
+      });
+    }
+
+    return {
+      sent: true,
+      challengeId,
+      nextAttemptAt,
+    };
+  }
+
+  async validateMfa(input: ValidateMfaInput): Promise<ValidateMfaOutput> {
+    const now = new Date();
+    const consumedRequestMetadata = snapshotMetadata(input.metadata);
+    const challenge = await this.challengeRepository.findById(input.challengeId);
+    if (!challenge || challenge.purpose !== ChallengePurpose.EMAIL_VERIFICATION
+      || challenge.subjectType !== ChallengeSubjectType.EMAIL || !challenge.targetEmail
+      || !challenge.isUsableAt(now)) {
+      throw invalidMfaCode();
+    }
+
+    const secretMatches = await this.tokenHasher.matches(`${challenge.id}:${input.code}`, challenge.secretHash);
+    if (!secretMatches) {
+      await this.challengeRepository.registerInvalidAttemptForPurpose(
+        challenge.id,
+        ChallengePurpose.EMAIL_VERIFICATION,
+        ChallengeSubjectType.EMAIL,
+        challenge.maxAttempts,
+        now,
+      );
+      throw invalidMfaCode();
+    }
+
+    const existingUser = await this.userService.findAuthStatusByEmail(challenge.targetEmail);
+    if (existingUser && existingUser.status !== UserStatus.ACTIVE) {
+      throw new AppError({
+        status: 403,
+        code: ErrorCode.FORBIDDEN,
+        message: "Sua conta está inativa. Reative-a para continuar.",
+      });
+    }
+
+    if (existingUser) {
+      const sessionId = randomUUID();
+      const tokenSubject = { userId: existingUser.id, sessionId };
+      const [accessToken, refreshToken] = await Promise.all([
+        this.jwtProvider.signAccessToken(tokenSubject),
+        this.jwtProvider.signRefreshToken(tokenSubject),
+      ]);
+      const verifiedAccess = await this.jwtProvider.verifyAccessToken(accessToken);
+      const tokenPayload: ChallengeTokenPayloadMetadata = {
+        sub: verifiedAccess.userId,
+        iss: verifiedAccess.issuer,
+        jti: verifiedAccess.tokenId,
+        iat: Math.floor(verifiedAccess.issuedAt.getTime() / 1000),
+        exp: Math.floor(verifiedAccess.expiresAt.getTime() / 1000),
+        type: "access",
+        sid: verifiedAccess.sessionId,
+      };
+      const completed = await this.challengeRepository.completeIfUsableForPurpose(
+        challenge.id,
+        ChallengePurpose.EMAIL_VERIFICATION,
+        ChallengeSubjectType.EMAIL,
+        challenge.maxAttempts,
+        {
+          issued: challenge.metadata.issued,
+          consumed: consumedRequestMetadata,
+          tokenPayload,
+        },
+        now,
+      );
+      if (!completed) throw invalidMfaCode();
+
+      const refreshTokenHash = await this.tokenHasher.hash(refreshToken);
+      if (typeof refreshTokenHash !== "string" || !refreshTokenHash.trim()) {
+        throw new TypeError("O hash do refresh token é obrigatório.");
+      }
+
+      const session = new RefreshToken({
+        id: sessionId,
+        userId: existingUser.id,
+        tokenHash: refreshTokenHash,
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS),
+        lastUsedAt: null,
+        revokedAt: null,
+        userAgent: consumedRequestMetadata.userAgent,
+        ipAddress: consumedRequestMetadata.ipAddress,
+        revokeReason: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (!await this.createSessionIfAccountActive(session)) {
+        throw new AppError({
+          status: 403,
+          code: ErrorCode.FORBIDDEN,
+          message: "Sua conta está inativa. Reative-a para continuar.",
+        });
+      }
+
+      this.emailFlows?.logger.info({
+        event: "auth.mfa.validated",
+        module: "auth",
+        message: "Código MFA validado e sessão autenticada iniciada",
+        context: { operation: "validateMfa", challengeId: challenge.id, userId: existingUser.id },
+      });
+
+      return {
+        accessToken,
+        refreshToken,
+        isRegistered: true,
+      };
+    }
+
+    const onboardingToken = await this.jwtProvider.signOnboardingToken({
+      email: challenge.targetEmail,
+      challengeId: challenge.id,
+    });
+    const verifiedOnboarding = await this.jwtProvider.verifyOnboardingToken(onboardingToken);
+    const tokenPayload: ChallengeTokenPayloadMetadata = {
+      sub: verifiedOnboarding.email,
+      iss: verifiedOnboarding.issuer,
+      jti: verifiedOnboarding.tokenId,
+      iat: Math.floor(verifiedOnboarding.issuedAt.getTime() / 1000),
+      exp: Math.floor(verifiedOnboarding.expiresAt.getTime() / 1000),
+      type: "onboarding",
+      cid: verifiedOnboarding.challengeId,
+    };
+    const completed = await this.challengeRepository.completeIfUsableForPurpose(
+      challenge.id,
+      ChallengePurpose.EMAIL_VERIFICATION,
+      ChallengeSubjectType.EMAIL,
+      challenge.maxAttempts,
+      {
+        issued: challenge.metadata.issued,
+        consumed: consumedRequestMetadata,
+        tokenPayload,
+      },
+      now,
+    );
+    if (!completed) throw invalidMfaCode();
+
+    this.emailFlows?.logger.info({
+      event: "auth.mfa.validated",
+      module: "auth",
+      message: "Código MFA validado para pré-cadastro",
+      context: { operation: "validateMfa", challengeId: challenge.id },
+    });
+
+    return {
+      accessToken: onboardingToken,
+      isRegistered: false,
+    };
+  }
+
   private createSessionIfAccountActive(session: RefreshToken): Promise<boolean> {
     return this.prisma.$transaction(async (transaction) => {
       const [account] = await transaction.$queryRaw<Array<{ status: string }>>`
@@ -448,6 +706,27 @@ function invalidAccountReactivationToken(): AppError {
     code: ErrorCode.VALIDATION_ERROR,
     message: "Link de reativação inválido ou expirado.",
   });
+}
+
+function invalidMfaCode(): AppError {
+  return new AppError({
+    status: 400,
+    code: ErrorCode.VALIDATION_ERROR,
+    message: "Código de verificação inválido ou expirado.",
+  });
+}
+
+function mfaRateLimitExceeded(message: string, nextAttemptAt: Date | null): AppError {
+  return new AppError({
+    status: 429,
+    code: ErrorCode.RATE_LIMIT_EXCEEDED,
+    message,
+    ...(nextAttemptAt ? { details: { nextAttemptAt: nextAttemptAt.toISOString() } } : {}),
+  });
+}
+
+function generateNumericOtp(digits: number): string {
+  return String(randomInt(0, 10 ** digits)).padStart(digits, "0");
 }
 
 function snapshotMetadata(metadata: RequestMetadata): RequestMetadata {
