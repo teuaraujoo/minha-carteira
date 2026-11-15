@@ -139,3 +139,29 @@
     @apply font-sans;
   }
 }
+
+/* Animação de entrada suave (opacidade, leve deslocamento e desfoque) ao acessar páginas */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    filter: blur(0px);
+  }
+}
+
+/* Mantém o estado final visível e nítido por padrão para respeitar redução de movimento */
+.page-fade-in {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .page-fade-in {
+    /* Sincronizado com a contagem das métricas (450ms); backwards evita flash sem prender translate/filter após terminar */
+    animation: page-fade-in 450ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}

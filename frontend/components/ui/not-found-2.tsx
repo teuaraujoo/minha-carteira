@@ -20,7 +20,7 @@ export function NotFound() {
         className="pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-accent/15 blur-3xl"
       />
 
-      <Empty className="relative z-10 max-w-lg">
+      <Empty className="page-fade-in relative z-10 max-w-lg">
         <EmptyHeader>
           <Image
             src="/favicon.png"

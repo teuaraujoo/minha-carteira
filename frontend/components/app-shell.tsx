@@ -379,7 +379,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             tabIndex={-1}
             className="min-w-0 p-4 pt-4 outline-none md:px-8 md:pb-8 md:pt-6"
           >
-            {children}
+            {/* A chave por rota reinicia o fade-in apenas no conteúdo, sem piscar barra lateral ou cabeçalho */}
+            <div key={pathname} className="page-fade-in">
+              {children}
+            </div>
           </main>
         </div>
       </div>
