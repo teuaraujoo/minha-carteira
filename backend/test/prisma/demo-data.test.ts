@@ -2,8 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { inflateSync } from "node:zlib";
 import bcrypt from "bcrypt";
-import { createDemoAccounts, createDemoHistory, createDemoUsers, DEMO_AVATAR, DEMO_USERS } from "../../prisma/scripts/data/demo-data.js";
+import {
+  createDefaultCategories,
+  createDemoAccounts,
+  createDemoHistory,
+  createDemoTransactions,
+  createDemoUsers,
+  DEFAULT_CATEGORY_DEFINITIONS,
+  DEMO_AVATAR,
+  DEMO_USERS,
+} from "../../prisma/scripts/data/demo-data.js";
 import { Account } from "../../src/modules/accounts/domain/entities/account.entity.js";
+import { Category } from "../../src/modules/categories/domain/entities/category.entity.js";
+import { Transaction } from "../../src/modules/transactions/domain/entities/transaction.entity.js";
 import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
 import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
 import { UserCapabilities } from "../../src/modules/users/domain/enums/users.enums.js";
@@ -121,4 +132,56 @@ test("contas financeiras de demonstração respeitam invariantes de domínio e p
   }
   assert.equal(accounts.filter(account => account.status === "ACTIVE").length, 2);
   assert.equal(accounts.filter(account => account.status === "INACTIVE").length, 1);
+});
+
+test("categorias padrão do seed cobrem 16 itens agnósticos de tipo com cores e ícones válidos", () => {
+  const categories = createDefaultCategories(now);
+  assert.equal(categories.length, DEFAULT_CATEGORY_DEFINITIONS.length);
+  assert.equal(categories.length, 16);
+  assert.equal(new Set(categories.map(category => category.id)).size, 16);
+  assert.equal(new Set(categories.map(category => category.name.toLowerCase())).size, 16);
+  for (const props of categories) {
+    const category = new Category({
+      id: props.id,
+      userId: (props.userId as string | null | undefined) ?? null,
+      name: props.name,
+      color: (props.color as string | null | undefined) ?? null,
+      icon: (props.icon as string | null | undefined) ?? null,
+      isDefault: Boolean(props.isDefault),
+      status: props.status as Category["status"],
+      createdAt: props.createdAt as Date,
+      updatedAt: props.updatedAt as Date,
+    });
+    assert.equal(category.isDefault, true);
+    assert.equal(category.userId, null);
+    assert.equal(category.status, "ACTIVE");
+  }
+});
+
+test("transações de demonstração respeitam invariantes de domínio e pertencem ao usuário padrão", () => {
+  const transactions = createDemoTransactions(now);
+  assert.equal(transactions.length, 3);
+  assert.equal(new Set(transactions.map(tx => tx.id)).size, 3);
+  for (const props of transactions) {
+    const entity = new Transaction({
+      id: props.id,
+      userId: props.userId,
+      accountId: props.accountId,
+      categoryId: (props.categoryId as string | null | undefined) ?? null,
+      description: props.description,
+      amount: Number(props.amount),
+      type: props.type as Transaction["type"],
+      status: props.status as Transaction["status"],
+      transactionDate: (props.transactionDate as Date).toISOString().slice(0, 10),
+      notes: (props.notes as string | null | undefined) ?? null,
+      confirmedAt: (props.confirmedAt as Date | null | undefined) ?? null,
+      createdAt: props.createdAt as Date,
+      updatedAt: props.updatedAt as Date,
+      deletedAt: (props.deletedAt as Date | null | undefined) ?? null,
+    });
+    assert.equal(entity.userId, DEMO_USERS[1]!.id);
+    assert.ok(entity.amount > 0);
+  }
+  assert.equal(transactions.filter(tx => tx.status === "CONFIRMED").length, 2);
+  assert.equal(transactions.filter(tx => tx.status === "PENDING").length, 1);
 });

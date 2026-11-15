@@ -7,7 +7,15 @@ import { createPinoAppLogger } from "../../../src/shared/infrastructure/logging/
 import { createR2Client } from "../../../src/modules/storage/infrastructure/providers/cloudflare-r2/r2-client.js";
 import { R2StorageService } from "../../../src/modules/storage/infrastructure/providers/cloudflare-r2/r2-storage.service.js";
 import { validateStoredFile } from "../../../src/modules/storage/domain/validation/file-validation.js";
-import { createDemoAccounts, createDemoHistory, createDemoUsers, DEMO_AVATAR, DEMO_USERS } from "../data/demo-data.js";
+import {
+  createDefaultCategories,
+  createDemoAccounts,
+  createDemoHistory,
+  createDemoTransactions,
+  createDemoUsers,
+  DEMO_AVATAR,
+  DEMO_USERS,
+} from "../data/demo-data.js";
 import { listApplicationTables, resolveMaintenanceTarget } from "../database-maintenance.js";
 
 const logger = createPinoAppLogger({ pretty: false });
@@ -43,6 +51,8 @@ try {
     const now = new Date();
     const history = createDemoHistory(now);
     const accounts = createDemoAccounts(now);
+    const defaultCategories = createDefaultCategories(now);
+    const demoTransactions = createDemoTransactions(now);
     await prisma.$transaction(async transaction => {
       // IDs e identidades reservados impedem promover ou sobrescrever contas preexistentes.
       const existing = await transaction.user.findMany({
@@ -70,10 +80,38 @@ try {
           throw new Error("Uma conta financeira existente conflita com os identificadores reservados do seed.");
         }
       }
+      for (const category of defaultCategories) {
+        const previousCategory = await transaction.category.findUnique({ where: { id: category.id } });
+        if (previousCategory && (!previousCategory.isDefault || previousCategory.name.toLowerCase() !== category.name.toLowerCase())) {
+          throw new Error("Uma categoria existente conflita com os identificadores padrão reservados do seed.");
+        }
+      }
+      for (const tx of demoTransactions) {
+        const previousTx = await transaction.transaction.findUnique({ where: { id: tx.id } });
+        if (previousTx && previousTx.userId !== tx.userId) {
+          throw new Error("Uma transação existente conflita com os identificadores reservados do seed.");
+        }
+      }
       for (const user of users) await transaction.user.upsert({ where: { id: user.id }, update: {}, create: user });
       for (const challenge of history.challenges) await transaction.challenge.upsert({ where: { id: challenge.id! }, update: {}, create: challenge });
       await transaction.refreshToken.upsert({ where: { id: history.refreshToken.id! }, update: {}, create: history.refreshToken });
       for (const account of accounts) await transaction.account.upsert({ where: { id: account.id }, update: {}, create: account });
+      for (const category of defaultCategories) await transaction.category.upsert({ where: { id: category.id }, update: {}, create: category });
+      for (const tx of demoTransactions) {
+        const existingTx = await transaction.transaction.findUnique({ where: { id: tx.id } });
+        if (!existingTx) {
+          await transaction.transaction.create({ data: tx });
+          if (tx.status === "CONFIRMED") {
+            const numericAmount = Number(tx.amount);
+            await transaction.account.update({
+              where: { id: tx.accountId },
+              data: {
+                currentBalance: tx.type === "INCOME" ? { increment: numericAmount } : { decrement: numericAmount },
+              },
+            });
+          }
+        }
+      }
     });
     for (const [index, user] of DEMO_USERS.slice(0, 3).entries()) {
       const id = `75000000-0000-4000-8000-00000000000${index + 1}`;
@@ -95,7 +133,7 @@ try {
         throw error;
       }
     }
-    logger.info({ event: "database.seed.completed", module: "database", message: "Seed concluído: quatro usuários, três imagens reais no R2, contas financeiras e históricos de autenticação sem tokens utilizáveis." });
+    logger.info({ event: "database.seed.completed", module: "database", message: "Seed concluído: quatro usuários, três imagens reais no R2, contas financeiras, categorias padrão, transações de exemplo e históricos de autenticação sem tokens utilizáveis." });
   } finally {
     await prisma.$disconnect();
     await pool.end();

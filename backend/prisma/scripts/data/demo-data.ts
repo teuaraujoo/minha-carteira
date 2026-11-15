@@ -2,6 +2,13 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "../../../generated/prisma/client.js";
 import { Account } from "../../../src/modules/accounts/domain/entities/account.entity.js";
 import { AccountType } from "../../../src/modules/accounts/domain/enums/account.enums.js";
+import { Category } from "../../../src/modules/categories/domain/entities/category.entity.js";
+import { CategoryStatus } from "../../../src/modules/categories/domain/enums/category.enums.js";
+import { Transaction } from "../../../src/modules/transactions/domain/entities/transaction.entity.js";
+import {
+  TransactionStatus,
+  TransactionType,
+} from "../../../src/modules/transactions/domain/enums/transaction.enums.js";
 import { User } from "../../../src/modules/users/domain/entities/users.entity.js";
 import { UserCapabilities, UserRoles, UserStatus } from "../../../src/modules/users/domain/enums/users.enums.js";
 import type { PasswordHasher } from "../../../src/shared/application/security/password-hasher.js";
@@ -109,4 +116,99 @@ export function createDemoAccounts(now: Date): Array<Prisma.AccountUncheckedCrea
   inactive.deactivate(inactivatedAt);
 
   return [digital.toJSON(), checking.toJSON(), inactive.toJSON()];
+}
+
+export const DEFAULT_CATEGORY_DEFINITIONS = [
+  { id: "77000000-0000-4000-8000-000000000001", name: "Salário", color: "#00C7C4", icon: "briefcase" },
+  { id: "77000000-0000-4000-8000-000000000002", name: "Serviços", color: "#00C7C4", icon: "wrench" },
+  { id: "77000000-0000-4000-8000-000000000003", name: "Rendimentos", color: "#015363", icon: "trending-up" },
+  { id: "77000000-0000-4000-8000-000000000004", name: "Poupança", color: "#00C7C4", icon: "piggy-bank" },
+  { id: "77000000-0000-4000-8000-000000000005", name: "Investimentos", color: "#012048", icon: "trending-up" },
+  { id: "77000000-0000-4000-8000-000000000006", name: "Reembolsos", color: "#015363", icon: "rotate-ccw" },
+  { id: "77000000-0000-4000-8000-000000000007", name: "Alimentação", color: "#015363", icon: "utensils" },
+  { id: "77000000-0000-4000-8000-000000000008", name: "Moradia", color: "#012048", icon: "home" },
+  { id: "77000000-0000-4000-8000-000000000009", name: "Transporte", color: "#B45309", icon: "car" },
+  { id: "77000000-0000-4000-8000-000000000010", name: "Saúde", color: "#0F766E", icon: "heart-pulse" },
+  { id: "77000000-0000-4000-8000-000000000011", name: "Lazer", color: "#C2410C", icon: "gamepad-2" },
+  { id: "77000000-0000-4000-8000-000000000012", name: "Assinaturas", color: "#5B21B6", icon: "repeat" },
+  { id: "77000000-0000-4000-8000-000000000013", name: "Educação", color: "#0F766E", icon: "graduation-cap" },
+  { id: "77000000-0000-4000-8000-000000000014", name: "Tarifas", color: "#64748B", icon: "receipt" },
+  { id: "77000000-0000-4000-8000-000000000015", name: "Transferências", color: "#881337", icon: "arrow-left-right" },
+  { id: "77000000-0000-4000-8000-000000000016", name: "Outros", color: "#64748B", icon: "layers" },
+] as const;
+
+export function createDefaultCategories(
+  now: Date,
+): Array<Prisma.CategoryUncheckedCreateInput & { id: string }> {
+  const createdAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  return DEFAULT_CATEGORY_DEFINITIONS.map((definition) => {
+    const category = new Category({
+      id: definition.id,
+      userId: null,
+      name: definition.name,
+      color: definition.color,
+      icon: definition.icon,
+      isDefault: true,
+      status: CategoryStatus.ACTIVE,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    return category.toJSON();
+  });
+}
+
+export function createDemoTransactions(
+  now: Date,
+): Array<Prisma.TransactionUncheckedCreateInput & { id: string }> {
+  const ownerUserId = DEMO_USERS[1]!.id;
+  const createdAt = new Date(now.getTime() - 60 * 60 * 1000);
+  const transactionDate = now.toISOString().slice(0, 10);
+
+  const salaryIncome = Transaction.create({
+    id: "78000000-0000-4000-8000-000000000001",
+    userId: ownerUserId,
+    accountId: "76000000-0000-4000-8000-000000000002",
+    categoryId: DEFAULT_CATEGORY_DEFINITIONS[0].id,
+    description: "Salário mensal",
+    amount: 4500,
+    type: TransactionType.INCOME,
+    status: TransactionStatus.CONFIRMED,
+    transactionDate,
+    notes: "Crédito em folha de pagamento.",
+    now: createdAt,
+  });
+
+  const groceryExpense = Transaction.create({
+    id: "78000000-0000-4000-8000-000000000002",
+    userId: ownerUserId,
+    accountId: "76000000-0000-4000-8000-000000000001",
+    categoryId: DEFAULT_CATEGORY_DEFINITIONS[6].id,
+    description: "Supermercado da semana",
+    amount: 180.5,
+    type: TransactionType.EXPENSE,
+    status: TransactionStatus.CONFIRMED,
+    transactionDate,
+    notes: null,
+    now: createdAt,
+  });
+
+  const pendingSubscription = Transaction.create({
+    id: "78000000-0000-4000-8000-000000000003",
+    userId: ownerUserId,
+    accountId: "76000000-0000-4000-8000-000000000001",
+    categoryId: DEFAULT_CATEGORY_DEFINITIONS[11].id,
+    description: "Assinatura de nuvem",
+    amount: 59.9,
+    type: TransactionType.EXPENSE,
+    status: TransactionStatus.PENDING,
+    transactionDate,
+    notes: "Débito previsto para o fechamento da fatura.",
+    now: createdAt,
+  });
+
+  return [salaryIncome, groceryExpense, pendingSubscription].map((transaction) => ({
+    ...transaction.toJSON(),
+    amount: transaction.amount.toFixed(2),
+    transactionDate: new Date(`${transaction.transactionDate}T00:00:00.000Z`),
+  }));
 }
