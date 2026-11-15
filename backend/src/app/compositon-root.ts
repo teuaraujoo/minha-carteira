@@ -16,6 +16,16 @@ import {
   PrismaAccountRepository,
   createAccountsRouter,
 } from "../modules/accounts/index.js";
+import {
+  CategoriesService,
+  PrismaCategoryRepository,
+  createCategoriesRouter,
+} from "../modules/categories/index.js";
+import {
+  TransactionsService,
+  PrismaTransactionRepository,
+  createTransactionsRouter,
+} from "../modules/transactions/index.js";
 import { createPinoAppLogger } from "../shared/infrastructure/logging/pino-app-logger.js";
 import { createApp } from "./app.js";
 import { ResendEmailProvider } from "../shared/infrastructure/providers/email/resend-email.provider.js";
@@ -74,7 +84,38 @@ export function createCompositionRoot() {
     userService,
     allowedOrigins,
   );
-  const app = createApp({ logger, authRouter, usersRouter, accountsRouter, allowedOrigins });
+  const categoryRepository = new PrismaCategoryRepository(prisma);
+  const categoriesService = new CategoriesService(categoryRepository, logger);
+  const categoriesRouter = createCategoriesRouter(
+    categoriesService,
+    jwtProvider,
+    refreshTokenRepository,
+    userService,
+    allowedOrigins,
+  );
+  const transactionRepository = new PrismaTransactionRepository(prisma);
+  const transactionsService = new TransactionsService(
+    transactionRepository,
+    accountsService,
+    categoriesService,
+    logger,
+  );
+  const transactionsRouter = createTransactionsRouter(
+    transactionsService,
+    jwtProvider,
+    refreshTokenRepository,
+    userService,
+    allowedOrigins,
+  );
+  const app = createApp({
+    logger,
+    authRouter,
+    usersRouter,
+    accountsRouter,
+    categoriesRouter,
+    transactionsRouter,
+    allowedOrigins,
+  });
 
   return { app, logger };
 }

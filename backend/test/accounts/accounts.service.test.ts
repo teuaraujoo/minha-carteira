@@ -271,6 +271,7 @@ test("PrismaAccountRepository converte Decimal, mapeia P2002/P2025 e preserva sa
   let capturedUpdateData: Record<string, unknown> | undefined;
   let capturedDeleteWhere: Record<string, unknown> | undefined;
   let failUpdateWithP2025 = false;
+  let failDeleteWithP2003 = false;
 
   const prismaMock = {
     account: {
@@ -322,8 +323,14 @@ test("PrismaAccountRepository converte Decimal, mapeia P2002/P2025 e preserva sa
       },
       deleteMany: async (args: { where: Record<string, unknown> }) => {
         capturedDeleteWhere = args.where;
+        if (failDeleteWithP2003) {
+          throw Object.assign(new Error("Foreign key constraint failed"), { code: "P2003" });
+        }
         return { count: 1 };
       },
+    },
+    transaction: {
+      count: async () => 3,
     },
   } as unknown as PrismaAccountClient;
 
@@ -360,5 +367,11 @@ test("PrismaAccountRepository converte Decimal, mapeia P2002/P2025 e preserva sa
   const deleted = await repository.deleteByIdAndUserId(entity.id, ownerId);
   assert.equal(deleted, true);
   assert.deepEqual(capturedDeleteWhere, { id: entity.id, userId: ownerId });
-  assert.equal(await repository.countLinkedTransactions(entity.id, ownerId), 0);
+  assert.equal(await repository.countLinkedTransactions(entity.id, ownerId), 3);
+
+  failDeleteWithP2003 = true;
+  await assert.rejects(
+    repository.deleteByIdAndUserId(entity.id, ownerId),
+    (error: unknown) => error instanceof AppError && error.status === 409 && error.code === ErrorCode.CONFLICT,
+  );
 });

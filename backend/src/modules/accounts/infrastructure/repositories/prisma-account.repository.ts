@@ -150,15 +150,29 @@ export class PrismaAccountRepository implements IAccountRepository {
   }
 
   async deleteByIdAndUserId(id: string, userId: string): Promise<boolean> {
-    const result = await this.prisma.account.deleteMany({
-      where: { id, userId },
-    });
-    return result.count > 0;
+    try {
+      const result = await this.prisma.account.deleteMany({
+        where: { id, userId },
+      });
+      return result.count > 0;
+    } catch (error) {
+      throw mapPrismaAccountError(error);
+    }
   }
 
-  /** Gancho preparatório: retornará a contagem real assim que o módulo `transactions` for implementado. */
-  async countLinkedTransactions(_accountId: string, _userId: string): Promise<number> {
-    return 0;
+  /** Retorna a contagem de transações não excluídas vinculadas à conta financeira. */
+  async countLinkedTransactions(accountId: string, userId: string): Promise<number> {
+    const transactionDelegate = (
+      this.prisma as Partial<Pick<PrismaClient, "transaction">>
+    ).transaction;
+    if (!transactionDelegate) return 0;
+    return transactionDelegate.count({
+      where: {
+        accountId,
+        userId,
+        deletedAt: null,
+      },
+    });
   }
 
   private toDomain(record: AccountRecord): Account {
@@ -199,6 +213,14 @@ function mapPrismaAccountError(error: unknown): unknown {
       status: 409,
       code: ErrorCode.CONFLICT,
       message: "Já existe uma conta ativa cadastrada com esse nome.",
+      cause: error,
+    });
+  }
+  if (error.code === "P2003") {
+    return new AppError({
+      status: 409,
+      code: ErrorCode.CONFLICT,
+      message: "Esta conta possui histórico de transações vinculado e não pode ser excluída. Desative-a para preservá-la no histórico.",
       cause: error,
     });
   }

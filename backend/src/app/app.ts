@@ -20,6 +20,8 @@ export interface CreateAppOptions {
   authRouter: Router;
   usersRouter: Router;
   accountsRouter?: Router;
+  categoriesRouter?: Router;
+  transactionsRouter?: Router;
   allowedOrigins: string[];
 }
 
@@ -44,6 +46,12 @@ export function createApp(options: CreateAppOptions) {
   app.use("/api/v1/users", options.usersRouter);
   if (options.accountsRouter) {
     app.use("/api/v1/accounts", options.accountsRouter);
+  }
+  if (options.categoriesRouter) {
+    app.use("/api/v1/categories", options.categoriesRouter);
+  }
+  if (options.transactionsRouter) {
+    app.use("/api/v1/transactions", options.transactionsRouter);
   }
 
   app.get("/", (_request, response) => {
