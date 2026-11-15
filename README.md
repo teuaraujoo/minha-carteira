@@ -1,3 +1,29 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="/frontend/public/logo.png">
+    <img alt="Símbolo Minha Carteira" src="/frontend/public/logo.png" width="220" height="80">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="https://nextjs.org/">
+    <img src="https://img.shields.io/badge/Next.js-16-000000?style=flat&logo=next.js&logoColor=white" alt="Next.js">
+  </a>
+  <a href="https://www.typescriptlang.org/">
+    <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&logo=typescript&logoColor=white" alt="TypeScript">
+  </a>
+  <a href="https://expressjs.com/">
+    <img src="https://img.shields.io/badge/Express.js-5-000000?style=flat&logo=express&logoColor=white" alt="Express">
+  </a>
+  <a href="https://www.postgresql.org/">
+    <img src="https://img.shields.io/badge/PostgreSQL-18-4169E1?style=flat&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue?style=flat" alt="MIT License">
+  </a>
+</p>
+
+
 # Minha Carteira
 
 Minha Carteira é uma aplicação web de gestão financeira pessoal. O projeto foi
