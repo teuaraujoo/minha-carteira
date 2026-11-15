@@ -13,9 +13,19 @@ export const metadata: Metadata = {
   applicationName: "Minha Carteira",
 };
 
+const themeInitScript = `(function(){try{var s=localStorage.getItem("mc-theme");var d=s==="dark"||(s!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;var m=document.querySelector('meta[name="color-scheme"]');r.classList.toggle("dark",d);r.classList.toggle("light",!d);if(m&&(s==="light"||s==="dark"))m.setAttribute("content",s);}catch(e){}})();`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-BR" className={cn("h-full antialiased font-sans", geistSans.variable, geistMono.variable, figtree.variable)}>
+    <html
+      lang="pt-BR"
+      suppressHydrationWarning
+      className={cn("h-full antialiased font-sans", geistSans.variable, geistMono.variable, figtree.variable)}
+    >
+      <head>
+        <meta name="color-scheme" content="light dark" />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full">{children}</body>
     </html>
   );
