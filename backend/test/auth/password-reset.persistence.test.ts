@@ -114,3 +114,51 @@ test("consumo condicional conclui o link de reativação uma única vez", async 
   assert.equal(updateData?.status, ChallengeStatus.COMPLETED);
   assert.equal(updateData?.consumedAt, at);
 });
+
+test("repository consulta contagem, último desafio e invalidação por targetEmail para EMAIL_VERIFICATION", async () => {
+  const queries: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+  const emailChallengeRecord = {
+    id: "email-challenge-1",
+    purpose: ChallengePurpose.EMAIL_VERIFICATION,
+    subjectType: ChallengeSubjectType.EMAIL,
+    subjectId: null,
+    targetEmail: "mfa@example.com",
+    secretHash: "hashed-otp",
+    status: ChallengeStatus.REQUESTED,
+    attempts: 0,
+    maxAttempts: 3,
+    nextAttemptAt: new Date(at.getTime() + 45_000),
+    metadata: { issued: metadata, consumed: null },
+    expiresAt: new Date(at.getTime() + 300_000),
+    consumedAt: null,
+    createdAt: at,
+    updatedAt: at,
+  };
+  const fake = {
+    challenge: {
+      findFirst: async (input: Record<string, unknown>) => {
+        queries.push({ kind: "findFirst", payload: input });
+        return emailChallengeRecord;
+      },
+      count: async (input: Record<string, unknown>) => {
+        queries.push({ kind: "count", payload: input });
+        return 2;
+      },
+      updateMany: async (input: Record<string, unknown>) => {
+        queries.push({ kind: "updateMany", payload: input });
+        return { count: 1 };
+      },
+    },
+  } as unknown as Pick<PrismaClient, "challenge">;
+
+  const repository = new PrismaChallengeRepository(fake);
+  const latest = await repository.findLatestByPurposeAndEmail(ChallengePurpose.EMAIL_VERIFICATION, " MFA@EXAMPLE.COM ");
+  const count = await repository.countByPurposeAndEmailSince(ChallengePurpose.EMAIL_VERIFICATION, " MFA@EXAMPLE.COM ", at);
+  const invalidated = await repository.invalidateOpenByPurposeAndEmail(ChallengePurpose.EMAIL_VERIFICATION, " MFA@EXAMPLE.COM ", at);
+
+  assert.equal(latest?.targetEmail, "mfa@example.com");
+  assert.equal(latest?.subjectId, null);
+  assert.equal(count, 2);
+  assert.equal(invalidated, 1);
+  assert.equal((queries[2]?.payload.data as Record<string, unknown>)?.status, ChallengeStatus.EXPIRED);
+});

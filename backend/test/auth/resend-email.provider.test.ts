@@ -59,6 +59,22 @@ test("Resend rejeita falhas sem propagar dados sensíveis do provedor", async ()
   });
 });
 
+test("Resend envia código MFA com expiração em português", async () => {
+  let sent: Record<string, unknown> | undefined;
+  const provider = new ResendEmailProvider(
+    createClient(async (input) => { sent = input; return { data: { id: "email-mfa" }, error: null }; }),
+    "Minha Carteira <conta@example.com>",
+  );
+  await provider.sendMfaCode({ email: "teco@example.com", code: "482910", expiresInMinutes: 5 });
+
+  assert.equal(sent?.to, "teco@example.com");
+  assert.match(String(sent?.subject), /Código de verificação/);
+  assert.match(String(sent?.html), /482910/);
+  assert.match(String(sent?.html), /5 minutos/);
+  assert.match(String(sent?.text), /482910/);
+  assert.match(String(sent?.text), /5 minutos/);
+});
+
 test("Resend exige remetente", () => {
   assert.throws(() => new ResendEmailProvider(createClient(async () => ({})), " "), /remetente do e-mail é obrigatório/);
 });

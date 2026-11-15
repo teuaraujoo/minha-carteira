@@ -22,10 +22,32 @@ test("emite access e refresh com claims, algoritmo e prazos definidos", async ()
   assert.equal(access.userId, subject.userId);
   assert.equal(access.sessionId, subject.sessionId);
   assert.equal(access.type, "access");
+  assert.equal(access.issuer, "minha-carteira-api");
   assert.ok(access.tokenId.length > 0);
   assert.equal(access.expiresAt.getTime() - access.issuedAt.getTime(), 15 * 60 * 1000);
   assert.equal(refresh.type, "refresh");
+  assert.equal(refresh.issuer, "minha-carteira-api");
   assert.equal(refresh.expiresAt.getTime() - refresh.issuedAt.getTime(), 5 * 24 * 60 * 60 * 1000);
+});
+
+test("emite e valida token de onboarding com expiração de 15 minutos e claims específicas", async () => {
+  const provider = new JsonWebTokenProvider(TEST_SECRET, "minha-carteira-stg");
+  const token = await provider.signOnboardingToken({
+    email: " NOVO@example.com ",
+    challengeId: "challenge-123",
+  });
+  const verified = await provider.verifyOnboardingToken(token);
+
+  assert.equal(verified.email, "novo@example.com");
+  assert.equal(verified.challengeId, "challenge-123");
+  assert.equal(verified.type, "onboarding");
+  assert.equal(verified.issuer, "minha-carteira-stg");
+  assert.ok(verified.tokenId.length > 0);
+  assert.equal(verified.expiresAt.getTime() - verified.issuedAt.getTime(), 15 * 60 * 1000);
+
+  const otherIssuerProvider = new JsonWebTokenProvider(TEST_SECRET, "outro-emissor");
+  await assert.rejects(otherIssuerProvider.verifyOnboardingToken(token), assertUnauthorized);
+  await assert.rejects(provider.verifyAccessToken(token), assertUnauthorized);
 });
 
 test("lê JWT_SECRET do ambiente sem carregar arquivo .env", async () => {
