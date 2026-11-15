@@ -85,7 +85,7 @@ export function AccountWalletCard({
   const cardBody = (
     <div
       className={cn(
-        "relative flex h-[218px] w-full flex-col justify-between overflow-hidden rounded-[24px] border border-slate-900/10 bg-white/95 p-5 transition-all select-none dark:border-white/15 dark:bg-slate-900/95",
+        "relative flex h-[218px] w-full flex-col justify-between overflow-hidden rounded-[24px] border border-slate-900/10 bg-white/95 p-4 transition-all select-none @[310px]:p-5 dark:border-white/15 dark:bg-slate-900/95",
         isInactive && "saturate-50 opacity-90",
         textPrimary,
       )}
@@ -105,7 +105,7 @@ export function AccountWalletCard({
       />
 
       {/* Topo: bandeira (ou ícone do tipo) à esquerda + tipo e status à direita */}
-      <div className="relative z-10 flex items-center justify-between gap-3">
+      <div className="relative z-10 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {brandMeta?.image ? (
             <span className="inline-flex h-8 items-center bg-transparent">
@@ -141,14 +141,14 @@ export function AccountWalletCard({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {isInactive ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 backdrop-blur-xs dark:text-amber-200">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-amber-800 backdrop-blur-xs @[310px]:px-2.5 dark:text-amber-200">
               <ShieldOff className="size-3" aria-hidden="true" />
               Inativa
             </span>
           ) : null}
           <span
             className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-xs",
+              "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap backdrop-blur-xs @[310px]:px-2.5",
               pillClass,
             )}
           >
@@ -159,26 +159,26 @@ export function AccountWalletCard({
       </div>
 
       {/* Centro: saldo atual + instituição financeira (ou saldo inicial) */}
-      <div className="relative z-10 flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className={cn("text-xs font-medium", textMuted)}>Saldo atual</p>
-          <p className="mt-0.5 truncate text-2xl font-bold tracking-tight tabular-nums sm:text-[28px]">
+      <div className="relative z-10 flex flex-wrap items-end justify-between gap-x-3 gap-y-1.5">
+        <div className="min-w-0 flex-1">
+          <p className={cn("whitespace-nowrap text-xs font-medium", textMuted)}>Saldo atual</p>
+          <p className="mt-0.5 whitespace-nowrap text-[clamp(1.1875rem,6.7cqi,1.75rem)] font-bold tracking-tight tabular-nums">
             {formatDisplayCurrency(account.currentBalance, hideValues)}
           </p>
         </div>
 
-        <div className="shrink-0 text-right">
+        <div className="min-w-0 shrink text-right">
           {account.institution ? (
             <>
-              <p className={cn("text-[11px] font-medium", textMuted)}>Instituição</p>
-              <p className="mt-0.5 max-w-28 truncate text-sm font-semibold">
+              <p className={cn("whitespace-nowrap text-[11px] font-medium", textMuted)}>Instituição</p>
+              <p className="mt-0.5 max-w-24 truncate text-xs font-semibold @[310px]:max-w-32 @[310px]:text-sm">
                 {account.institution}
               </p>
             </>
           ) : (
             <>
-              <p className={cn("text-[11px] font-medium", textMuted)}>Saldo inicial</p>
-              <p className="mt-0.5 text-sm font-semibold tabular-nums">
+              <p className={cn("whitespace-nowrap text-[11px] font-medium", textMuted)}>Saldo inicial</p>
+              <p className="mt-0.5 whitespace-nowrap text-xs font-semibold tabular-nums @[310px]:text-sm">
                 {formatDisplayCurrency(account.initialBalance, hideValues)}
               </p>
             </>
@@ -206,7 +206,7 @@ export function AccountWalletCard({
   return (
     <div
       className={cn(
-        "relative w-full",
+        "@container relative w-full",
         isFront
           ? "drop-shadow-[0_12px_24px_rgba(15,23,42,0.12)] dark:drop-shadow-[0_12px_24px_rgba(0,0,0,0.4)]"
           : "drop-shadow-[0_6px_14px_rgba(15,23,42,0.08)] dark:drop-shadow-[0_6px_14px_rgba(0,0,0,0.3)]",

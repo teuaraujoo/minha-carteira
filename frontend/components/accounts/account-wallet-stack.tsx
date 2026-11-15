@@ -37,41 +37,43 @@ export function AccountWalletStack({
 
   if (viewMode === "grid") {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {accounts.map((account) => {
-          const isSelected = account.id === selectedAccountId;
-          return (
-            <div
-              key={account.id}
-              className={cn(
-                "group relative rounded-[26px] p-1 transition-all",
-                isSelected
-                  ? "ring-2 ring-accent ring-offset-2 ring-offset-background"
-                  : "hover:-translate-y-0.5 motion-reduce:hover:translate-y-0",
-              )}
-            >
-              <AccountWalletCard
-                account={account}
-                hideValues={hideValues}
-                isFront={isSelected}
-                isSelected={isSelected}
-                onSelect={() => onSelectAccount(account.id)}
-                ariaLabel={`Selecionar conta ${account.name}`}
-              />
-              <button
-                type="button"
-                onClick={() => onOpenAccountDetails(account.id)}
+      <div className="@container">
+        <div className="grid grid-cols-1 gap-4 @[510px]:grid-cols-2">
+          {accounts.map((account) => {
+            const isSelected = account.id === selectedAccountId;
+            return (
+              <div
+                key={account.id}
                 className={cn(
-                  "mt-2 flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors",
-                  "hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  "group relative rounded-[26px] p-1 transition-all",
+                  isSelected
+                    ? "ring-2 ring-accent ring-offset-2 ring-offset-background"
+                    : "hover:-translate-y-0.5 motion-reduce:hover:translate-y-0",
                 )}
               >
-                <span>Abrir detalhes de {account.name}</span>
-                <ArrowUpRight className="size-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          );
-        })}
+                <AccountWalletCard
+                  account={account}
+                  hideValues={hideValues}
+                  isFront={isSelected}
+                  isSelected={isSelected}
+                  onSelect={() => onSelectAccount(account.id)}
+                  ariaLabel={`Selecionar conta ${account.name}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => onOpenAccountDetails(account.id)}
+                  className={cn(
+                    "mt-2 flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors",
+                    "hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  )}
+                >
+                  <span className="truncate">Abrir detalhes de {account.name}</span>
+                  <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }

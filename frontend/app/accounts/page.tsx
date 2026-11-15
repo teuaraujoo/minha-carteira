@@ -75,7 +75,7 @@ export default function AccountsPage() {
 
   return (
     <AppShell>
-      <section aria-label="Contas financeiras" className="mx-auto max-w-6xl space-y-6">
+      <section aria-label="Contas financeiras" className="mx-auto w-full max-w-[1440px] space-y-6">
         {/* Cabeçalho consolidado com saldo total, filtros e ações */}
         <Card size="sm">
           <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -231,7 +231,7 @@ export default function AccountsPage() {
             </CardContent>
           </Card>
         ) : viewMode === "stack" ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(340px,430px)_1fr] lg:items-start">
+          <div className="grid gap-6 lg:grid-cols-[minmax(360px,440px)_1fr] lg:items-start">
             <div className="space-y-3">
               <AccountWalletStack
                 accounts={filteredAccounts}
@@ -259,7 +259,7 @@ export default function AccountsPage() {
             ) : null}
           </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-start">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(400px,0.95fr)] xl:items-start 2xl:grid-cols-[minmax(0,1.45fr)_minmax(440px,1fr)]">
             <AccountWalletStack
               accounts={filteredAccounts}
               selectedAccountId={selectedAccount?.id ?? null}

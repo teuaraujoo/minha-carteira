@@ -30,6 +30,7 @@ import {
   resolveCategoryIcon,
 } from "@/components/accounts/account-catalog";
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
+import { AccountMetricCard } from "@/components/accounts/account-metric-card";
 import { AccountWalletCard } from "@/components/accounts/account-wallet-card";
 import {
   COMPETENCE_MONTHS,
@@ -205,7 +206,7 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-[1440px] space-y-6">
       {/* Breadcrumb e ações rápidas */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1.5">
@@ -374,71 +375,47 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
             </div>
           </div>
 
-          {/* Faixa de 6 KPIs */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Card size="sm">
-              <CardContent className="space-y-1">
-                <p className="text-xs text-muted-foreground">Saldo atual</p>
-                <p className="text-lg font-bold text-foreground tabular-nums">
-                  {formatDisplayCurrency(account.currentBalance, hideValues)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardContent className="space-y-1">
-                <p className="text-xs text-muted-foreground">Saldo inicial</p>
-                <p className="text-lg font-semibold text-foreground tabular-nums">
-                  {formatDisplayCurrency(account.initialBalance, hideValues)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardContent className="space-y-1">
-                <p className="text-xs text-muted-foreground">Entradas do mês</p>
-                <p className="text-lg font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
-                  {formatDisplayCurrency(selectedMonthFlow.income, hideValues)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardContent className="space-y-1">
-                <p className="text-xs text-muted-foreground">Saídas do mês</p>
-                <p className="text-lg font-bold text-rose-600 tabular-nums dark:text-rose-400">
-                  {formatDisplayCurrency(selectedMonthFlow.expense, hideValues)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardContent className="space-y-1">
-                <p className="text-xs text-muted-foreground">Resultado do mês</p>
-                <p
-                  className={cn(
-                    "text-lg font-bold tabular-nums",
-                    monthResult >= 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-rose-600 dark:text-rose-400",
-                  )}
-                >
-                  {formatDisplayCurrency(monthResult, hideValues)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardContent className="space-y-1">
-                <p className="text-xs text-muted-foreground">Mov. pendentes</p>
-                <p className="text-lg font-semibold text-amber-600 tabular-nums dark:text-amber-400">
-                  {pendingTransactions.length}{" "}
-                  <span className="text-xs font-medium text-muted-foreground">
-                    ({formatDisplayCurrency(pendingTotal, hideValues)})
-                  </span>
-                </p>
-              </CardContent>
-            </Card>
+          {/* Faixa padronizada de 6 KPIs */}
+          <div className="@container">
+            <div className="grid grid-cols-1 gap-3 @[360px]:grid-cols-2 @[640px]:grid-cols-3">
+              <AccountMetricCard
+                surface="card"
+                label="Saldo atual"
+                value={formatDisplayCurrency(account.currentBalance, hideValues)}
+                tone="neutral"
+              />
+              <AccountMetricCard
+                surface="card"
+                label="Saldo inicial"
+                value={formatDisplayCurrency(account.initialBalance, hideValues)}
+                tone="neutral"
+              />
+              <AccountMetricCard
+                surface="card"
+                label="Entradas do mês"
+                value={formatDisplayCurrency(selectedMonthFlow.income, hideValues)}
+                tone="positive"
+              />
+              <AccountMetricCard
+                surface="card"
+                label="Saídas do mês"
+                value={formatDisplayCurrency(selectedMonthFlow.expense, hideValues)}
+                tone="negative"
+              />
+              <AccountMetricCard
+                surface="card"
+                label="Resultado do mês"
+                value={formatDisplayCurrency(monthResult, hideValues)}
+                tone={monthResult >= 0 ? "positive" : "negative"}
+              />
+              <AccountMetricCard
+                surface="card"
+                label="Mov. pendentes"
+                value={String(pendingTransactions.length)}
+                secondaryValue={`(${formatDisplayCurrency(pendingTotal, hideValues)})`}
+                tone="warning"
+              />
+            </div>
           </div>
         </div>
       </div>

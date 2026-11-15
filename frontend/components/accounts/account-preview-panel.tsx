@@ -17,6 +17,7 @@ import {
   resolveAccountBrand,
   resolveCategoryIcon,
 } from "@/components/accounts/account-catalog";
+import { AccountMetricCard } from "@/components/accounts/account-metric-card";
 import type {
   AccountItem,
   AccountTransactionItem,
@@ -67,7 +68,7 @@ export function AccountPreviewPanel({
       <div>
         <CardHeader className="border-b border-border/70 pb-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <CardTitle className="truncate text-lg">{account.name}</CardTitle>
                 <Badge variant={account.status === "ACTIVE" ? "success" : "warning"}>
@@ -95,6 +96,7 @@ export function AccountPreviewPanel({
               type="button"
               variant="outline"
               size="sm"
+              className="shrink-0"
               onClick={() => onEdit(account)}
             >
               <Pencil className="size-3.5" aria-hidden="true" />
@@ -104,38 +106,29 @@ export function AccountPreviewPanel({
         </CardHeader>
 
         <CardContent className="space-y-5 pt-5">
-          {/* Resumo rápido de saldo e fluxo mensal */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-border/80 bg-muted/40 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Saldo atual</p>
-              <p className="mt-1 text-sm font-bold text-foreground tabular-nums">
-                {formatDisplayCurrency(account.currentBalance, hideValues)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/80 bg-muted/40 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Entradas (mês)</p>
-              <p className="mt-1 text-sm font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
-                {formatDisplayCurrency(account.monthlyIncome, hideValues)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/80 bg-muted/40 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Saídas (mês)</p>
-              <p className="mt-1 text-sm font-semibold text-rose-600 tabular-nums dark:text-rose-400">
-                {formatDisplayCurrency(account.monthlyExpense, hideValues)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/80 bg-muted/40 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Resultado</p>
-              <p
-                className={cn(
-                  "mt-1 text-sm font-semibold tabular-nums",
-                  monthlyResult >= 0
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400",
-                )}
-              >
-                {formatDisplayCurrency(monthlyResult, hideValues)}
-              </p>
+          {/* Resumo rápido de saldo e fluxo mensal com métricas padronizadas */}
+          <div className="@container">
+            <div className="grid grid-cols-1 gap-3 @[300px]:grid-cols-2 @[660px]:grid-cols-4">
+              <AccountMetricCard
+                label="Saldo atual"
+                value={formatDisplayCurrency(account.currentBalance, hideValues)}
+                tone="neutral"
+              />
+              <AccountMetricCard
+                label="Entradas do mês"
+                value={formatDisplayCurrency(account.monthlyIncome, hideValues)}
+                tone="positive"
+              />
+              <AccountMetricCard
+                label="Saídas do mês"
+                value={formatDisplayCurrency(account.monthlyExpense, hideValues)}
+                tone="negative"
+              />
+              <AccountMetricCard
+                label="Resultado do mês"
+                value={formatDisplayCurrency(monthlyResult, hideValues)}
+                tone={monthlyResult >= 0 ? "positive" : "negative"}
+              />
             </div>
           </div>
 
@@ -208,7 +201,7 @@ export function AccountPreviewPanel({
                             >
                               <CategoryIcon className="size-2.5" aria-hidden="true" />
                             </span>
-                            <span>
+                            <span className="truncate">
                               {tx.category} • {formatTransactionDate(tx.occurredAt)}
                             </span>
                           </p>
