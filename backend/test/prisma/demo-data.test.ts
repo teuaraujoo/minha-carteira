@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { inflateSync } from "node:zlib";
 import bcrypt from "bcrypt";
-import { createDemoHistory, createDemoUsers, DEMO_AVATAR, DEMO_USERS } from "../../prisma/scripts/data/demo-data.js";
+import { createDemoAccounts, createDemoHistory, createDemoUsers, DEMO_AVATAR, DEMO_USERS } from "../../prisma/scripts/data/demo-data.js";
+import { Account } from "../../src/modules/accounts/domain/entities/account.entity.js";
 import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
 import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
 import { UserCapabilities } from "../../src/modules/users/domain/enums/users.enums.js";
@@ -93,4 +94,31 @@ test("histórico de demonstração contém apenas autenticações expiradas ou c
   assert.match(history.refreshToken.tokenHash, /^[a-f0-9]{64}$/);
   const session = new RefreshToken(history.refreshToken as ConstructorParameters<typeof RefreshToken>[0]);
   assert.equal(session.isActiveAt(now), false);
+});
+
+test("contas financeiras de demonstração respeitam invariantes de domínio e pertencem ao usuário padrão", () => {
+  const accounts = createDemoAccounts(now);
+  assert.equal(accounts.length, 3);
+  assert.equal(new Set(accounts.map(account => account.id)).size, 3);
+  for (const props of accounts) {
+    const account = new Account({
+      id: props.id,
+      userId: props.userId,
+      name: props.name,
+      type: props.type as Account["type"],
+      brand: props.brand ?? null,
+      institution: props.institution ?? null,
+      color: props.color ?? null,
+      initialBalance: Number(props.initialBalance),
+      currentBalance: Number(props.currentBalance),
+      status: props.status as Account["status"],
+      inactivatedAt: (props.inactivatedAt as Date | null | undefined) ?? null,
+      createdAt: props.createdAt as Date,
+      updatedAt: props.updatedAt as Date,
+    });
+    assert.equal(account.userId, DEMO_USERS[1]!.id);
+    assert.ok(account.initialBalance >= 0);
+  }
+  assert.equal(accounts.filter(account => account.status === "ACTIVE").length, 2);
+  assert.equal(accounts.filter(account => account.status === "INACTIVE").length, 1);
 });

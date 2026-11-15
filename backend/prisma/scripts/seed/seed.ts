@@ -7,7 +7,7 @@ import { createPinoAppLogger } from "../../../src/shared/infrastructure/logging/
 import { createR2Client } from "../../../src/modules/storage/infrastructure/providers/cloudflare-r2/r2-client.js";
 import { R2StorageService } from "../../../src/modules/storage/infrastructure/providers/cloudflare-r2/r2-storage.service.js";
 import { validateStoredFile } from "../../../src/modules/storage/domain/validation/file-validation.js";
-import { createDemoHistory, createDemoUsers, DEMO_AVATAR, DEMO_USERS } from "../data/demo-data.js";
+import { createDemoAccounts, createDemoHistory, createDemoUsers, DEMO_AVATAR, DEMO_USERS } from "../data/demo-data.js";
 import { listApplicationTables, resolveMaintenanceTarget } from "../database-maintenance.js";
 
 const logger = createPinoAppLogger({ pretty: false });
@@ -40,7 +40,9 @@ try {
   try {
     const client = await pool.connect();
     try { await listApplicationTables(client, target.schema); } finally { client.release(); }
-    const history = createDemoHistory(new Date());
+    const now = new Date();
+    const history = createDemoHistory(now);
+    const accounts = createDemoAccounts(now);
     await prisma.$transaction(async transaction => {
       // IDs e identidades reservados impedem promover ou sobrescrever contas preexistentes.
       const existing = await transaction.user.findMany({
@@ -62,9 +64,16 @@ try {
       if (previousSession && (previousSession.userId !== history.refreshToken.userId || previousSession.tokenHash !== history.refreshToken.tokenHash)) {
         throw new Error("Uma sessão existente conflita com o histórico reservado do seed.");
       }
+      for (const account of accounts) {
+        const previousAccount = await transaction.account.findUnique({ where: { id: account.id } });
+        if (previousAccount && previousAccount.userId !== account.userId) {
+          throw new Error("Uma conta financeira existente conflita com os identificadores reservados do seed.");
+        }
+      }
       for (const user of users) await transaction.user.upsert({ where: { id: user.id }, update: {}, create: user });
       for (const challenge of history.challenges) await transaction.challenge.upsert({ where: { id: challenge.id! }, update: {}, create: challenge });
       await transaction.refreshToken.upsert({ where: { id: history.refreshToken.id! }, update: {}, create: history.refreshToken });
+      for (const account of accounts) await transaction.account.upsert({ where: { id: account.id }, update: {}, create: account });
     });
     for (const [index, user] of DEMO_USERS.slice(0, 3).entries()) {
       const id = `75000000-0000-4000-8000-00000000000${index + 1}`;
@@ -86,7 +95,7 @@ try {
         throw error;
       }
     }
-    logger.info({ event: "database.seed.completed", module: "database", message: "Seed concluído: quatro usuários, três imagens reais no R2 e históricos de autenticação sem tokens utilizáveis." });
+    logger.info({ event: "database.seed.completed", module: "database", message: "Seed concluído: quatro usuários, três imagens reais no R2, contas financeiras e históricos de autenticação sem tokens utilizáveis." });
   } finally {
     await prisma.$disconnect();
     await pool.end();

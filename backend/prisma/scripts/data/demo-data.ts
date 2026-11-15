@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Prisma } from "../../../generated/prisma/client.js";
+import { Account } from "../../../src/modules/accounts/domain/entities/account.entity.js";
+import { AccountType } from "../../../src/modules/accounts/domain/enums/account.enums.js";
 import { User } from "../../../src/modules/users/domain/entities/users.entity.js";
 import { UserCapabilities, UserRoles, UserStatus } from "../../../src/modules/users/domain/enums/users.enums.js";
 import type { PasswordHasher } from "../../../src/shared/application/security/password-hasher.js";
@@ -62,4 +64,49 @@ export function createDemoHistory(now: Date) {
     createdAt: issuedAt, updatedAt: completedAt,
   };
   return { challenges, refreshToken };
+}
+
+export function createDemoAccounts(now: Date): Array<Prisma.AccountUncheckedCreateInput & { id: string }> {
+  const ownerUserId = DEMO_USERS[1]!.id;
+  const createdAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const inactivatedAt = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+
+  const digital = Account.create({
+    id: "76000000-0000-4000-8000-000000000001",
+    userId: ownerUserId,
+    name: "Nubank Principal",
+    type: AccountType.DIGITAL,
+    brand: "mastercard",
+    institution: "Nubank",
+    color: "#8A05BE",
+    initialBalance: 3500,
+    now: createdAt,
+  });
+
+  const checking = Account.create({
+    id: "76000000-0000-4000-8000-000000000002",
+    userId: ownerUserId,
+    name: "Banco do Brasil",
+    type: AccountType.CHECKING,
+    brand: "visa",
+    institution: "Banco do Brasil",
+    color: "#0038A8",
+    initialBalance: 1200.5,
+    now: createdAt,
+  });
+
+  const inactive = Account.create({
+    id: "76000000-0000-4000-8000-000000000003",
+    userId: ownerUserId,
+    name: "Cartão Antigo",
+    type: AccountType.DIGITAL,
+    brand: "elo",
+    institution: "Banco Inter",
+    color: "#64748B",
+    initialBalance: 0,
+    now: createdAt,
+  });
+  inactive.deactivate(inactivatedAt);
+
+  return [digital.toJSON(), checking.toJSON(), inactive.toJSON()];
 }

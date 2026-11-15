@@ -77,6 +77,19 @@ enum MessagingIdentityStatus {
   REVOKED
 }
 
+enum AccountType {
+  CHECKING
+  CASH
+  DIGITAL
+  SAVINGS
+  INVESTMENT
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id                    String                 @id @default(uuid()) @db.Uuid
   username              String                 @unique
@@ -93,6 +106,7 @@ model User {
   refreshTokens         RefreshToken[]
   storedFiles           StoredFile[]
   messagingIdentities   MessagingIdentity[]
+  accounts              Account[]
 
   @@index([status, inactivatedAt])
   @@map("users")
@@ -179,4 +193,26 @@ model MessagingIdentity {
   @@unique([provider, externalUserId])
   @@index([userId, enabled, status])
   @@map("messaging_identities")
+}
+
+model Account {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  name           String        @db.VarChar(80)
+  type           AccountType
+  brand          String?       @db.VarChar(60)
+  institution    String?       @db.VarChar(80)
+  color          String?       @db.VarChar(7)
+  initialBalance Decimal       @map("initial_balance") @db.Decimal(14, 2)
+  currentBalance Decimal       @map("current_balance") @db.Decimal(14, 2)
+  status         AccountStatus @default(ACTIVE)
+  inactivatedAt  DateTime?     @map("inactivated_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, type, status])
+  @@index([userId, inactivatedAt])
+  @@map("accounts")
 }

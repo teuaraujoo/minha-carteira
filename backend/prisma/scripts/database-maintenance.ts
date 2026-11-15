@@ -1,11 +1,11 @@
 import type { PoolClient } from "pg";
 
 export const REQUIRED_TABLES = [
-  "users", "stored_files", "refresh_tokens", "challenges",
+  "users", "stored_files", "refresh_tokens", "challenges", "accounts",
 ] as const;
 
 export const RESET_TABLES = [
-  "challenges", "messaging_identities", "refresh_tokens", "stored_files", "users",
+  "challenges", "messaging_identities", "accounts", "refresh_tokens", "stored_files", "users",
 ] as const;
 
 export interface MaintenanceTarget {
