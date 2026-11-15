@@ -19,6 +19,7 @@ export interface CreateAppOptions {
   logger: AppLogger;
   authRouter: Router;
   usersRouter: Router;
+  accountsRouter?: Router;
   allowedOrigins: string[];
 }
 
@@ -41,6 +42,9 @@ export function createApp(options: CreateAppOptions) {
 
   app.use("/api/v1/auth", options.authRouter);
   app.use("/api/v1/users", options.usersRouter);
+  if (options.accountsRouter) {
+    app.use("/api/v1/accounts", options.accountsRouter);
+  }
 
   app.get("/", (_request, response) => {
     response.status(200).send("Hello, World!");

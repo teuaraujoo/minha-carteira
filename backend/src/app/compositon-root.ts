@@ -11,6 +11,11 @@ import { AuthService } from "../modules/auth/application/services/auth.service.j
 import { StorageService, PrismaStoredFileRepository, createR2Client, R2StorageService } from "../modules/storage/index.js";
 import { createAuthRouter } from "../modules/auth/presentation/routes/auth.routes.js";
 import { createUsersRouter } from "../modules/users/presentation/routes/users.routes.js";
+import {
+  AccountsService,
+  PrismaAccountRepository,
+  createAccountsRouter,
+} from "../modules/accounts/index.js";
 import { createPinoAppLogger } from "../shared/infrastructure/logging/pino-app-logger.js";
 import { createApp } from "./app.js";
 import { ResendEmailProvider } from "../shared/infrastructure/providers/email/resend-email.provider.js";
@@ -60,7 +65,16 @@ export function createCompositionRoot() {
     refreshTokenRepository,
     allowedOrigins,
   );
-  const app = createApp({ logger, authRouter, usersRouter, allowedOrigins });
+  const accountRepository = new PrismaAccountRepository(prisma);
+  const accountsService = new AccountsService(accountRepository, logger);
+  const accountsRouter = createAccountsRouter(
+    accountsService,
+    jwtProvider,
+    refreshTokenRepository,
+    userService,
+    allowedOrigins,
+  );
+  const app = createApp({ logger, authRouter, usersRouter, accountsRouter, allowedOrigins });
 
   return { app, logger };
 }
