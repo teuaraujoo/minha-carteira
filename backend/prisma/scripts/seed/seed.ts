@@ -52,10 +52,6 @@ try {
           throw new Error("Uma conta existente conflita com as identidades reservadas do seed; nenhum usuário foi alterado.");
         }
       }
-      const previousRequest = await transaction.passwordResetRequest.findUnique({ where: { id: history.request.id! } });
-      if (previousRequest && previousRequest.userId !== history.request.userId) {
-        throw new Error("Uma solicitação existente conflita com o histórico reservado do seed.");
-      }
       for (const challenge of history.challenges) {
         const previous = await transaction.challenge.findUnique({ where: { id: challenge.id! } });
         if (previous && (previous.subjectId !== challenge.subjectId || previous.subjectType !== challenge.subjectType || previous.purpose !== challenge.purpose || previous.secretHash !== challenge.secretHash)) {
@@ -67,7 +63,6 @@ try {
         throw new Error("Uma sessão existente conflita com o histórico reservado do seed.");
       }
       for (const user of users) await transaction.user.upsert({ where: { id: user.id }, update: {}, create: user });
-      await transaction.passwordResetRequest.upsert({ where: { id: history.request.id! }, update: {}, create: history.request });
       for (const challenge of history.challenges) await transaction.challenge.upsert({ where: { id: challenge.id! }, update: {}, create: challenge });
       await transaction.refreshToken.upsert({ where: { id: history.refreshToken.id! }, update: {}, create: history.refreshToken });
     });

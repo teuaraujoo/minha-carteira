@@ -52,7 +52,6 @@ de persistência converte essa estrutura para uma coluna JSON. A localização e
 confiáveis. Esses dados continuam sendo sinais de auditoria, não provas de
 identidade.
 
-`PasswordResetRequest.metadata` registra o contexto que iniciou a solicitação.
 `Challenge.metadata.issued` registra o contexto de emissão do desafio, enquanto
 `Challenge.metadata.consumed` começa nulo e recebe o contexto da requisição que
 o consumiu. Essa separação permite uma comparação futura sem usá-la agora para
@@ -102,34 +101,6 @@ enum RefreshTokenRevokeReason {
 estados diferentes. Um token vencido pode ter `revokedAt` e `revokeReason`
 nulos.
 
-## Modelo de recuperação
-
-```typescript
-interface PasswordResetRequest {
-  id: string;
-  userId: string;
-  status: PasswordResetRequestStatus;
-  requestedAt: Date;
-  expiresAt: Date;
-  metadata: RequestMetadata;
-  completedAt: Date | null;
-  cancelledAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-enum PasswordResetRequestStatus {
-  PENDING = "PENDING",
-  COMPLETED = "COMPLETED",
-  FAILED = "FAILED",
-  EXPIRED = "EXPIRED",
-  CANCELLED = "CANCELLED",
-}
-```
-
-`PasswordResetRequest` representa o processo de recuperação. O segredo enviado
-no link pertence a um `Challenge` vinculado à solicitação.
-
 ## Modelo de desafio
 
 ```typescript
@@ -158,7 +129,6 @@ enum ChallengePurpose {
 
 enum ChallengeSubjectType {
   USER = "USER",
-  PASSWORD_RESET_REQUEST = "PASSWORD_RESET_REQUEST",
   MESSAGING_IDENTITY = "MESSAGING_IDENTITY",
 }
 
@@ -170,8 +140,8 @@ enum ChallengeStatus {
 }
 ```
 
-Na recuperação de senha, `subjectType` recebe `PASSWORD_RESET_REQUEST` e
-`subjectId` recebe o ID da solicitação. O token em texto puro existe apenas
+Na recuperação de senha, `subjectType` recebe `USER` e
+`subjectId` recebe o ID do usuário. O token em texto puro existe apenas
 durante a geração do link. Banco, logs e eventos armazenam somente
 `secretHash` ou identificadores técnicos.
 
@@ -224,7 +194,7 @@ existir; não há prazo de retenção separado para a metadata. Apagar o registr
 remove também sua metadata. O job de expiração muda status para `EXPIRED`, mas
 não apaga registros.
 
-Como `Challenge` referencia `PasswordResetRequest` ou `User` por campos
+Como `Challenge` referencia `User` ou `MessagingIdentity` por campos
 polimórficos e não possui foreign key, a limpeza deve apagar os desafios
 vinculados explicitamente: os de reset junto com a solicitação e os de
 reativação junto com a conta, conforme a futura rotina de exclusão de usuários.
@@ -285,12 +255,6 @@ interface AccountSessionCoordinator {
   ): Promise<{ found: boolean; reactivated: boolean }>;
 }
 
-interface PasswordResetRequestRepository {
-  save(request: PasswordResetRequest): Promise<void>;
-  complete(id: string, completedAt: Date): Promise<void>;
-  cancelPendingFromUser(userId: string, cancelledAt: Date): Promise<void>;
-}
-
 interface ChallengeRepository {
   save(challenge: Challenge): Promise<void>;
   consumeUsableBySecretHash(
@@ -326,7 +290,7 @@ token. Uma simples sequência de leitura e atualização não satisfaz uso únic
 
 Para redefinição de senha, o `Composition Root` deve implementar um
 `PasswordResetUnitOfWork`. A execução fornece versões transacionais de
-`PasswordResetRequestRepository`, `ChallengeRepository`,
+`ChallengeRepository`,
 `RefreshTokenRepository` e `UsersAuthGateway`, todas ligadas à mesma transação
 do PostgreSQL. Nenhum tipo do Prisma pode aparecer na assinatura da aplicação.
 
@@ -433,11 +397,11 @@ todos os outros desafios `ACCOUNT_REACTIVATION` ainda `REQUESTED` da conta.
 3. **Use case:** localiza o usuário elegível por contrato público.
 4. **Módulos:** gera token criptograficamente seguro, calcula hash e monta URL
    com a origem do frontend configurada.
-5. **Persistência:** salva `PasswordResetRequest` e `Challenge` vinculados,
+5. **Persistência:** salva `Challenge` vinculado ao usuário (`USER`),
    persiste metadata para auditoria e guarda somente o hash do segredo no
    desafio.
-6. **E-mail:** solicita o envio ao `EmailProvider`. Se o envio falhar, marca a
-   solicitação e o desafio como `FAILED`; não tenta reenviar automaticamente.
+6. **E-mail:** solicita o envio ao `EmailProvider`. Se o envio falhar, marca o
+   desafio como `FAILED`; não tenta reenviar automaticamente.
 7. **Resposta:** devolve sempre a mesma resposta neutra 202, inclusive para
    e-mail inexistente, limite excedido ou falha do Resend.
 
@@ -447,12 +411,12 @@ todos os outros desafios `ACCOUNT_REACTIVATION` ainda `REQUESTED` da conta.
 2. **Validação:** confere igualdade e aplica a mesma política de senha do
    cadastro; a camada HTTP monta a metadata da requisição de consumo.
 3. **Use case:** localiza o desafio pelo ID, compara o hash do segredo e resolve
-   a solicitação vinculada. Segredo inválido incrementa `attempts`; a terceira
+   o usuário vinculado (`subjectId`). Segredo inválido incrementa `attempts`; a terceira
    falha marca o desafio como `FAILED`. O desafio expira após 15 minutos.
 4. **Módulos:** gera novo hash de senha pelo `PasswordHasher` e chama
    `UsersAuthGateway`.
 5. **Persistência:** `PasswordResetUnitOfWork` registra
-   `Challenge.metadata.consumed`, consome o desafio, conclui a solicitação,
+   `Challenge.metadata.consumed`, consome o desafio,
    troca o hash da senha e revoga todos os refresh tokens na mesma transação
    PostgreSQL.
 6. **Resposta:** responde 204 e solicita a notificação de senha alterada. Falha
@@ -472,7 +436,7 @@ todos os outros desafios `ACCOUNT_REACTIVATION` ainda `REQUESTED` da conta.
    configurada do frontend.
 5. **Persistência:** salva `Challenge` com propósito `ACCOUNT_REACTIVATION`,
    sujeito `USER`, metadata de emissão, expiração em 15 minutos e no máximo três
-   tentativas inválidas. Não existe `PasswordResetRequest` para esse fluxo.
+   tentativas inválidas.
 6. **E-mail:** o `EmailProvider` envia o link pelo Resend. Se houver falha,
    marca o desafio como `FAILED`; não há reenvio automático.
 7. **Resposta:** responde 202 de forma neutra, mesmo quando o e-mail não
@@ -581,17 +545,17 @@ antes de interferir em qualquer fluxo de autenticação.
 ## Backlog de encerramento de pendências
 
 Um processo agendado deve buscar registros pendentes cujo `expiresAt` já passou.
-Ele marca `PasswordResetRequest` e desafios vencidos como `EXPIRED`. Registros
+Ele marca desafios vencidos como `EXPIRED` (e pode limpar desafios de usuários
+desativados ou excluídos). Registros
 que não podem ser processados recebem `FAILED`. Esse job não envia e-mails, não
 troca senhas e não autentica usuários.
 
-As relações obrigatórias de `RefreshToken` e `PasswordResetRequest` com `User`
-usam `onDelete: Cascade`. A exclusão definitiva do usuário remove esses
+A relação obrigatória de `RefreshToken` com `User`
+usa `onDelete: Cascade`. A exclusão definitiva do usuário remove esses
 registros. `Challenge` permanece polimórfico e não possui foreign key direta.
 
 Metadata acompanha a vida do registro em que está armazenada. A exclusão do
-registro também remove a metadata; desafios polimórficos vinculados a uma
-solicitação devem ser apagados explicitamente na mesma transação.
+registro também remove a metadata.
 
 ## Ordem das migrations
 
@@ -601,7 +565,7 @@ até o momento é:
 1. `create-users`;
 2. `create-storage`;
 3. `create-refresh-tokens`;
-4. `create-password-reset-requests`;
+4. `create-password-reset-requests` *(removida posteriormente por `drop-password-reset-requests`)*;
 5. `create-challenges`;
 6. `add-account-reactivation-challenge` (adiciona `ACCOUNT_REACTIVATION` ao
    enum `ChallengePurpose`).

@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
-import { PasswordResetRequest } from "../../src/modules/auth/domain/entities/password-reset-request.entity.js";
 import { RefreshToken } from "../../src/modules/auth/domain/entities/refresh-token.entity.js";
-import type { ChallengeProps, PasswordResetRequestProps, RefreshTokenProps } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
+import type { ChallengeProps, RefreshTokenProps } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
 import {
   ChallengePurpose,
   ChallengeStatus,
   ChallengeSubjectType,
-  PasswordResetRequestStatus,
   RefreshTokenRevokeReason,
 } from "../../src/modules/auth/domain/enums/auth.enums.js";
 
@@ -22,15 +20,9 @@ function refreshToken(overrides: Partial<RefreshTokenProps> = {}): RefreshToken 
     revokeReason: null, createdAt: start, updatedAt: start, ...overrides });
 }
 
-function resetRequest(overrides: Partial<PasswordResetRequestProps> = {}): PasswordResetRequest {
-  return new PasswordResetRequest({ id: "request-1", userId: "user-1", status: PasswordResetRequestStatus.PENDING,
-    requestedAt: start, expiresAt: later, metadata, completedAt: null, cancelledAt: null,
-    createdAt: start, updatedAt: start, ...overrides });
-}
-
 function challenge(overrides: Partial<ChallengeProps> = {}): Challenge {
   return new Challenge({ id: "challenge-1", purpose: ChallengePurpose.PASSWORD_RESET,
-    subjectType: ChallengeSubjectType.PASSWORD_RESET_REQUEST, subjectId: "request-1", secretHash: "secret-hash",
+    subjectType: ChallengeSubjectType.USER, subjectId: "user-1", secretHash: "secret-hash",
     status: ChallengeStatus.REQUESTED, attempts: 0, maxAttempts: 3,
     metadata: { issued: metadata, consumed: null }, expiresAt: later, consumedAt: null,
     createdAt: start, updatedAt: start, ...overrides });
@@ -41,15 +33,6 @@ test("identifica sessão ativa e encerra validade na expiração ou revogação"
   assert.equal(refreshToken().isActiveAt(later), false);
   assert.equal(refreshToken({ revokedAt: start, revokeReason: RefreshTokenRevokeReason.LOGOUT }).isActiveAt(start), false);
   assert.throws(() => refreshToken({ revokedAt: start }), /Data e motivo/);
-});
-
-test("representa estados e expiração de solicitação de recuperação", () => {
-  const pending = resetRequest();
-  assert.equal(pending.isPendingAt(start), true);
-  assert.equal(pending.isPendingAt(later), false);
-  assert.equal(resetRequest({ status: PasswordResetRequestStatus.COMPLETED, completedAt: later }).isPendingAt(start), false);
-  assert.throws(() => resetRequest({ status: PasswordResetRequestStatus.COMPLETED }), /completedAt/);
-  assert.throws(() => resetRequest({ expiresAt: start }), /posterior/);
 });
 
 test("representa validade, tentativas e consumo do desafio", () => {
@@ -63,10 +46,10 @@ test("representa validade, tentativas e consumo do desafio", () => {
 
 test("copia metadata e datas para impedir mutações externas", () => {
   const source = { ...metadata, location: { latitude: 1, longitude: 2 } };
-  const request = resetRequest({ metadata: source });
+  const created = challenge({ metadata: { issued: source, consumed: null } });
   source.location.latitude = 9;
-  assert.equal(request.metadata.location?.latitude, 1);
-  const date = request.requestedAt;
+  assert.equal(created.metadata.issued.location?.latitude, 1);
+  const date = created.expiresAt;
   date.setTime(0);
-  assert.equal(request.requestedAt.getTime(), start.getTime());
+  assert.equal(created.expiresAt.getTime(), later.getTime());
 });

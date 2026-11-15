@@ -112,7 +112,7 @@ autenticação. O perfil completo pertence a `GET /users/me`.
 
 O sistema DEVE aceitar um e-mail e responder de forma neutra, exista ou não um
 usuário correspondente. Quando aplicável, deve gerar um token aleatório, salvar
-somente seu hash em um `Challenge` vinculado à `PasswordResetRequest` e enviar
+somente seu hash em um `Challenge` vinculado ao `USER` e enviar
 um link pelo Resend. Falhas de entrega também não podem alterar a resposta
 pública neutra. O servidor limita solicitações por e-mail normalizado e por IP,
 independentemente de a conta existir. Ao exceder o limite, mantém a resposta
@@ -122,14 +122,14 @@ neutra e não envia outro e-mail.
 
 O sistema DEVE aceitar `token`, `password` e `passwordConfirmation`. Deve
 validar igualdade, política de senha, expiração, uso único e vínculo do token
-antes de trocar o hash. A validação usa o `Challenge` e resolve sua
-`PasswordResetRequest` associada. O token identifica o desafio e contém um
+antes de trocar o hash. A validação usa o `Challenge` e resolve o usuário
+associado (`subjectType = USER`, `subjectId = userId`). O token identifica o desafio e contém um
 segredo; cada segredo inválido incrementa `attempts`. Após três falhas, o
 desafio recebe status `FAILED`.
 
 ### AUTH-RF-009 — Pós-recuperação
 
-O sistema DEVE consumir o desafio, concluir a solicitação, revogar todos os
+O sistema DEVE consumir o desafio, revogar todos os
 refresh tokens do usuário e enviar uma notificação de alteração. Não deve criar
 uma nova sessão.
 
@@ -140,7 +140,7 @@ tela de login. A API não precisa responder com redirecionamento HTTP.
 
 ### AUTH-RF-011 — Metadata de auditoria
 
-O sistema DEVE registrar `metadata` em `PasswordResetRequest` e `Challenge` para
+O sistema DEVE registrar `metadata` no `Challenge` para
 auditoria. A estrutura pode conter localização informada pelo frontend,
 `userAgent`, endereço IP e `deviceId`. Nesta versão, esses dados NÃO DEVEM
 aprovar, rejeitar ou alterar o resultado de login, recuperação ou desafio.
@@ -149,8 +149,7 @@ Endereço IP deve ser obtido da conexão ou de proxies confiáveis, e `userAgent
 deve ser obtido pela camada HTTP. Localização e `deviceId` são declarados pelo
 cliente. Nenhum desses valores é evidência confiável de identidade.
 
-`PasswordResetRequest.metadata` registra o início do processo. A metadata de
-`Challenge` separa o contexto de emissão do contexto de consumo, permitindo
+A metadata de `Challenge` separa o contexto de emissão do contexto de consumo, permitindo
 comparação futura sem interferir no comportamento atual.
 
 ### AUTH-RF-012 — Reativação de conta desativada
@@ -221,7 +220,7 @@ aprovada. A rota administrativa de reativação pertence ao módulo `users`.
 - `PasswordHasher`;
 - provider JWT;
 - `RefreshTokenRepository`;
-- `PasswordResetRequestRepository` e `ChallengeRepository`;
+- `ChallengeRepository`;
 - `TokenGenerator`, `TokenHasher` e `ClockProvider`;
 - `EmailProvider` implementado com o SDK do Resend;
 - configuração segura de cookies e CORS;
@@ -249,7 +248,7 @@ aprovada. A rota administrativa de reativação pertence ao módulo `users`.
 - o refresh token é persistido somente como hash;
 - os motivos de revogação são `LOGOUT`, `PASSWORD_RESET`,
   `USER_DEACTIVATED`, `ADMINISTRATIVE_ACTION` e `SECURITY_EVENT`;
-- recuperação usa `PasswordResetRequest` vinculada a um `Challenge` genérico;
+- recuperação usa `Challenge` genérico vinculado ao usuário (`USER`);
 - o token de reset contém `challengeId.secret`; somente o hash do segredo é
   persistido;
 - o token de reset expira 15 minutos após a emissão e permite três tentativas
@@ -267,7 +266,7 @@ aprovada. A rota administrativa de reativação pertence ao módulo `users`.
   bloqueia o usuário;
 - falha ao enviar o link marca a solicitação e o desafio como `FAILED`; o
   sistema não reprocessa automaticamente e mantém a resposta pública neutra;
-- `PasswordResetRequest` e `Challenge` guardam metadata para auditoria;
+- `Challenge` guarda metadata para auditoria;
 - metadata não participa de decisões de segurança nesta versão;
 - metadata permanece enquanto existir o registro que a contém e é removida
   junto com ele, sem prazo separado;
@@ -309,7 +308,7 @@ pendentes. O processo deve marcar solicitações vencidas como `EXPIRED` e
 desafios vencidos ou não processáveis como `EXPIRED` ou `FAILED`. O sistema não
 executa essa rotina durante o fluxo HTTP.
 
-`PasswordResetRequestStatus` e `ChallengeStatus` possuem `FAILED` para falhas de
+`ChallengeStatus` possui `FAILED` para falhas de
 processamento. `CANCELLED` permanece reservado para encerramento intencional de
 uma solicitação ainda válida.
 

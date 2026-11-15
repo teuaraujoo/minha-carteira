@@ -29,14 +29,6 @@ enum RefreshTokenRevokeReason {
   SECURITY_EVENT
 }
 
-enum PasswordResetRequestStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  EXPIRED
-  CANCELLED
-}
-
 enum ChallengePurpose {
   PASSWORD_RESET
   ACCOUNT_REACTIVATION
@@ -46,7 +38,6 @@ enum ChallengePurpose {
 
 enum ChallengeSubjectType {
   USER
-  PASSWORD_RESET_REQUEST
   MESSAGING_IDENTITY
 }
 
@@ -99,7 +90,6 @@ model User {
   updatedAt             DateTime               @updatedAt @map("updated_at")
   inactivatedAt         DateTime?              @map("inactivated_at")
   refreshTokens         RefreshToken[]
-  passwordResetRequests PasswordResetRequest[]
   storedFiles           StoredFile[]
   messagingIdentities   MessagingIdentity[]
 
@@ -125,24 +115,6 @@ model RefreshToken {
   @@index([userId, expiresAt])
   @@index([userId, revokedAt])
   @@map("refresh_tokens")
-}
-
-model PasswordResetRequest {
-  id          String                     @id @default(uuid()) @db.Uuid
-  userId      String                     @map("user_id") @db.Uuid
-  status      PasswordResetRequestStatus @default(PENDING)
-  requestedAt DateTime                   @default(now()) @map("requested_at")
-  expiresAt   DateTime                   @map("expires_at")
-  metadata    Json
-  completedAt DateTime?                  @map("completed_at")
-  cancelledAt DateTime?                  @map("cancelled_at")
-  createdAt   DateTime                   @default(now()) @map("created_at")
-  updatedAt   DateTime                   @updatedAt @map("updated_at")
-  user        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, status])
-  @@index([status, expiresAt])
-  @@map("password_reset_requests")
 }
 
 model Challenge {

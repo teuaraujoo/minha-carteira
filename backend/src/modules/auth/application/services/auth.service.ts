@@ -8,7 +8,6 @@ import {
   REFRESH_TOKEN_TTL_MS,
 } from "../../domain/constants/auth.constants.js";
 import { Challenge } from "../../domain/entities/challenge.entity.js";
-import { PasswordResetRequest } from "../../domain/entities/password-reset-request.entity.js";
 import { RefreshToken } from "../../domain/entities/refresh-token.entity.js";
 import type { ChallengeMetadata, RequestMetadata } from "../../domain/interfaces/auth.interfaces.js";
 import type { LoginInput, LoginSessionResult } from "../dto/login.dto.js";
@@ -18,16 +17,13 @@ import type { PasswordHasher } from "../../../../shared/application/security/pas
 import type { AppLogger } from "../../../../shared/application/logging/app-logger.js";
 import type { EmailProvider } from "../../../../shared/application/contracts/email-provider.contract.js";
 import type { IChallengeRepository } from "../../domain/interfaces/challenge-repository.interface.js";
-import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, PasswordResetRequestStatus } from "../../domain/enums/auth.enums.js";
+import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType } from "../../domain/enums/auth.enums.js";
 import type { PrismaClient } from "../../../../../generated/prisma/client.js";
 import { UserStatus as PrismaUserStatus } from "../../../../../generated/prisma/enums.js";
 import { PrismaRefreshTokenRepository } from "../../infrastructure/repositories/refresh-token.repository.js";
 import { PrismaChallengeRepository } from "../../infrastructure/repositories/challenge.repository.js";
-import { PrismaPasswordResetRequestRepository } from "../../infrastructure/repositories/password-reset-request.repository.js";
 import { randomUUID } from "node:crypto";
 import type { UserService } from "../../../users/application/services/users.service.js";
-
-const PASSWORD_RESET_CONCURRENCY_ERROR = Symbol("Falha de concorrência na redefinição de senha.");
 
 export interface RequestPasswordResetInput {
   email: string;
@@ -42,7 +38,6 @@ export interface ConfirmPasswordResetInput {
 }
 
 export interface AuthEmailDependencies {
-  challengeRepository: IChallengeRepository;
   emailProvider: EmailProvider;
   tokenGenerator: TokenGenerator;
   rateLimiter: PasswordResetRateLimiter;
@@ -58,6 +53,7 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly jwtProvider: JwtProvider,
     private readonly prisma: PrismaClient,
+    private readonly challengeRepository: IChallengeRepository,
     private readonly emailFlows?: AuthEmailDependencies,
   ) { }
 
@@ -71,28 +67,15 @@ export class AuthService {
     const recipient = await this.userService.findActivePasswordResetRecipient(normalizedEmail);
     if (!recipient) return;
 
-    const requestId = randomUUID();
     const challengeId = randomUUID();
     const secret = dependencies.tokenGenerator.generate();
     const secretHash = await this.tokenHasher.hash(secret);
     const expiresAt = new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS);
-    const resetRequest = new PasswordResetRequest({
-      id: requestId,
-      userId: recipient.id,
-      status: PasswordResetRequestStatus.PENDING,
-      requestedAt: now,
-      expiresAt,
-      metadata,
-      completedAt: null,
-      cancelledAt: null,
-      createdAt: now,
-      updatedAt: now,
-    });
     const challenge = new Challenge({
       id: challengeId,
       purpose: ChallengePurpose.PASSWORD_RESET,
-      subjectType: ChallengeSubjectType.PASSWORD_RESET_REQUEST,
-      subjectId: requestId,
+      subjectType: ChallengeSubjectType.USER,
+      subjectId: recipient.id,
       secretHash,
       status: ChallengeStatus.REQUESTED,
       attempts: 0,
@@ -104,10 +87,7 @@ export class AuthService {
       updatedAt: now,
     });
 
-    await this.prisma.$transaction(async (transaction) => {
-      await new PrismaPasswordResetRequestRepository(transaction).save(resetRequest);
-      await new PrismaChallengeRepository(transaction).save(challenge);
-    });
+    await this.challengeRepository.save(challenge);
 
     const resetUrl = new URL("/reset-password", dependencies.frontendUrl);
     resetUrl.searchParams.set("token", `${challengeId}.${secret}`);
@@ -121,11 +101,7 @@ export class AuthService {
       });
     } catch {
       try {
-        const now = new Date()
-        await this.prisma.$transaction(async (transaction) => {
-          await new PrismaPasswordResetRequestRepository(transaction).markFailed(requestId, now);
-          await new PrismaChallengeRepository(transaction).markFailed(challengeId, now);
-        });
+        await this.challengeRepository.markFailed(challengeId, new Date());
       } catch {
         dependencies.logger.error({
           event: "auth.password-reset.email-failed",
@@ -157,53 +133,43 @@ export class AuthService {
       consumed: snapshotMetadata(input.metadata),
     };
 
-    let changedEmail: string | null = null;
-    try {
-      changedEmail = await this.prisma.$transaction(async (transaction) => {
-        const challenges = new PrismaChallengeRepository(transaction);
-        const requests = new PrismaPasswordResetRequestRepository(transaction);
-        const refreshTokens = new PrismaRefreshTokenRepository(transaction);
-        const challenge = await challenges.findById(challengeId);
-        if (!challenge || challenge.purpose !== ChallengePurpose.PASSWORD_RESET
-          || challenge.subjectType !== ChallengeSubjectType.PASSWORD_RESET_REQUEST
-          || !challenge.isUsableAt(now)) return null;
+    const changedEmail = await this.prisma.$transaction(async (transaction) => {
+      const challenges = new PrismaChallengeRepository(transaction);
+      const refreshTokens = new PrismaRefreshTokenRepository(transaction);
+      const challenge = await challenges.findById(challengeId);
+      if (!challenge || challenge.purpose !== ChallengePurpose.PASSWORD_RESET
+        || challenge.subjectType !== ChallengeSubjectType.USER
+        || !challenge.isUsableAt(now)) return null;
 
-        if (!await this.tokenHasher.matches(secret, challenge.secretHash)) {
-          await challenges.registerInvalidAttempt(challengeId, now);
-          return null;
-        }
+      if (!await this.tokenHasher.matches(secret, challenge.secretHash)) {
+        await challenges.registerInvalidAttempt(challengeId, now);
+        return null;
+      }
 
-        const resetRequest = await requests.findById(challenge.subjectId);
-        if (!resetRequest || resetRequest.userId.length === 0 || !resetRequest.isPendingAt(now)) return null;
-        const recipient = await transaction.user.findFirst({
-          where: { id: resetRequest.userId, status: PrismaUserStatus.ACTIVE },
-          select: { email: true },
-        });
-        if (!recipient) return null;
-
-        if (!await challenges.completeIfUsable(challengeId, {
-          issued: challenge.metadata.issued,
-          consumed: consumedMetadata.consumed,
-        }, now)) return null;
-        if (!await requests.complete(resetRequest.id, now)) throw PASSWORD_RESET_CONCURRENCY_ERROR;
-
-        const passwordHash = await this.passwordHasher.hash(input.password);
-        const updatedUser = await transaction.user.updateMany({
-          where: { id: resetRequest.userId, status: PrismaUserStatus.ACTIVE },
-          data: { passwordHash, updatedAt: now },
-        });
-        if (updatedUser.count !== 1) throw PASSWORD_RESET_CONCURRENCY_ERROR;
-        await refreshTokens.revokeAllFromUser(
-          resetRequest.userId,
-          now,
-          RefreshTokenRevokeReason.PASSWORD_RESET,
-        );
-        return recipient.email;
+      const recipient = await transaction.user.findFirst({
+        where: { id: challenge.subjectId, status: PrismaUserStatus.ACTIVE },
+        select: { email: true },
       });
-    } catch (error) {
-      if (error === PASSWORD_RESET_CONCURRENCY_ERROR) throw invalidResetToken();
-      throw error;
-    }
+      if (!recipient) return null;
+
+      if (!await challenges.completeIfUsable(challengeId, {
+        issued: challenge.metadata.issued,
+        consumed: consumedMetadata.consumed,
+      }, now)) return null;
+
+      const passwordHash = await this.passwordHasher.hash(input.password);
+      const updatedUser = await transaction.user.updateMany({
+        where: { id: challenge.subjectId, status: PrismaUserStatus.ACTIVE },
+        data: { passwordHash, updatedAt: now },
+      });
+      if (updatedUser.count !== 1) throw invalidResetToken();
+      await refreshTokens.revokeAllFromUser(
+        challenge.subjectId,
+        now,
+        RefreshTokenRevokeReason.PASSWORD_RESET,
+      );
+      return recipient.email;
+    });
 
     if (!changedEmail) throw invalidResetToken();
     dependencies.logger.info({
@@ -253,7 +219,7 @@ export class AuthService {
       createdAt: now,
       updatedAt: now,
     });
-    await dependencies.challengeRepository.save(challenge);
+    await this.challengeRepository.save(challenge);
 
     const reactivationUrl = new URL("/reactivate-account", dependencies.frontendUrl);
     reactivationUrl.searchParams.set("token", `${challengeId}.${secret}`);
@@ -268,7 +234,7 @@ export class AuthService {
     } catch {
       try {
         const failedAt = new Date()
-        await dependencies.challengeRepository.markFailed(challengeId, failedAt);
+        await this.challengeRepository.markFailed(challengeId, failedAt);
       } catch {
         dependencies.logger.error({
           event: "auth.account-reactivation.email-failed",
@@ -293,14 +259,14 @@ export class AuthService {
     if (!challengeId || !secret || extra.length > 0) throw invalidAccountReactivationToken();
 
     const now = new Date();
-    const challenge = await dependencies.challengeRepository.findById(challengeId);
+    const challenge = await this.challengeRepository.findById(challengeId);
     if (!challenge || challenge.purpose !== ChallengePurpose.ACCOUNT_REACTIVATION
       || challenge.subjectType !== ChallengeSubjectType.USER || !challenge.isUsableAt(now)) {
       throw invalidAccountReactivationToken();
     }
 
     if (!await this.tokenHasher.matches(secret, challenge.secretHash)) {
-      await dependencies.challengeRepository.registerInvalidAttemptForPurpose(
+      await this.challengeRepository.registerInvalidAttemptForPurpose(
         challenge.id,
         ChallengePurpose.ACCOUNT_REACTIVATION,
         ChallengeSubjectType.USER,
@@ -314,7 +280,7 @@ export class AuthService {
       issued: challenge.metadata.issued,
       consumed: snapshotMetadata(input.metadata),
     };
-    if (!await dependencies.challengeRepository.completeIfUsableForPurpose(
+    if (!await this.challengeRepository.completeIfUsableForPurpose(
       challenge.id,
       ChallengePurpose.ACCOUNT_REACTIVATION,
       ChallengeSubjectType.USER,

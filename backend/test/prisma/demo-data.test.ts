@@ -79,9 +79,6 @@ test("avatar de demonstração passa no validador e possui chunks PNG íntegros"
 
 test("histórico de demonstração contém apenas autenticações expiradas ou consumidas", () => {
   const history = createDemoHistory(now);
-  assert.equal(history.request.status, "COMPLETED");
-  assert.ok(history.request.completedAt instanceof Date);
-  assert.ok(history.request.expiresAt instanceof Date && history.request.expiresAt < now);
   for (const props of history.challenges) {
     const challenge = new Challenge(props as unknown as ConstructorParameters<typeof Challenge>[0]);
     assert.equal(challenge.isUsableAt(now), false);
@@ -89,8 +86,8 @@ test("histórico de demonstração contém apenas autenticações expiradas ou c
     assert.match(challenge.secretHash, /^[a-f0-9]{64}$/);
     assert.equal(challenge.consumedAt !== null, challenge.status === "COMPLETED");
   }
-  assert.equal(history.challenges[0]?.subjectId, history.request.id);
-  assert.equal(history.refreshToken.userId, history.request.userId);
+  assert.equal(history.challenges[0]?.subjectType, "USER");
+  assert.equal(history.challenges[0]?.subjectId, history.refreshToken.userId);
   assert.ok(history.refreshToken.revokedAt instanceof Date);
   assert.ok(history.refreshToken.expiresAt instanceof Date && history.refreshToken.expiresAt < now);
   assert.match(history.refreshToken.tokenHash, /^[a-f0-9]{64}$/);

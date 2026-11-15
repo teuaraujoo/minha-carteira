@@ -2,46 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AuthService } from "../../src/modules/auth/application/services/auth.service.js";
 import { Challenge } from "../../src/modules/auth/domain/entities/challenge.entity.js";
-import { PasswordResetRequest } from "../../src/modules/auth/domain/entities/password-reset-request.entity.js";
 import type { RequestMetadata } from "../../src/modules/auth/domain/interfaces/auth.interfaces.js";
 import type { IChallengeRepository } from "../../src/modules/auth/domain/interfaces/challenge-repository.interface.js";
-import type { IPasswordResetRequestRepository } from "../../src/modules/auth/domain/interfaces/password-reset-request-repository.interface.js";
 import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
-import type { UsersAuthGateway } from "../../src/modules/users/index.js";
+import type { UserService } from "../../src/modules/users/application/services/users.service.js";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
-import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, PasswordResetRequestStatus, RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
+import { ChallengePurpose, ChallengeStatus, ChallengeSubjectType, RefreshTokenRevokeReason } from "../../src/modules/auth/domain/enums/auth.enums.js";
 import { InMemoryPasswordResetRateLimiter } from "../../src/modules/auth/infrastructure/security/in-memory-password-reset-rate-limiter.js";
 import { noopLogger } from "../../src/shared/application/logging/app-logger.js";
 
-const now = new Date("2026-10-18T12:00:00.000Z");
+const now = new Date();
 const metadata: RequestMetadata = { location: null, userAgent: "Teste", ipAddress: "127.0.0.1", deviceId: null };
 
 interface MemoryPasswordResetTransaction {
-  requests: IPasswordResetRequestRepository;
   challenges: IChallengeRepository;
   refreshTokens: IRefreshTokenRepository;
-  users: UsersAuthGateway;
+  users: Pick<UserService, "findActivePasswordResetRecipient" | "findActivePasswordResetRecipientById" | "changePasswordHash">;
 }
 
 function createPrisma(transaction: MemoryPasswordResetTransaction): PrismaClient {
   const prismaTransaction = {
-    passwordResetRequest: {
-      create: async ({ data }: { data: ConstructorParameters<typeof PasswordResetRequest>[0] }) => transaction.requests.save(new PasswordResetRequest(data)),
-      findUnique: async ({ where }: { where: { id: string } }) => {
-        const request = await transaction.requests.findById(where.id);
-        return request ? {
-          id: request.id, userId: request.userId, status: request.status,
-          requestedAt: request.requestedAt, expiresAt: request.expiresAt, metadata: request.metadata,
-          completedAt: request.completedAt, cancelledAt: request.cancelledAt,
-          createdAt: request.createdAt, updatedAt: request.updatedAt,
-        } : null;
-      },
-      updateMany: async ({ where, data }: { where: { id: string }; data: { status: string; completedAt?: Date; updatedAt: Date } }) => {
-        if (data.status === "COMPLETED") return { count: await transaction.requests.complete(where.id, data.completedAt ?? data.updatedAt) ? 1 : 0 };
-        await transaction.requests.markFailed(where.id, data.updatedAt);
-        return { count: 1 };
-      },
-    },
     challenge: {
       create: async ({ data }: { data: ConstructorParameters<typeof Challenge>[0] }) => transaction.challenges.save(new Challenge(data)),
       findUnique: async (input: { where: { id: string }; select?: { attempts: boolean; maxAttempts: boolean } }) => {
@@ -59,7 +39,7 @@ function createPrisma(transaction: MemoryPasswordResetTransaction): PrismaClient
         if (data.attempts) {
           const updated = await transaction.challenges.registerInvalidAttemptForPurpose(
             where.id, where.purpose ?? ChallengePurpose.PASSWORD_RESET,
-            where.subjectType ?? ChallengeSubjectType.PASSWORD_RESET_REQUEST,
+            where.subjectType ?? ChallengeSubjectType.USER,
             where.attempts?.lt ?? 3, data.updatedAt,
           );
           return { count: updated ? 1 : 0 };
@@ -95,11 +75,9 @@ function createPrisma(transaction: MemoryPasswordResetTransaction): PrismaClient
 }
 
 function setup(options: { activeRecipient?: { id: string; email: string } | null; failEmail?: boolean } = {}) {
-  let request: PasswordResetRequest | null = null;
   let challenge: Challenge | null = null;
   let challengeAttempts = 0;
   let challengeFailed = false;
-  let requestCompleted = false;
   let challengeCompleted = false;
   let changedPasswordHash: string | null = null;
   const revoked: Array<{ userId: string; reason: RefreshTokenRevokeReason }> = [];
@@ -107,17 +85,6 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
   const sentResetUrls: string[] = [];
   const recipient = options.activeRecipient === undefined ? { id: "user-1", email: "teco@example.com" } : options.activeRecipient;
   const transaction: MemoryPasswordResetTransaction = {
-    requests: {
-      save: async (value) => { request = value; },
-      findById: async (id) => request?.id === id && !requestCompleted ? request : null,
-      complete: async (id, at) => {
-        if (request?.id !== id || !request.isPendingAt(at) || requestCompleted) return false;
-        requestCompleted = true;
-        return true;
-      },
-      markFailed: async (id) => { if (request?.id === id) requestFailed = true; },
-      deleteWithChallenges: async () => undefined,
-    },
     challenges: {
       save: async (value) => { challenge = value; },
       findById: async (id) => challenge?.id === id && !challengeFailed && !challengeCompleted ? challenge : null,
@@ -153,26 +120,18 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
       revokeAllFromUser: async (userId, _at, reason) => { revoked.push({ userId, reason }); },
     },
     users: {
-      findCredentialsByIdentifier: async () => null,
-      findActiveUserById: async () => null,
       findActivePasswordResetRecipient: async () => recipient,
       findActivePasswordResetRecipientById: async (id) => id === recipient?.id ? recipient : null,
-      findInactiveAccountReactivationRecipient: async () => null,
-      reactivateUserById: async () => false,
       changePasswordHash: async (_id, hash) => { changedPasswordHash = hash; },
     },
   };
-  let requestFailed = false;
   const prisma = createPrisma(transaction);
-  let id = 0;
   const service = new AuthService(
     transaction.refreshTokens,
-    { now: () => now },
     { hash: async (token) => `hash:${token}`, matches: async (token, expected) => expected === `hash:${token}` },
     { hash: async (password) => `password-hash:${password}`, compare: async () => false },
-    transaction.users,
+    transaction.users as unknown as UserService,
     { signAccessToken: async () => "", signRefreshToken: async () => "", verifyAccessToken: async () => { throw new Error("Não esperado."); }, verifyRefreshToken: async () => { throw new Error("Não esperado."); } },
-    { generate: () => `generated-${++id}` },
     prisma,
     {
       challengeRepository: transaction.challenges,
@@ -189,12 +148,9 @@ function setup(options: { activeRecipient?: { id: string; email: string } | null
   );
   return {
     service,
-    get request() { return request; },
     get challenge() { return challenge; },
-    get requestFailed() { return requestFailed; },
     get challengeFailed() { return challengeFailed; },
     get challengeAttempts() { return challengeAttempts; },
-    get requestCompleted() { return requestCompleted; },
     get challengeCompleted() { return challengeCompleted; },
     get changedPasswordHash() { return changedPasswordHash; },
     revoked,
@@ -207,34 +163,34 @@ test("solicitação grava somente o hash do segredo e envia link neutro", async 
   const fixture = setup();
   await fixture.service.requestPasswordReset({ email: " TECO@EXAMPLE.COM ", metadata });
 
-  assert.equal(fixture.request?.status, PasswordResetRequestStatus.PENDING);
+  assert.equal(fixture.challenge?.status, ChallengeStatus.REQUESTED);
+  assert.equal(fixture.challenge?.subjectType, ChallengeSubjectType.USER);
+  assert.equal(fixture.challenge?.subjectId, "user-1");
   assert.equal(fixture.challenge?.secretHash, "hash:secret-token");
   assert.equal(fixture.challenge?.secretHash.includes("challengeId.secret"), false);
-  assert.equal(fixture.sentResetUrls[0], "https://carteira.example/reset-password?token=generated-2.secret-token");
+  assert.equal(fixture.sentResetUrls[0], `https://carteira.example/reset-password?token=${fixture.challenge?.id}.secret-token`);
   assert.deepEqual(fixture.emails, ["teco@example.com"]);
 });
 
 test("e-mail ausente não cria registro nem envia mensagem", async () => {
   const fixture = setup({ activeRecipient: null });
   await fixture.service.requestPasswordReset({ email: "ausente@example.com", metadata });
-  assert.equal(fixture.request, null);
   assert.equal(fixture.challenge, null);
   assert.deepEqual(fixture.emails, []);
 });
 
-test("falha de envio marca solicitação e desafio como falhos sem propagar", async () => {
+test("falha de envio marca desafio como falho sem propagar", async () => {
   const fixture = setup({ failEmail: true });
   await fixture.service.requestPasswordReset({ email: "teco@example.com", metadata });
-  assert.equal(fixture.requestFailed, true);
   assert.equal(fixture.challengeFailed, true);
 });
 
 test("confirmação atualiza senha, consome desafio e revoga sessões na unidade transacional", async () => {
   const fixture = setup();
   await fixture.service.requestPasswordReset({ email: "teco@example.com", metadata });
-  await fixture.service.confirmPasswordReset({ token: "generated-2.secret-token", password: "nova-senha-segura", passwordConfirmation: "nova-senha-segura", metadata });
+  const challengeId = fixture.challenge!.id;
+  await fixture.service.confirmPasswordReset({ token: `${challengeId}.secret-token`, password: "nova-senha-segura", passwordConfirmation: "nova-senha-segura", metadata });
 
-  assert.equal(fixture.requestCompleted, true);
   assert.equal(fixture.challengeCompleted, true);
   assert.equal(fixture.changedPasswordHash, "password-hash:nova-senha-segura");
   assert.deepEqual(fixture.revoked, [{ userId: "user-1", reason: RefreshTokenRevokeReason.PASSWORD_RESET }]);
@@ -244,8 +200,9 @@ test("confirmação atualiza senha, consome desafio e revoga sessões na unidade
 test("três segredos inválidos marcam o desafio como FAILED sem trocar a senha", async () => {
   const fixture = setup();
   await fixture.service.requestPasswordReset({ email: "teco@example.com", metadata });
+  const challengeId = fixture.challenge!.id;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await assert.rejects(fixture.service.confirmPasswordReset({ token: "generated-2.segredo-errado", password: "nova-senha-segura", passwordConfirmation: "nova-senha-segura", metadata }));
+    await assert.rejects(fixture.service.confirmPasswordReset({ token: `${challengeId}.segredo-errado`, password: "nova-senha-segura", passwordConfirmation: "nova-senha-segura", metadata }));
   }
   assert.equal(fixture.challengeAttempts, 3);
   assert.equal(fixture.challengeFailed, true);
@@ -255,7 +212,8 @@ test("três segredos inválidos marcam o desafio como FAILED sem trocar a senha"
 test("confirmação concorrente consome o desafio uma única vez", async () => {
   const fixture = setup();
   await fixture.service.requestPasswordReset({ email: "teco@example.com", metadata });
-  const input = { token: "generated-2.secret-token", password: "nova-senha-segura", passwordConfirmation: "nova-senha-segura", metadata };
+  const challengeId = fixture.challenge!.id;
+  const input = { token: `${challengeId}.secret-token`, password: "nova-senha-segura", passwordConfirmation: "nova-senha-segura", metadata };
   const results = await Promise.allSettled([
     fixture.service.confirmPasswordReset(input),
     fixture.service.confirmPasswordReset(input),

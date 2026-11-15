@@ -2,7 +2,6 @@ import type {
     ChallengePurpose,
     ChallengeStatus,
     ChallengeSubjectType,
-    PasswordResetRequestStatus,
     RefreshTokenRevokeReason
 } from "../enums/auth.enums.js";
 
@@ -17,19 +16,6 @@ export interface RefreshTokenProps {
     userAgent: string | null;
     ipAddress: string | null;
     revokeReason: RefreshTokenRevokeReason | null;
-    createdAt: Date;
-    updatedAt: Date;
-}
-
-export interface PasswordResetRequestProps {
-    id: string;
-    userId: string;
-    status: PasswordResetRequestStatus;
-    requestedAt: Date;
-    expiresAt: Date;
-    metadata: RequestMetadata;
-    completedAt: Date | null;
-    cancelledAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }

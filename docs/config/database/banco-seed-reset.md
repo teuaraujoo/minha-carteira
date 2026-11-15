@@ -118,7 +118,7 @@ interativo; não existe opção de confirmação automática.
    Tabelas obrigatórias ausentes ou tabelas desconhecidas interrompem o reset.
 3. **Persistência:** abre uma transação e executa `DELETE` no schema selecionado,
    na ordem `challenges`, `messaging_identities` quando existir,
-   `password_reset_requests`, `refresh_tokens`, `stored_files` e `users`.
+   `refresh_tokens`, `stored_files` e `users`.
 4. **Resposta:** confirma a transação e registra as quantidades removidas por
    tabela. Se uma remoção falhar, desfaz toda a transação.
 

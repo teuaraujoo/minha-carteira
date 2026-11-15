@@ -49,14 +49,9 @@ export function createDemoHistory(now: Date) {
   const completedAt = new Date(now.getTime() - 45 * 60 * 1000);
   const metadata = { location: null, userAgent: "Seed de demonstração", ipAddress: null, deviceId: null };
   const userId = DEMO_USERS[1]!.id;
-  const requestId = "72000000-0000-4000-8000-000000000001";
   const secretHash = (label: string) => createHash("sha256").update(label).digest("hex");
-  const request: Prisma.PasswordResetRequestUncheckedCreateInput = {
-    id: requestId, userId, status: "COMPLETED", requestedAt: issuedAt, expiresAt,
-    metadata, completedAt, cancelledAt: null, createdAt: issuedAt, updatedAt: completedAt,
-  };
   const challenges: Prisma.ChallengeUncheckedCreateInput[] = [
-    { id: "73000000-0000-4000-8000-000000000001", purpose: "PASSWORD_RESET", subjectType: "PASSWORD_RESET_REQUEST", subjectId: requestId, secretHash: secretHash("seed-reset-concluido"), status: "COMPLETED", attempts: 0, maxAttempts: 3, metadata: { issued: metadata, consumed: metadata }, expiresAt, consumedAt: completedAt, createdAt: issuedAt, updatedAt: completedAt },
+    { id: "73000000-0000-4000-8000-000000000001", purpose: "PASSWORD_RESET", subjectType: "USER", subjectId: userId, secretHash: secretHash("seed-reset-concluido"), status: "COMPLETED", attempts: 0, maxAttempts: 3, metadata: { issued: metadata, consumed: metadata }, expiresAt, consumedAt: completedAt, createdAt: issuedAt, updatedAt: completedAt },
     { id: "73000000-0000-4000-8000-000000000002", purpose: "ACCOUNT_REACTIVATION", subjectType: "USER", subjectId: DEMO_USERS[3]!.id, secretHash: secretHash("seed-reativacao-expirada"), status: "EXPIRED", attempts: 0, maxAttempts: 3, metadata: { issued: metadata, consumed: null }, expiresAt, consumedAt: null, createdAt: issuedAt, updatedAt: now },
   ];
   const refreshToken: Prisma.RefreshTokenUncheckedCreateInput = {
@@ -65,5 +60,5 @@ export function createDemoHistory(now: Date) {
     revokedAt: completedAt, revokeReason: "LOGOUT", userAgent: metadata.userAgent, ipAddress: null,
     createdAt: issuedAt, updatedAt: completedAt,
   };
-  return { request, challenges, refreshToken };
+  return { challenges, refreshToken };
 }

@@ -6,14 +6,6 @@ export enum RefreshTokenRevokeReason {
   SECURITY_EVENT = "SECURITY_EVENT",
 }
 
-export enum PasswordResetRequestStatus {
-  PENDING = "PENDING",
-  COMPLETED = "COMPLETED",
-  FAILED = "FAILED",
-  EXPIRED = "EXPIRED",
-  CANCELLED = "CANCELLED",
-}
-
 export enum ChallengePurpose {
   PASSWORD_RESET = "PASSWORD_RESET",
   ACCOUNT_REACTIVATION = "ACCOUNT_REACTIVATION",
@@ -23,7 +15,6 @@ export enum ChallengePurpose {
 
 export enum ChallengeSubjectType {
   USER = "USER",
-  PASSWORD_RESET_REQUEST = "PASSWORD_RESET_REQUEST",
   MESSAGING_IDENTITY = "MESSAGING_IDENTITY",
 }
 

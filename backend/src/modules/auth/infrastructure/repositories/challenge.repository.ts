@@ -59,7 +59,7 @@ export class PrismaChallengeRepository implements IChallengeRepository {
     return this.registerInvalidAttemptForPurpose(
       id,
       ChallengePurpose.PASSWORD_RESET,
-      ChallengeSubjectType.PASSWORD_RESET_REQUEST,
+      ChallengeSubjectType.USER,
       3,
       attemptedAt,
     );
@@ -99,7 +99,7 @@ export class PrismaChallengeRepository implements IChallengeRepository {
     return this.completeIfUsableForPurpose(
       id,
       ChallengePurpose.PASSWORD_RESET,
-      ChallengeSubjectType.PASSWORD_RESET_REQUEST,
+      ChallengeSubjectType.USER,
       3,
       metadata,
       completedAt,

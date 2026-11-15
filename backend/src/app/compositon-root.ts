@@ -22,6 +22,7 @@ export function createCompositionRoot() {
   const logger = createPinoAppLogger();
   const passwordHasher = new BcryptPasswordHasher(Number(process.env.BCRYPT_SALT_ROUNDS ?? 12));
   const usersRepository = new PrismaUsersRepository(prisma);
+  const challengRepository = new PrismaChallengeRepository(prisma);
   const refreshTokenRepository = new PrismaRefreshTokenRepository(prisma);
   const r2 = createR2Client({
     accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ?? "",
@@ -38,8 +39,7 @@ export function createCompositionRoot() {
     new Resend(requiredEnvironment("RESEND_API_KEY")),
     requiredEnvironment("RESEND_FROM_EMAIL"),
   );
-  const authService = new AuthService(refreshTokenRepository, tokenHasher, passwordHasher, userService, jwtProvider, prisma, {
-    challengeRepository: new PrismaChallengeRepository(prisma),
+  const authService = new AuthService(refreshTokenRepository, tokenHasher, passwordHasher, userService, jwtProvider, prisma, challengRepository, {
     emailProvider,
     tokenGenerator: new CryptoTokenGenerator(),
     rateLimiter: new InMemoryPasswordResetRateLimiter(),
