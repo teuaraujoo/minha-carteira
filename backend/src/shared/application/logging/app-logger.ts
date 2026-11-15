@@ -40,7 +40,15 @@ export type LogEvent =
   | "accounts.updated"
   | "accounts.deactivated"
   | "accounts.reactivated"
-  | "accounts.deleted";
+  | "accounts.deleted"
+  | "categories.created"
+  | "categories.updated"
+  | "categories.deactivated"
+  | "categories.reactivated"
+  | "categories.deleted"
+  | "transactions.created"
+  | "transactions.confirmed"
+  | "transactions.deleted";
 
 export interface ApprovedLogContext {
   operation?: string;
