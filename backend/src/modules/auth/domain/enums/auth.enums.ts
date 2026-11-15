@@ -16,6 +16,7 @@ export enum ChallengePurpose {
 export enum ChallengeSubjectType {
   USER = "USER",
   MESSAGING_IDENTITY = "MESSAGING_IDENTITY",
+  EMAIL = "EMAIL",
 }
 
 export enum ChallengeStatus {

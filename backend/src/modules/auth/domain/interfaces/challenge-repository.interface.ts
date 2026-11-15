@@ -22,4 +22,7 @@ export interface IChallengeRepository {
     completedAt: Date,
   ): Promise<boolean>;
   markFailed(id: string, failedAt: Date): Promise<void>;
+  findLatestByPurposeAndEmail(purpose: Challenge["purpose"], targetEmail: string): Promise<Challenge | null>;
+  countByPurposeAndEmailSince(purpose: Challenge["purpose"], targetEmail: string, since: Date): Promise<number>;
+  invalidateOpenByPurposeAndEmail(purpose: Challenge["purpose"], targetEmail: string, updatedAt: Date): Promise<number>;
 }

@@ -1,6 +1,13 @@
 export const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 export const REFRESH_TOKEN_TTL_MS = 5 * 24 * 60 * 60 * 1000;
+export const ONBOARDING_TOKEN_TTL_MS = 15 * 60 * 1000;
 export const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 export const PASSWORD_RESET_MAX_ATTEMPTS = 3;
 export const ACCOUNT_REACTIVATION_TOKEN_TTL_MS = 15 * 60 * 1000;
 export const ACCOUNT_REACTIVATION_MAX_ATTEMPTS = 3;
+export const MFA_CODE_TTL_MS = 5 * 60 * 1000;
+export const MFA_RESEND_COOLDOWN_MS = 45 * 1000;
+export const MFA_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+export const MFA_RATE_LIMIT_MAX_REQUESTS = 3;
+export const MFA_MAX_ATTEMPTS = 3;
+export const MFA_CODE_LENGTH = 6;

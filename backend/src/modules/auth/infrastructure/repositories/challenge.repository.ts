@@ -15,11 +15,13 @@ interface ChallengeRecord {
   id: string;
   purpose: string;
   subjectType: string;
-  subjectId: string;
+  subjectId: string | null;
+  targetEmail: string | null;
   secretHash: string;
   status: string;
   attempts: number;
   maxAttempts: number;
+  nextAttemptAt: Date | null;
   metadata: unknown;
   expiresAt: Date;
   consumedAt: Date | null;
@@ -37,10 +39,12 @@ export class PrismaChallengeRepository implements IChallengeRepository {
         purpose: PrismaChallengePurpose[challenge.purpose],
         subjectType: PrismaChallengeSubjectType[challenge.subjectType],
         subjectId: challenge.subjectId,
+        targetEmail: challenge.targetEmail,
         secretHash: challenge.secretHash,
         status: PrismaChallengeStatus[challenge.status],
         attempts: challenge.attempts,
         maxAttempts: challenge.maxAttempts,
+        nextAttemptAt: challenge.nextAttemptAt,
         metadata: toPrismaJson(challenge.metadata),
         expiresAt: challenge.expiresAt,
         consumedAt: challenge.consumedAt,
@@ -138,6 +142,46 @@ export class PrismaChallengeRepository implements IChallengeRepository {
       where: { id, status: PrismaChallengeStatus.REQUESTED },
       data: { status: PrismaChallengeStatus.FAILED, updatedAt: failedAt },
     });
+  }
+
+  async findLatestByPurposeAndEmail(purpose: Challenge["purpose"], targetEmail: string): Promise<Challenge | null> {
+    const record = await this.prisma.challenge.findFirst({
+      where: {
+        purpose: PrismaChallengePurpose[purpose],
+        subjectType: PrismaChallengeSubjectType.EMAIL,
+        targetEmail: targetEmail.trim().toLowerCase(),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return record ? this.toDomain(record as ChallengeRecord) : null;
+  }
+
+  async countByPurposeAndEmailSince(purpose: Challenge["purpose"], targetEmail: string, since: Date): Promise<number> {
+    return this.prisma.challenge.count({
+      where: {
+        purpose: PrismaChallengePurpose[purpose],
+        subjectType: PrismaChallengeSubjectType.EMAIL,
+        targetEmail: targetEmail.trim().toLowerCase(),
+        createdAt: { gte: since },
+      },
+    });
+  }
+
+  async invalidateOpenByPurposeAndEmail(
+    purpose: Challenge["purpose"],
+    targetEmail: string,
+    updatedAt: Date,
+  ): Promise<number> {
+    const result = await this.prisma.challenge.updateMany({
+      where: {
+        purpose: PrismaChallengePurpose[purpose],
+        subjectType: PrismaChallengeSubjectType.EMAIL,
+        targetEmail: targetEmail.trim().toLowerCase(),
+        status: PrismaChallengeStatus.REQUESTED,
+      },
+      data: { status: PrismaChallengeStatus.EXPIRED, updatedAt },
+    });
+    return result.count;
   }
 
   private toDomain(record: ChallengeRecord): Challenge {

@@ -21,19 +21,21 @@ export interface RefreshTokenProps {
 }
 
 export interface ChallengeProps {
-    id: string;
-    purpose: ChallengePurpose;
-    subjectType: ChallengeSubjectType;
-    subjectId: string;
-    secretHash: string;
-    status: ChallengeStatus;
-    attempts: number;
-    maxAttempts: number;
-    metadata: ChallengeMetadata;
-    expiresAt: Date;
-    consumedAt: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
+  id: string;
+  purpose: ChallengePurpose;
+  subjectType: ChallengeSubjectType;
+  subjectId: string | null;
+  targetEmail?: string | null | undefined;
+  secretHash: string;
+  status: ChallengeStatus;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt?: Date | null | undefined;
+  metadata: ChallengeMetadata;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface RequestMetadata {
@@ -43,7 +45,19 @@ export interface RequestMetadata {
     deviceId: string | null;
 }
 
+export interface ChallengeTokenPayloadMetadata {
+  sub: string;
+  iss: string;
+  jti: string;
+  iat: number;
+  exp: number;
+  type: "access" | "onboarding";
+  sid?: string;
+  cid?: string;
+}
+
 export interface ChallengeMetadata {
-    issued: RequestMetadata;
-    consumed: RequestMetadata | null;
+  issued: RequestMetadata;
+  consumed: RequestMetadata | null;
+  tokenPayload?: ChallengeTokenPayloadMetadata | null | undefined;
 }
