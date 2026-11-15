@@ -39,6 +39,7 @@ enum ChallengePurpose {
 enum ChallengeSubjectType {
   USER
   MESSAGING_IDENTITY
+  EMAIL
 }
 
 enum ChallengeStatus {
@@ -118,22 +119,25 @@ model RefreshToken {
 }
 
 model Challenge {
-  id          String               @id @default(uuid()) @db.Uuid
-  purpose     ChallengePurpose
-  subjectType ChallengeSubjectType @map("subject_type")
-  subjectId   String               @map("subject_id") @db.Uuid
-  secretHash  String               @unique @map("secret_hash")
-  status      ChallengeStatus      @default(REQUESTED)
-  attempts    Int                  @default(0)
-  maxAttempts Int                  @map("max_attempts")
-  metadata    Json
-  expiresAt   DateTime             @map("expires_at")
-  consumedAt  DateTime?            @map("consumed_at")
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  id            String               @id @default(uuid()) @db.Uuid
+  purpose       ChallengePurpose
+  subjectType   ChallengeSubjectType @map("subject_type")
+  subjectId     String?              @map("subject_id") @db.Uuid
+  targetEmail   String?              @map("target_email")
+  secretHash    String               @unique @map("secret_hash")
+  status        ChallengeStatus      @default(REQUESTED)
+  attempts      Int                  @default(0)
+  maxAttempts   Int                  @map("max_attempts")
+  metadata      Json
+  expiresAt     DateTime             @map("expires_at")
+  nextAttemptAt DateTime?            @map("next_attempt_at")
+  consumedAt    DateTime?            @map("consumed_at")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
 
   @@index([subjectType, subjectId])
   @@index([status, expiresAt])
+  @@index([purpose, targetEmail, createdAt])
   @@map("challenges")
 }
 

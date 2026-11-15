@@ -51,8 +51,9 @@ export function createDemoHistory(now: Date) {
   const userId = DEMO_USERS[1]!.id;
   const secretHash = (label: string) => createHash("sha256").update(label).digest("hex");
   const challenges: Prisma.ChallengeUncheckedCreateInput[] = [
-    { id: "73000000-0000-4000-8000-000000000001", purpose: "PASSWORD_RESET", subjectType: "USER", subjectId: userId, secretHash: secretHash("seed-reset-concluido"), status: "COMPLETED", attempts: 0, maxAttempts: 3, metadata: { issued: metadata, consumed: metadata }, expiresAt, consumedAt: completedAt, createdAt: issuedAt, updatedAt: completedAt },
-    { id: "73000000-0000-4000-8000-000000000002", purpose: "ACCOUNT_REACTIVATION", subjectType: "USER", subjectId: DEMO_USERS[3]!.id, secretHash: secretHash("seed-reativacao-expirada"), status: "EXPIRED", attempts: 0, maxAttempts: 3, metadata: { issued: metadata, consumed: null }, expiresAt, consumedAt: null, createdAt: issuedAt, updatedAt: now },
+    { id: "73000000-0000-4000-8000-000000000001", purpose: "PASSWORD_RESET", subjectType: "USER", subjectId: userId, targetEmail: null, secretHash: secretHash("seed-reset-concluido"), status: "COMPLETED", attempts: 0, maxAttempts: 3, nextAttemptAt: null, metadata: { issued: metadata, consumed: metadata }, expiresAt, consumedAt: completedAt, createdAt: issuedAt, updatedAt: completedAt },
+    { id: "73000000-0000-4000-8000-000000000002", purpose: "ACCOUNT_REACTIVATION", subjectType: "USER", subjectId: DEMO_USERS[3]!.id, targetEmail: null, secretHash: secretHash("seed-reativacao-expirada"), status: "EXPIRED", attempts: 0, maxAttempts: 3, nextAttemptAt: null, metadata: { issued: metadata, consumed: null }, expiresAt, consumedAt: null, createdAt: issuedAt, updatedAt: now },
+    { id: "73000000-0000-4000-8000-000000000003", purpose: "EMAIL_VERIFICATION", subjectType: "EMAIL", subjectId: null, targetEmail: "seed.mfa@example.com", secretHash: secretHash("seed-mfa-expirado"), status: "EXPIRED", attempts: 0, maxAttempts: 3, nextAttemptAt: new Date(issuedAt.getTime() + 45 * 1000), metadata: { issued: metadata, consumed: null }, expiresAt, consumedAt: null, createdAt: issuedAt, updatedAt: now },
   ];
   const refreshToken: Prisma.RefreshTokenUncheckedCreateInput = {
     id: "74000000-0000-4000-8000-000000000001", userId,
