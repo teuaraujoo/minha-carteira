@@ -8,7 +8,6 @@ import { z } from "zod";
 
 import {
   ACCOUNT_BRAND_OPTIONS,
-  ACCOUNT_COLOR_PALETTE,
   ACCOUNT_TYPE_OPTIONS,
   DEFAULT_ACCOUNT_COLOR,
   INSTITUTION_SUGGESTIONS,
@@ -21,6 +20,7 @@ import {
   type AccountItem,
 } from "@/components/accounts/accounts-mock-store";
 import { Button } from "@/components/ui/button";
+import { ColorPalettePicker } from "@/components/ui/color-palette-picker";
 import {
   Dialog,
   DialogContent,
@@ -64,7 +64,10 @@ const accountFormSchema = z.object({
     .string()
     .trim()
     .max(40, "O nome da instituição deve ter no máximo 40 caracteres."),
-  color: z.string(),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9A-Fa-f]{6}$/, "Informe uma cor hexadecimal válida (ex.: #012048)."),
 });
 
 type AccountFormValues = z.infer<typeof accountFormSchema>;
@@ -381,33 +384,22 @@ export function AccountFormDialog({
               {/* Paleta de cor do card */}
               <div className="space-y-2">
                 <Label>Cor do cartão</Label>
-                <div className="flex flex-wrap items-center gap-2">
-                  {ACCOUNT_COLOR_PALETTE.map((swatch) => {
-                    const selected = watchedValues.color === swatch.hex;
-                    return (
-                      <button
-                        key={swatch.hex}
-                        type="button"
-                        onClick={() =>
-                          setValue("color", swatch.hex, {
-                            shouldDirty: true,
-                            shouldTouch: true,
-                          })
-                        }
-                        aria-label={`Cor ${swatch.name}`}
-                        aria-pressed={selected}
-                        title={swatch.name}
-                        className={cn(
-                          "size-8 cursor-pointer rounded-full border-2 transition-transform focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                          selected
-                            ? "scale-110 border-foreground ring-2 ring-accent ring-offset-2 ring-offset-card"
-                            : "border-white/40 hover:scale-105",
-                        )}
-                        style={{ backgroundColor: swatch.hex }}
-                      />
-                    );
-                  })}
-                </div>
+                <ColorPalettePicker
+                  value={watchedValues.color ?? DEFAULT_ACCOUNT_COLOR}
+                  onChange={(hex) =>
+                    setValue("color", hex, {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  label="Cor do cartão"
+                />
+                {errors.color ? (
+                  <p className="text-xs text-destructive">
+                    {errors.color.message}
+                  </p>
+                ) : null}
               </div>
             </div>
 
