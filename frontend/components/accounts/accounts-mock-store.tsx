@@ -21,6 +21,19 @@ export interface AccountTransactionItem {
   status: TransactionStatus;
   amount: number;
   occurredAt: string;
+  notes?: string | null;
+}
+
+export interface CreateMockTransactionInput {
+  accountId: string;
+  description: string;
+  category: string;
+  categoryColor: string;
+  kind: TransactionKind;
+  status: TransactionStatus;
+  amount: number;
+  occurredAt: string;
+  notes?: string | null;
 }
 
 export interface AccountMonthlyFlow {
@@ -349,6 +362,30 @@ const INITIAL_TRANSACTIONS: AccountTransactionItem[] = [
     amount: 45.9,
     occurredAt: "2026-09-10",
   },
+  {
+    id: "tx-16",
+    accountId: "acc-nubank",
+    title: "Freela Redesign App",
+    category: "Serviços",
+    categoryColor: "#00C7C4",
+    kind: "INCOME",
+    status: "PENDING",
+    amount: 2800.0,
+    occurredAt: "2026-11-20",
+    notes: "Parcela final após entrega das telas no Figma.",
+  },
+  {
+    id: "tx-17",
+    accountId: "acc-xp",
+    title: "Dividendos FIIs Novembro",
+    category: "Rendimentos",
+    categoryColor: "#015363",
+    kind: "INCOME",
+    status: "PENDING",
+    amount: 420.0,
+    occurredAt: "2026-11-19",
+    notes: "Provento previsto para crédito na corretora.",
+  },
 ];
 
 const MONTHLY_FLOW_SERIES: Record<string, AccountMonthlyFlow[]> = {
@@ -666,6 +703,173 @@ export function getAccountCategorySpend(
   monthKey: string,
 ): AccountCategorySpend[] {
   return CATEGORY_SPEND_BY_ACCOUNT_MONTH[accountId]?.[monthKey] ?? [];
+}
+
+export function createMockTransaction(input: CreateMockTransactionInput): {
+  ok: true;
+  transaction: AccountTransactionItem;
+} | {
+  ok: false;
+  error: string;
+} {
+  const description = input.description.trim();
+  if (description.length < 2) {
+    return {
+      ok: false,
+      error: "Informe uma descrição com pelo menos 2 caracteres.",
+    };
+  }
+
+  const targetAccount = storeState.accounts.find(
+    (item) => item.id === input.accountId,
+  );
+  if (!targetAccount) {
+    return { ok: false, error: "Conta selecionada não encontrada." };
+  }
+
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    return { ok: false, error: "O valor da movimentação deve ser maior que zero." };
+  }
+
+  const now = new Date().toISOString();
+  const isCurrentMonth = input.occurredAt.startsWith("2026-11");
+  const signedDelta = input.kind === "INCOME" ? input.amount : -input.amount;
+
+  const newTransaction: AccountTransactionItem = {
+    id: `tx-${Date.now().toString(36)}`,
+    accountId: input.accountId,
+    title: description,
+    category: input.category,
+    categoryColor: input.categoryColor,
+    kind: input.kind,
+    status: input.status,
+    amount: input.amount,
+    occurredAt: input.occurredAt,
+    notes: input.notes?.trim() || null,
+  };
+
+  storeState = {
+    ...storeState,
+    transactions: [newTransaction, ...storeState.transactions],
+    accounts: storeState.accounts.map((account) => {
+      if (account.id !== input.accountId) return account;
+      const shouldApplyBalance = input.status === "CONFIRMED";
+      return {
+        ...account,
+        currentBalance: shouldApplyBalance
+          ? account.currentBalance + signedDelta
+          : account.currentBalance,
+        monthlyIncome:
+          shouldApplyBalance && isCurrentMonth && input.kind === "INCOME"
+            ? account.monthlyIncome + input.amount
+            : account.monthlyIncome,
+        monthlyExpense:
+          shouldApplyBalance && isCurrentMonth && input.kind === "EXPENSE"
+            ? account.monthlyExpense + input.amount
+            : account.monthlyExpense,
+        transactionsCount: account.transactionsCount + 1,
+        updatedAt: now,
+      };
+    }),
+  };
+
+  emitChange();
+  return { ok: true, transaction: newTransaction };
+}
+
+export function confirmMockTransaction(transactionId: string): {
+  ok: true;
+  transaction: AccountTransactionItem;
+} | {
+  ok: false;
+  error: string;
+} {
+  const target = storeState.transactions.find((item) => item.id === transactionId);
+  if (!target) {
+    return { ok: false, error: "Transação não encontrada." };
+  }
+  if (target.status === "CONFIRMED") {
+    return { ok: false, error: "Esta transação já está confirmada." };
+  }
+
+  const now = new Date().toISOString();
+  const isCurrentMonth = target.occurredAt.startsWith("2026-11");
+  const signedDelta = target.kind === "INCOME" ? target.amount : -target.amount;
+  const confirmed: AccountTransactionItem = {
+    ...target,
+    status: "CONFIRMED",
+  };
+
+  storeState = {
+    ...storeState,
+    transactions: storeState.transactions.map((item) =>
+      item.id === transactionId ? confirmed : item,
+    ),
+    accounts: storeState.accounts.map((account) => {
+      if (account.id !== target.accountId) return account;
+      return {
+        ...account,
+        currentBalance: account.currentBalance + signedDelta,
+        monthlyIncome:
+          isCurrentMonth && target.kind === "INCOME"
+            ? account.monthlyIncome + target.amount
+            : account.monthlyIncome,
+        monthlyExpense:
+          isCurrentMonth && target.kind === "EXPENSE"
+            ? account.monthlyExpense + target.amount
+            : account.monthlyExpense,
+        updatedAt: now,
+      };
+    }),
+  };
+
+  emitChange();
+  return { ok: true, transaction: confirmed };
+}
+
+export function deleteMockTransaction(transactionId: string): {
+  ok: true;
+  deleted: AccountTransactionItem;
+} | {
+  ok: false;
+  error: string;
+} {
+  const target = storeState.transactions.find((item) => item.id === transactionId);
+  if (!target) {
+    return { ok: false, error: "Transação não encontrada." };
+  }
+
+  const now = new Date().toISOString();
+  const isCurrentMonth = target.occurredAt.startsWith("2026-11");
+  const signedDelta = target.kind === "INCOME" ? target.amount : -target.amount;
+
+  storeState = {
+    ...storeState,
+    transactions: storeState.transactions.filter((item) => item.id !== transactionId),
+    accounts: storeState.accounts.map((account) => {
+      if (account.id !== target.accountId) return account;
+      const shouldRevertBalance = target.status === "CONFIRMED";
+      return {
+        ...account,
+        currentBalance: shouldRevertBalance
+          ? account.currentBalance - signedDelta
+          : account.currentBalance,
+        monthlyIncome:
+          shouldRevertBalance && isCurrentMonth && target.kind === "INCOME"
+            ? Math.max(0, account.monthlyIncome - target.amount)
+            : account.monthlyIncome,
+        monthlyExpense:
+          shouldRevertBalance && isCurrentMonth && target.kind === "EXPENSE"
+            ? Math.max(0, account.monthlyExpense - target.amount)
+            : account.monthlyExpense,
+        transactionsCount: Math.max(0, account.transactionsCount - 1),
+        updatedAt: now,
+      };
+    }),
+  };
+
+  emitChange();
+  return { ok: true, deleted: target };
 }
 
 export function useAccountsStore() {
