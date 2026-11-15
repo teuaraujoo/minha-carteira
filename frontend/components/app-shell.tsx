@@ -19,10 +19,14 @@ import {
   UserRound,
   Wallet,
   X,
+  Goal,
+  Group,
+  Handshake 
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Toaster } from "react-hot-toast";
 import { WhatsappSupportCard } from "@/components/whatsapp-support-card";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +37,9 @@ const navigationItems = [
   { label: "Categorias", href: "/categories", icon: Tags },
   { label: "Recorrências", href: "/recurring-transactions", icon: Repeat },
   { label: "Orçamentos", href: "/budgets", icon: ChartPie },
+  { label: "Metas", href: "/goals", icon: Goal },
+  { label: "Grupos", href: "/groups", icon: Group },
+  { label: "Amigos", href: "/friends", icon: Handshake },
   { label: "Configurações", href: "/settings", icon: Settings },
 ];
 
@@ -376,6 +383,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3500,
+          className:
+            "!rounded-xl !border !border-border !bg-popover !text-popover-foreground !shadow-lg !text-sm",
+        }}
+      />
     </TooltipProvider>
   );
 }
