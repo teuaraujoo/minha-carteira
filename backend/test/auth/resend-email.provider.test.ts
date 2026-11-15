@@ -75,6 +75,41 @@ test("Resend envia código MFA com expiração em português", async () => {
   assert.match(String(sent?.text), /5 minutos/);
 });
 
+test("Resend inclui logo inline e identidade visual em todos os templates", async () => {
+  const sentEmails: Array<Record<string, unknown>> = [];
+  const provider = new ResendEmailProvider(
+    createClient(async (input) => {
+      sentEmails.push(input);
+      return { data: { id: `email-${sentEmails.length}` }, error: null };
+    }),
+    "Minha Carteira <conta@example.com>",
+  );
+
+  await provider.sendPasswordReset({ email: "teco@example.com", resetUrl: "https://carteira.example/reset?t=1" });
+  await provider.sendPasswordChanged({ email: "teco@example.com" });
+  await provider.sendAccountReactivation({ email: "teco@example.com", reactivationUrl: "https://carteira.example/reactivate?t=1" });
+  await provider.sendMfaCode({ email: "teco@example.com", code: "123456", expiresInMinutes: 5 });
+
+  assert.equal(sentEmails.length, 4);
+  for (const email of sentEmails) {
+    const html = String(email.html);
+    assert.match(html, /src="cid:minha-carteira-logo"/);
+    assert.match(html, /#012048/);
+    assert.match(html, /#00C7C4/);
+    const attachments = email.attachments as Array<{
+      filename?: string;
+      content?: Buffer;
+      contentType?: string;
+      contentId?: string;
+    }>;
+    assert.equal(attachments?.length, 1);
+    assert.equal(attachments[0]?.filename, "logo.png");
+    assert.equal(attachments[0]?.contentType, "image/png");
+    assert.equal(attachments[0]?.contentId, "minha-carteira-logo");
+    assert.ok(Buffer.isBuffer(attachments[0]?.content) && attachments[0].content.length > 0);
+  }
+});
+
 test("Resend exige remetente", () => {
   assert.throws(() => new ResendEmailProvider(createClient(async () => ({})), " "), /remetente do e-mail é obrigatório/);
 });

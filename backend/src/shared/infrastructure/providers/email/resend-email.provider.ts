@@ -2,7 +2,7 @@ import { Resend } from "resend";
 import { AppError, ErrorCode } from "../../../presentation/http/app-error.js";
 import type { EmailProvider } from "../../../application/contracts/email-provider.contract.js";
 import type { AccountReactivationEmail, MfaCodeEmail, PasswordChangedEmail, PasswordResetEmail } from "../../../application/interfaces/auth-emails.interfaces.js";
-import { AuthEmailTemplates } from "./auth-email-templates.js";
+import { AuthEmailTemplates, type EmailInlineAttachment } from "./auth-email-templates.js";
 
 export class ResendEmailProvider implements EmailProvider {
   constructor(
@@ -49,9 +49,22 @@ export class ResendEmailProvider implements EmailProvider {
     });
   }
 
-  private async send(input: { to: string; subject: string; text: string; html: string }): Promise<void> {
+  private async send(input: {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+    attachments?: EmailInlineAttachment[];
+  }): Promise<void> {
     try {
-      const result = await this.client.emails.send({ from: this.sender, ...input });
+      const result = await this.client.emails.send({
+        from: this.sender,
+        to: input.to,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      });
       if (result.error || !result.data?.id) throw new Error("O Resend não confirmou o envio.");
     } catch {
       throw new AppError({
