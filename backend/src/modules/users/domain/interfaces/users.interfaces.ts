@@ -22,3 +22,9 @@ export interface AccountReactivationRecipient {
   id: string;
   email: string;
 }
+
+export interface UserAuthEmailStatus {
+  id: string;
+  email: string;
+  status: UserStatus;
+}

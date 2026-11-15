@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { AppError, ErrorCode } from "../../../presentation/http/app-error.js";
 import type { EmailProvider } from "../../../application/contracts/email-provider.contract.js";
-import type { AccountReactivationEmail, PasswordChangedEmail, PasswordResetEmail } from "../../../application/interfaces/auth-emails.interfaces.js";
+import type { AccountReactivationEmail, MfaCodeEmail, PasswordChangedEmail, PasswordResetEmail } from "../../../application/interfaces/auth-emails.interfaces.js";
 import { AuthEmailTemplates } from "./auth-email-templates.js";
 
 export class ResendEmailProvider implements EmailProvider {
@@ -36,6 +36,15 @@ export class ResendEmailProvider implements EmailProvider {
     await this.send({
       to: input.email,
       subject: "Reativação da conta — Minha Carteira",
+      ...content,
+    });
+  }
+
+  async sendMfaCode(input: MfaCodeEmail): Promise<void> {
+    const content = await this.templates.mfaCode(input.code, input.expiresInMinutes);
+    await this.send({
+      to: input.email,
+      subject: "Código de verificação — Minha Carteira",
       ...content,
     });
   }

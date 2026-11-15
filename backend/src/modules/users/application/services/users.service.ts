@@ -7,7 +7,7 @@ import type { PasswordHasher } from "../../../../shared/application/security/pas
 import type { RegisterUserInput, RegisterUserOutput } from "../dto/register-user.dto.js";
 import { User } from "../../domain/entities/users.entity.js";
 import { mapRegisterUserOutput } from "../mappers/register-user.mapper.js";
-import type { AccountReactivationRecipient, AuthUser, AuthUserCredentials, PasswordResetRecipient } from "../../domain/interfaces/users.interfaces.js";
+import type { AccountReactivationRecipient, AuthUser, AuthUserCredentials, PasswordResetRecipient, UserAuthEmailStatus } from "../../domain/interfaces/users.interfaces.js";
 import { UserRoles, UserStatus } from "../../domain/enums/users.enums.js";
 import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-error.js";
 import type { Prisma, PrismaClient } from "../../../../../generated/prisma/client.js";
@@ -224,6 +224,12 @@ export class UserService {
     const user = await this.userRepository.findByEmail(email.trim().toLowerCase());
     if (!user || user.isActive()) return null;
     return { id: user.id, email: user.email };
+  }
+
+  async findAuthStatusByEmail(email: string): Promise<UserAuthEmailStatus | null> {
+    const user = await this.userRepository.findByEmail(email.trim().toLowerCase());
+    if (!user) return null;
+    return { id: user.id, email: user.email, status: user.status };
   }
 
   async changePasswordHash(userId: string, passwordHash: string): Promise<void> {

@@ -8,7 +8,8 @@ export interface RenderedEmailTemplate {
 type AuthEmailTemplateName =
   | "password-reset.html"
   | "password-changed.html"
-  | "account-reactivation.html";
+  | "account-reactivation.html"
+  | "mfa-code.html";
 
 export class AuthEmailTemplates {
   private readonly templateCache = new Map<AuthEmailTemplateName, Promise<string>>();
@@ -33,6 +34,21 @@ export class AuthEmailTemplates {
     return {
       html: await this.render("account-reactivation.html", { REACTIVATION_URL: safeUrl }),
       text: `Para reativar sua conta, acesse: ${safeUrl}\n\nSe você não solicitou essa alteração, ignore esta mensagem.`,
+    };
+  }
+
+  async mfaCode(code: string, expiresInMinutes: number): Promise<RenderedEmailTemplate> {
+    const trimmedCode = code.trim();
+    if (!trimmedCode) throw new Error("O código de verificação é obrigatório.");
+    if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 1) {
+      throw new Error("O tempo de expiração do código deve ser um inteiro positivo.");
+    }
+    return {
+      html: await this.render("mfa-code.html", {
+        CODE: trimmedCode,
+        EXPIRES_IN_MINUTES: String(expiresInMinutes),
+      }),
+      text: `Seu código de verificação do Minha Carteira é: ${trimmedCode}\n\nEste código expira em ${expiresInMinutes} minutos.\nSe você não solicitou este código, ignore esta mensagem.`,
     };
   }
 

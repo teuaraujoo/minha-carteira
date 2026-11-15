@@ -1,15 +1,17 @@
 import type { CookieOptions, Response } from "express";
-import { ACCESS_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../domain/constants/auth.constants.js";
+import { ACCESS_TOKEN_TTL_MS, ONBOARDING_TOKEN_TTL_MS, REFRESH_TOKEN_TTL_MS } from "../../domain/constants/auth.constants.js";
 
 export const AUTH_COOKIE_NAMES = {
   access: "__Secure-mc_access",
   refresh: "__Secure-mc_refresh",
+  onboarding: "__Secure-mc_onboarding",
   csrf: "__Secure-mc_csrf",
 } as const;
 
 export const AUTH_COOKIE_PATHS = {
   access: "/api/v1",
   refresh: "/api/v1/auth",
+  onboarding: "/api/v1/auth",
   csrf: "/api/v1",
 } as const;
 
@@ -31,6 +33,12 @@ export const REFRESH_COOKIE_OPTIONS: CookieOptions = {
   maxAge: REFRESH_TOKEN_TTL_MS,
 };
 
+export const ONBOARDING_COOKIE_OPTIONS: CookieOptions = {
+  ...sharedCookieOptions,
+  path: AUTH_COOKIE_PATHS.onboarding,
+  maxAge: ONBOARDING_TOKEN_TTL_MS,
+};
+
 export const CSRF_COOKIE_OPTIONS: CookieOptions = {
   ...sharedCookieOptions,
   path: AUTH_COOKIE_PATHS.csrf,
@@ -41,8 +49,17 @@ export function setAuthenticationCookies(response: Response, accessToken: string
   if (refreshToken !== undefined) response.cookie(AUTH_COOKIE_NAMES.refresh, refreshToken, REFRESH_COOKIE_OPTIONS);
 }
 
+export function setOnboardingCookie(response: Response, onboardingToken: string): void {
+  response.cookie(AUTH_COOKIE_NAMES.onboarding, onboardingToken, ONBOARDING_COOKIE_OPTIONS);
+}
+
+export function clearOnboardingCookie(response: Response): void {
+  response.clearCookie(AUTH_COOKIE_NAMES.onboarding, ONBOARDING_COOKIE_OPTIONS);
+}
+
 export function clearAuthenticationCookies(response: Response): void {
   response.clearCookie(AUTH_COOKIE_NAMES.access, ACCESS_COOKIE_OPTIONS);
   response.clearCookie(AUTH_COOKIE_NAMES.refresh, REFRESH_COOKIE_OPTIONS);
+  response.clearCookie(AUTH_COOKIE_NAMES.onboarding, ONBOARDING_COOKIE_OPTIONS);
   response.clearCookie(AUTH_COOKIE_NAMES.csrf, CSRF_COOKIE_OPTIONS);
 }

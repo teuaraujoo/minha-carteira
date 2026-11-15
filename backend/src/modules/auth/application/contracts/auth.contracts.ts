@@ -1,6 +1,7 @@
 export type { EmailProvider } from "../../../../shared/application/contracts/email-provider.contract.js";
 export type {
   AccountReactivationEmail,
+  MfaCodeEmail,
   PasswordChangedEmail,
   PasswordResetEmail,
 } from "../../../../shared/application/interfaces/auth-emails.interfaces.js";
@@ -10,9 +11,23 @@ export interface TokenSubject {
   sessionId: string;
 }
 
+export interface OnboardingTokenSubject {
+  email: string;
+  challengeId: string;
+}
+
 export interface VerifiedToken extends TokenSubject {
   tokenId: string;
   type: "access" | "refresh";
+  issuer: string;
+  issuedAt: Date;
+  expiresAt: Date;
+}
+
+export interface VerifiedOnboardingToken extends OnboardingTokenSubject {
+  tokenId: string;
+  type: "onboarding";
+  issuer: string;
   issuedAt: Date;
   expiresAt: Date;
 }
@@ -20,8 +35,10 @@ export interface VerifiedToken extends TokenSubject {
 export interface JwtProvider {
   signAccessToken(subject: TokenSubject): Promise<string>;
   signRefreshToken(subject: TokenSubject): Promise<string>;
+  signOnboardingToken(subject: OnboardingTokenSubject): Promise<string>;
   verifyAccessToken(token: string): Promise<VerifiedToken>;
   verifyRefreshToken(token: string): Promise<VerifiedToken>;
+  verifyOnboardingToken(token: string): Promise<VerifiedOnboardingToken>;
 }
 
 export interface TokenHasher {

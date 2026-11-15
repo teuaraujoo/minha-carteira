@@ -32,12 +32,16 @@ export type LogEvent =
   | "auth.password-reset.notification-failed"
   | "auth.account-reactivation.requested"
   | "auth.account-reactivation.email-failed"
-  | "auth.account-reactivation.completed";
+  | "auth.account-reactivation.completed"
+  | "auth.mfa.requested"
+  | "auth.mfa.email-failed"
+  | "auth.mfa.validated";
 
 export interface ApprovedLogContext {
   operation?: string;
   count?: number;
   userId?: string;
+  challengeId?: string;
   accountId?: string;
   categoryId?: string;
   transactionId?: string;
