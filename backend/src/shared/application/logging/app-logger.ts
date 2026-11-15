@@ -35,7 +35,12 @@ export type LogEvent =
   | "auth.account-reactivation.completed"
   | "auth.mfa.requested"
   | "auth.mfa.email-failed"
-  | "auth.mfa.validated";
+  | "auth.mfa.validated"
+  | "accounts.created"
+  | "accounts.updated"
+  | "accounts.deactivated"
+  | "accounts.reactivated"
+  | "accounts.deleted";
 
 export interface ApprovedLogContext {
   operation?: string;
