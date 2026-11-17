@@ -5,7 +5,12 @@ import { Router } from "express";
 import { createApp } from "../../src/app/app.js";
 import { createAccountsRouter, Account, AccountStatus, AccountType, AccountsService } from "../../src/modules/accounts/index.js";
 import type { IAccountRepository } from "../../src/modules/accounts/domain/interfaces/account-repository.interface.js";
-import type { AccountPaginationQuery, PaginatedAccountsResult } from "../../src/modules/accounts/domain/interfaces/account.interfaces.js";
+import type {
+  AccountDetailMetricsData,
+  AccountDetailMetricsQuery,
+  AccountPaginationQuery,
+  PaginatedAccountsResult,
+} from "../../src/modules/accounts/domain/interfaces/account.interfaces.js";
 import type { IRefreshTokenRepository } from "../../src/modules/auth/domain/interfaces/refresh-tokens-repository.interface.js";
 import { JsonWebTokenProvider } from "../../src/modules/auth/infrastructure/security/jsonwebtoken.provider.js";
 import { createCsrfToken } from "../../src/modules/auth/presentation/middlewares/csrf.middleware.js";
@@ -85,6 +90,26 @@ class HttpMemoryAccountRepository implements IAccountRepository {
 
   async countLinkedTransactions(accountId: string, _userId: string): Promise<number> {
     return this.linkedTransactions.get(accountId) ?? 0;
+  }
+
+  detailMetricsOverride: AccountDetailMetricsData | null = null;
+  lastMetricsQuery: AccountDetailMetricsQuery | null = null;
+
+  async getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData> {
+    this.lastMetricsQuery = query;
+    if (this.detailMetricsOverride) {
+      return this.detailMetricsOverride;
+    }
+    const month = `${String(query.month).padStart(2, "0")}/${query.year}`;
+    return {
+      month,
+      income: 0,
+      expense: 0,
+      netResult: 0,
+      pending: { count: 0, amount: 0, incomeAmount: 0, expenseAmount: 0 },
+      monthlySeries: [],
+      categorySpend: [],
+    };
   }
 }
 
@@ -418,5 +443,70 @@ test("POST, GET, PATCH, deactivate/reactivate e DELETE /api/v1/accounts seguem c
       headers: { Origin: origin, Cookie: ownerCookie, "x-csrf-token": csrfToken },
     });
     assert.equal(deleteRes.status, 204);
+  });
+});
+
+test("GET /api/v1/accounts/:accountId aceita ?month=MM/YYYY ou YYYY-MM, retorna metrics e rejeita competência inválida", async () => {
+  await withAccountsServer(async ({ baseUrl, ownerCookie, csrfToken, repository }) => {
+    const createRes = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: origin,
+        Cookie: ownerCookie,
+        "x-csrf-token": csrfToken,
+      },
+      body: JSON.stringify({
+        name: "Conta Métricas",
+        type: AccountType.DIGITAL,
+        initialBalance: 2000,
+      }),
+    });
+    assert.equal(createRes.status, 201);
+    const createdBody = await createRes.json() as { data: { id: string } };
+
+    repository.detailMetricsOverride = {
+      month: "11/2026",
+      income: 3000,
+      expense: 900,
+      netResult: 2100,
+      pending: { count: 1, amount: 100, incomeAmount: 0, expenseAmount: 100 },
+      monthlySeries: [],
+      categorySpend: [],
+    };
+
+    // Formato MM/YYYY (11%2F2026 na query URL)
+    const detailBrRes = await fetch(`${baseUrl}/${createdBody.data.id}?month=11%2F2026`, {
+      headers: { Cookie: ownerCookie },
+    });
+    assert.equal(detailBrRes.status, 200);
+    const detailBrBody = await detailBrRes.json() as {
+      data: {
+        metrics: { month: string; income: number; expense: number; netResult: number; projectedBalance: number };
+      };
+    };
+    assert.equal(repository.lastMetricsQuery?.month, 11);
+    assert.equal(repository.lastMetricsQuery?.year, 2026);
+    assert.equal(detailBrBody.data.metrics.month, "11/2026");
+    assert.equal(detailBrBody.data.metrics.projectedBalance, 1900);
+
+    // Formato YYYY-MM
+    const detailIsoRes = await fetch(`${baseUrl}/${createdBody.data.id}?month=2026-11`, {
+      headers: { Cookie: ownerCookie },
+    });
+    assert.equal(detailIsoRes.status, 200);
+    assert.equal(repository.lastMetricsQuery?.month, 11);
+    assert.equal(repository.lastMetricsQuery?.year, 2026);
+
+    // Formato inválido ou parâmetro desconhecido retorna 400
+    const invalidMonthRes = await fetch(`${baseUrl}/${createdBody.data.id}?month=13/2026`, {
+      headers: { Cookie: ownerCookie },
+    });
+    assert.equal(invalidMonthRes.status, 400);
+
+    const extraParamRes = await fetch(`${baseUrl}/${createdBody.data.id}?month=11/2026&unknown=1`, {
+      headers: { Cookie: ownerCookie },
+    });
+    assert.equal(extraParamRes.status, 400);
   });
 });

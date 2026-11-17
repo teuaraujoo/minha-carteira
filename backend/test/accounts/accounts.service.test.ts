@@ -4,7 +4,12 @@ import { AccountsService } from "../../src/modules/accounts/application/services
 import { Account, normalizeAccountName } from "../../src/modules/accounts/domain/entities/account.entity.js";
 import { AccountStatus, AccountType } from "../../src/modules/accounts/domain/enums/account.enums.js";
 import type { IAccountRepository } from "../../src/modules/accounts/domain/interfaces/account-repository.interface.js";
-import type { AccountPaginationQuery, PaginatedAccountsResult } from "../../src/modules/accounts/domain/interfaces/account.interfaces.js";
+import type {
+  AccountDetailMetricsData,
+  AccountDetailMetricsQuery,
+  AccountPaginationQuery,
+  PaginatedAccountsResult,
+} from "../../src/modules/accounts/domain/interfaces/account.interfaces.js";
 import { PrismaAccountRepository, type PrismaAccountClient } from "../../src/modules/accounts/infrastructure/repositories/prisma-account.repository.js";
 import type { AppLogger, LogInput } from "../../src/shared/application/logging/app-logger.js";
 import { AppError, ErrorCode } from "../../src/shared/presentation/http/app-error.js";
@@ -79,6 +84,26 @@ class InMemoryAccountRepository implements IAccountRepository {
 
   async countLinkedTransactions(accountId: string, _userId: string): Promise<number> {
     return this.linkedTransactions.get(accountId) ?? 0;
+  }
+
+  detailMetricsOverride: AccountDetailMetricsData | null = null;
+  lastMetricsQuery: AccountDetailMetricsQuery | null = null;
+
+  async getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData> {
+    this.lastMetricsQuery = query;
+    if (this.detailMetricsOverride) {
+      return this.detailMetricsOverride;
+    }
+    const month = `${String(query.month).padStart(2, "0")}/${query.year}`;
+    return {
+      month,
+      income: 0,
+      expense: 0,
+      netResult: 0,
+      pending: { count: 0, amount: 0, incomeAmount: 0, expenseAmount: 0 },
+      monthlySeries: [],
+      categorySpend: [],
+    };
   }
 }
 
@@ -374,4 +399,181 @@ test("PrismaAccountRepository converte Decimal, mapeia P2002/P2025 e preserva sa
     repository.deleteByIdAndUserId(entity.id, ownerId),
     (error: unknown) => error instanceof AppError && error.status === 409 && error.code === ErrorCode.CONFLICT,
   );
+});
+
+test("AccountsService.getAccountById calcula projectedBalance e usa mês/ano atual como fallback", async () => {
+  const { service, repository } = createFixture();
+  const created = await service.createAccount({
+    userId: ownerId,
+    name: "Carteira Principal",
+    type: AccountType.CHECKING,
+    initialBalance: 1000,
+  });
+
+  repository.linkedTransactions.set(created.id, 4);
+  repository.detailMetricsOverride = {
+    month: "11/2026",
+    income: 5000,
+    expense: 2100,
+    netResult: 2900,
+    pending: {
+      count: 3,
+      amount: 750,
+      incomeAmount: 500,
+      expenseAmount: 250,
+    },
+    monthlySeries: [
+      { month: "06/2026", label: "Jun/2026", income: 0, expense: 0 },
+      { month: "07/2026", label: "Jul/2026", income: 0, expense: 0 },
+      { month: "08/2026", label: "Ago/2026", income: 0, expense: 0 },
+      { month: "09/2026", label: "Set/2026", income: 0, expense: 0 },
+      { month: "10/2026", label: "Out/2026", income: 0, expense: 0 },
+      { month: "11/2026", label: "Nov/2026", income: 5000, expense: 2100 },
+    ],
+    categorySpend: [],
+  };
+
+  const detail = await service.getAccountById({
+    userId: ownerId,
+    accountId: created.id,
+    year: 2026,
+    month: 11,
+  });
+  assert.equal(detail.transactionsCount, 4);
+  assert.equal(detail.metrics.month, "11/2026");
+  assert.equal(detail.metrics.projectedBalance, 1250);
+  assert.equal(repository.lastMetricsQuery?.year, 2026);
+  assert.equal(repository.lastMetricsQuery?.month, 11);
+
+  await service.getAccountById({ userId: ownerId, accountId: created.id });
+  const now = new Date();
+  assert.equal(repository.lastMetricsQuery?.year, now.getUTCFullYear());
+  assert.equal(repository.lastMetricsQuery?.month, now.getUTCMonth() + 1);
+});
+
+test("PrismaAccountRepository.getDetailMetrics agrega 6 meses, pendências e gastos por categoria", async () => {
+  const categoryHomeId = "77000000-0000-4000-8000-000000000008";
+  const categoryFoodId = "77000000-0000-4000-8000-000000000007";
+  let capturedConfirmedWhere: Record<string, unknown> | undefined;
+  let capturedPendingWhere: Record<string, unknown> | undefined;
+
+  const prismaMock = {
+    account: {},
+    transaction: {
+      findMany: async (args: { where: Record<string, unknown> }) => {
+        if (args.where.status === "CONFIRMED") {
+          capturedConfirmedWhere = args.where;
+          return [
+            {
+              type: "INCOME",
+              amount: "4500.00",
+              transactionDate: new Date("2026-11-05T00:00:00.000Z"),
+              categoryId: null,
+            },
+            {
+              type: "EXPENSE",
+              amount: "1200.00",
+              transactionDate: new Date("2026-11-10T00:00:00.000Z"),
+              categoryId: categoryHomeId,
+            },
+            {
+              type: "EXPENSE",
+              amount: "300.00",
+              transactionDate: new Date("2026-11-12T00:00:00.000Z"),
+              categoryId: categoryFoodId,
+            },
+            {
+              type: "EXPENSE",
+              amount: "500.00",
+              transactionDate: new Date("2026-11-15T00:00:00.000Z"),
+              categoryId: null,
+            },
+            {
+              type: "INCOME",
+              amount: "3800.00",
+              transactionDate: new Date("2026-08-05T00:00:00.000Z"),
+              categoryId: null,
+            },
+          ];
+        }
+        capturedPendingWhere = args.where;
+        return [
+          { type: "INCOME", amount: "400.00" },
+          { type: "EXPENSE", amount: "150.50" },
+        ];
+      },
+    },
+    category: {
+      findMany: async () => [
+        { id: categoryHomeId, name: "Moradia", color: "#012048", icon: "home" },
+        { id: categoryFoodId, name: "Alimentação", color: "#015363", icon: "utensils" },
+      ],
+    },
+  } as unknown as PrismaAccountClient;
+
+  const repository = new PrismaAccountRepository(prismaMock);
+  const metrics = await repository.getDetailMetrics({
+    userId: ownerId,
+    accountId: "76000000-0000-4000-8000-000000000001",
+    year: 2026,
+    month: 11,
+  });
+
+  assert.equal(capturedConfirmedWhere?.deletedAt, null);
+  assert.equal(capturedPendingWhere?.deletedAt, null);
+  assert.equal(metrics.month, "11/2026");
+  assert.equal(metrics.income, 4500);
+  assert.equal(metrics.expense, 2000);
+  assert.equal(metrics.netResult, 2500);
+  assert.deepEqual(metrics.pending, {
+    count: 2,
+    amount: 550.5,
+    incomeAmount: 400,
+    expenseAmount: 150.5,
+  });
+  assert.equal(metrics.monthlySeries.length, 6);
+  assert.deepEqual(metrics.monthlySeries[0], {
+    month: "06/2026",
+    label: "Jun/2026",
+    income: 0,
+    expense: 0,
+  });
+  assert.deepEqual(metrics.monthlySeries[2], {
+    month: "08/2026",
+    label: "Ago/2026",
+    income: 3800,
+    expense: 0,
+  });
+  assert.deepEqual(metrics.monthlySeries[5], {
+    month: "11/2026",
+    label: "Nov/2026",
+    income: 4500,
+    expense: 2000,
+  });
+  assert.deepEqual(metrics.categorySpend, [
+    {
+      categoryId: categoryHomeId,
+      name: "Moradia",
+      color: "#012048",
+      icon: "home",
+      amount: 1200,
+      percentage: 60,
+    },
+    {
+      categoryId: null,
+      name: "Sem categoria",
+      color: null,
+      icon: null,
+      amount: 500,
+      percentage: 25,
+    },
+    {
+      categoryId: categoryFoodId,
+      name: "Alimentação",
+      color: "#015363",
+      icon: "utensils",
+      amount: 300,
+      percentage: 15,
+    },
+  ]);
 });

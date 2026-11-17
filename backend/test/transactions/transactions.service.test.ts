@@ -5,6 +5,8 @@ import { Account } from "../../src/modules/accounts/domain/entities/account.enti
 import { AccountStatus, AccountType } from "../../src/modules/accounts/domain/enums/account.enums.js";
 import type { IAccountRepository } from "../../src/modules/accounts/domain/interfaces/account-repository.interface.js";
 import type {
+  AccountDetailMetricsData,
+  AccountDetailMetricsQuery,
   AccountPaginationQuery,
   PaginatedAccountsResult,
 } from "../../src/modules/accounts/domain/interfaces/account.interfaces.js";
@@ -81,6 +83,17 @@ class TestAccountRepository implements IAccountRepository {
 
   async deleteByIdAndUserId(): Promise<boolean> { return true; }
   async countLinkedTransactions(): Promise<number> { return 0; }
+  async getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData> {
+    return {
+      month: `${String(query.month).padStart(2, "0")}/${query.year}`,
+      income: 0,
+      expense: 0,
+      netResult: 0,
+      pending: { count: 0, amount: 0, incomeAmount: 0, expenseAmount: 0 },
+      monthlySeries: [],
+      categorySpend: [],
+    };
+  }
 }
 
 class TestCategoryRepository implements ICategoryRepository {
@@ -114,6 +127,17 @@ class TestCategoryRepository implements ICategoryRepository {
 
   async deleteByIdAndUserId(): Promise<boolean> { return true; }
   async countLinkedTransactions(): Promise<number> { return 0; }
+  async getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData> {
+    return {
+      month: `${String(query.month).padStart(2, "0")}/${query.year}`,
+      income: 0,
+      expense: 0,
+      netResult: 0,
+      pending: { count: 0, amount: 0, incomeAmount: 0, expenseAmount: 0 },
+      monthlySeries: [],
+      categorySpend: [],
+    };
+  }
 }
 
 class TestTransactionRepository implements ITransactionRepository {

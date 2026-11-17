@@ -8,6 +8,8 @@ import {
   AccountStatus,
   AccountsService,
   AccountType,
+  type AccountDetailMetricsData,
+  type AccountDetailMetricsQuery,
   type AccountPaginationQuery,
   type IAccountRepository,
   type PaginatedAccountsResult,
@@ -90,6 +92,17 @@ class HttpMemoryAccountRepository implements IAccountRepository {
   }
   async deleteByIdAndUserId(): Promise<boolean> { return false; }
   async countLinkedTransactions(): Promise<number> { return 0; }
+  async getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData> {
+    return {
+      month: `${String(query.month).padStart(2, "0")}/${query.year}`,
+      income: 0,
+      expense: 0,
+      netResult: 0,
+      pending: { count: 0, amount: 0, incomeAmount: 0, expenseAmount: 0 },
+      monthlySeries: [],
+      categorySpend: [],
+    };
+  }
 }
 
 class HttpMemoryCategoryRepository implements ICategoryRepository {
@@ -130,6 +143,17 @@ class HttpMemoryCategoryRepository implements ICategoryRepository {
   async update(category: Category): Promise<Category> { return category; }
   async deleteByIdAndUserId(): Promise<boolean> { return false; }
   async countLinkedTransactions(): Promise<number> { return 0; }
+  async getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData> {
+    return {
+      month: `${String(query.month).padStart(2, "0")}/${query.year}`,
+      income: 0,
+      expense: 0,
+      netResult: 0,
+      pending: { count: 0, amount: 0, incomeAmount: 0, expenseAmount: 0 },
+      monthlySeries: [],
+      categorySpend: [],
+    };
+  }
 }
 
 class HttpMemoryTransactionRepository implements ITransactionRepository {
