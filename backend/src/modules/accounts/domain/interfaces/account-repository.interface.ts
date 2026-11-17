@@ -1,5 +1,10 @@
 import type { Account } from "../entities/account.entity.js";
-import type { AccountPaginationQuery, PaginatedAccountsResult } from "./account.interfaces.js";
+import type {
+  AccountDetailMetricsData,
+  AccountDetailMetricsQuery,
+  AccountPaginationQuery,
+  PaginatedAccountsResult,
+} from "./account.interfaces.js";
 
 export interface IAccountRepository {
   create(account: Account): Promise<Account>;
@@ -13,4 +18,5 @@ export interface IAccountRepository {
   update(account: Account): Promise<Account>;
   deleteByIdAndUserId(id: string, userId: string): Promise<boolean>;
   countLinkedTransactions(accountId: string, userId: string): Promise<number>;
+  getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData>;
 }

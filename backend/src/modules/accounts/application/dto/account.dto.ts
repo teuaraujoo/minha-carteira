@@ -24,6 +24,8 @@ export interface ListAccountsInputDto {
 export interface GetAccountByIdInputDto {
   userId: string;
   accountId: string;
+  month?: number | undefined;
+  year?: number | undefined;
 }
 
 export interface UpdateAccountInputDto {
@@ -72,4 +74,40 @@ export interface ListAccountsMetaDto extends PaginationMeta {
 export interface PaginatedAccountsResponseDto {
   items: AccountResponseDto[];
   meta: ListAccountsMetaDto;
+}
+
+export interface AccountMonthlySeriesItemDto {
+  month: string;
+  label: string;
+  income: number;
+  expense: number;
+}
+
+export interface AccountCategorySpendItemDto {
+  categoryId: string | null;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  amount: number;
+  percentage: number;
+}
+
+export interface AccountDetailMetricsDto {
+  month: string;
+  income: number;
+  expense: number;
+  netResult: number;
+  projectedBalance: number;
+  pending: {
+    count: number;
+    amount: number;
+    incomeAmount: number;
+    expenseAmount: number;
+  };
+  monthlySeries: AccountMonthlySeriesItemDto[];
+  categorySpend: AccountCategorySpendItemDto[];
+}
+
+export interface AccountDetailResponseDto extends AccountResponseDto {
+  metrics: AccountDetailMetricsDto;
 }

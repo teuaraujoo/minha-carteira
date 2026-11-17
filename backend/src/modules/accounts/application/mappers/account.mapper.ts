@@ -1,5 +1,9 @@
 import type { Account } from "../../domain/entities/account.entity.js";
-import type { AccountResponseDto } from "../dto/account.dto.js";
+import type {
+  AccountDetailMetricsDto,
+  AccountDetailResponseDto,
+  AccountResponseDto,
+} from "../dto/account.dto.js";
 
 export function toAccountResponseDto(account: Account, transactionsCount: number): AccountResponseDto {
   return {
@@ -16,5 +20,16 @@ export function toAccountResponseDto(account: Account, transactionsCount: number
     createdAt: account.createdAt.toISOString(),
     updatedAt: account.updatedAt.toISOString(),
     transactionsCount,
+  };
+}
+
+export function toAccountDetailResponseDto(
+  account: Account,
+  transactionsCount: number,
+  metrics: AccountDetailMetricsDto,
+): AccountDetailResponseDto {
+  return {
+    ...toAccountResponseDto(account, transactionsCount),
+    metrics,
   };
 }

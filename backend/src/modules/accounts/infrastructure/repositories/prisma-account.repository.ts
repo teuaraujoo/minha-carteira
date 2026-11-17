@@ -7,7 +7,19 @@ import { AppError, ErrorCode } from "../../../../shared/presentation/http/app-er
 import { Account } from "../../domain/entities/account.entity.js";
 import { AccountStatus, AccountType } from "../../domain/enums/account.enums.js";
 import type { IAccountRepository } from "../../domain/interfaces/account-repository.interface.js";
-import type { AccountPaginationQuery, PaginatedAccountsResult } from "../../domain/interfaces/account.interfaces.js";
+import type {
+  AccountCategorySpendItem,
+  AccountDetailMetricsData,
+  AccountDetailMetricsQuery,
+  AccountMonthlySeriesItem,
+  AccountPaginationQuery,
+  PaginatedAccountsResult,
+} from "../../domain/interfaces/account.interfaces.js";
+
+const PORTUGUESE_MONTH_ABBR = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+] as const;
 
 export type PrismaAccountClient = Pick<PrismaClient, "account">;
 
@@ -175,6 +187,146 @@ export class PrismaAccountRepository implements IAccountRepository {
     });
   }
 
+  /** Calcula métricas mensais, série de 6 meses e gastos por categoria da conta na competência. */
+  async getDetailMetrics(query: AccountDetailMetricsQuery): Promise<AccountDetailMetricsData> {
+    const slots = buildMonthlySlots(query.year, query.month);
+    const targetMonthKey = formatMonthKey(query.year, query.month);
+    const monthStart = new Date(Date.UTC(query.year, query.month - 1, 1));
+    const nextMonthStart = new Date(Date.UTC(query.year, query.month, 1));
+    const seriesStart = new Date(Date.UTC(query.year, query.month - 6, 1));
+
+    const delegates = this.prisma as Partial<Pick<PrismaClient, "transaction" | "category">>;
+    if (!delegates.transaction) {
+      return {
+        month: targetMonthKey,
+        income: 0,
+        expense: 0,
+        netResult: 0,
+        pending: { count: 0, amount: 0, incomeAmount: 0, expenseAmount: 0 },
+        monthlySeries: slots,
+        categorySpend: [],
+      };
+    }
+
+    const [confirmedRows, pendingRows] = await Promise.all([
+      delegates.transaction.findMany({
+        where: {
+          accountId: query.accountId,
+          userId: query.userId,
+          deletedAt: null,
+          status: "CONFIRMED",
+          transactionDate: { gte: seriesStart, lt: nextMonthStart },
+        },
+        select: {
+          type: true,
+          amount: true,
+          transactionDate: true,
+          categoryId: true,
+        },
+      }),
+      delegates.transaction.findMany({
+        where: {
+          accountId: query.accountId,
+          userId: query.userId,
+          deletedAt: null,
+          status: "PENDING",
+          transactionDate: { gte: monthStart, lt: nextMonthStart },
+        },
+        select: {
+          type: true,
+          amount: true,
+        },
+      }),
+    ]);
+
+    const slotByMonth = new Map<string, AccountMonthlySeriesItem>(
+      slots.map((slot) => [slot.month, slot]),
+    );
+    const expenseByCategory = new Map<string | null, number>();
+    let targetIncome = 0;
+    let targetExpense = 0;
+
+    for (const row of confirmedRows) {
+      const numericAmount = decimalToNumber(row.amount);
+      const txDate = row.transactionDate instanceof Date ? row.transactionDate : new Date(row.transactionDate);
+      const rowMonthKey = formatMonthKey(txDate.getUTCFullYear(), txDate.getUTCMonth() + 1);
+      const slot = slotByMonth.get(rowMonthKey);
+
+      if (slot) {
+        if (row.type === "INCOME") {
+          slot.income = roundCurrency(slot.income + numericAmount);
+        } else {
+          slot.expense = roundCurrency(slot.expense + numericAmount);
+        }
+      }
+
+      if (txDate >= monthStart && txDate < nextMonthStart) {
+        if (row.type === "INCOME") {
+          targetIncome = roundCurrency(targetIncome + numericAmount);
+        } else {
+          targetExpense = roundCurrency(targetExpense + numericAmount);
+          const categoryKey = row.categoryId ?? null;
+          expenseByCategory.set(
+            categoryKey,
+            roundCurrency((expenseByCategory.get(categoryKey) ?? 0) + numericAmount),
+          );
+        }
+      }
+    }
+
+    let pendingIncome = 0;
+    let pendingExpense = 0;
+    for (const row of pendingRows) {
+      const numericAmount = decimalToNumber(row.amount);
+      if (row.type === "INCOME") {
+        pendingIncome = roundCurrency(pendingIncome + numericAmount);
+      } else {
+        pendingExpense = roundCurrency(pendingExpense + numericAmount);
+      }
+    }
+
+    const categoryIds = Array.from(expenseByCategory.keys()).filter(
+      (id): id is string => typeof id === "string",
+    );
+    const categories =
+      categoryIds.length > 0 && delegates.category
+        ? await delegates.category.findMany({
+            where: { id: { in: categoryIds } },
+            select: { id: true, name: true, color: true, icon: true },
+          })
+        : [];
+    const categoryMetaById = new Map(categories.map((item) => [item.id, item]));
+
+    const categorySpend: AccountCategorySpendItem[] = Array.from(expenseByCategory.entries())
+      .map(([categoryId, amount]) => {
+        const meta = categoryId ? categoryMetaById.get(categoryId) : undefined;
+        return {
+          categoryId: meta ? meta.id : null,
+          name: meta ? meta.name : "Sem categoria",
+          color: meta?.color ?? null,
+          icon: meta?.icon ?? null,
+          amount,
+          percentage: targetExpense > 0 ? Number(((amount / targetExpense) * 100).toFixed(1)) : 0,
+        };
+      })
+      .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, "pt-BR"));
+
+    return {
+      month: targetMonthKey,
+      income: targetIncome,
+      expense: targetExpense,
+      netResult: roundCurrency(targetIncome - targetExpense),
+      pending: {
+        count: pendingRows.length,
+        amount: roundCurrency(pendingIncome + pendingExpense),
+        incomeAmount: pendingIncome,
+        expenseAmount: pendingExpense,
+      },
+      monthlySeries: slots,
+      categorySpend,
+    };
+  }
+
   private toDomain(record: AccountRecord): Account {
     return new Account({
       id: record.id,
@@ -204,6 +356,31 @@ function decimalToNumber(value: unknown): number {
     throw new RangeError("Valor decimal inválido retornado pelo banco de dados.");
   }
   return Number(numeric.toFixed(2));
+}
+
+function roundCurrency(value: number): number {
+  const normalized = Math.abs(value) < 0.005 ? 0 : value;
+  return Number(normalized.toFixed(2));
+}
+
+function formatMonthKey(year: number, month: number): string {
+  return `${String(month).padStart(2, "0")}/${year}`;
+}
+
+function buildMonthlySlots(year: number, month: number): AccountMonthlySeriesItem[] {
+  const slots: AccountMonthlySeriesItem[] = [];
+  for (let offset = -5; offset <= 0; offset += 1) {
+    const slotDate = new Date(Date.UTC(year, month - 1 + offset, 1));
+    const slotYear = slotDate.getUTCFullYear();
+    const slotMonth = slotDate.getUTCMonth() + 1;
+    slots.push({
+      month: formatMonthKey(slotYear, slotMonth),
+      label: `${PORTUGUESE_MONTH_ABBR[slotMonth - 1]}/${slotYear}`,
+      income: 0,
+      expense: 0,
+    });
+  }
+  return slots;
 }
 
 function mapPrismaAccountError(error: unknown): unknown {

@@ -6,6 +6,7 @@ import type { AccountsService } from "../../application/services/accounts.servic
 import {
   accountIdParamSchema,
   createAccountSchema,
+  getAccountDetailQuerySchema,
   listAccountsQuerySchema,
   updateAccountSchema,
 } from "../schemas/accounts.schemas.js";
@@ -62,7 +63,17 @@ export class AccountsController {
   async getById(request: Request, response: Response): Promise<void> {
     const userId = requireUserId(request);
     const accountId = parseAccountIdParam(request);
-    const account = await this.accountsService.getAccountById({ userId, accountId });
+    const parsedQuery = getAccountDetailQuerySchema.safeParse(request.query);
+    if (!parsedQuery.success) {
+      throw validationError("Parâmetro de competência da conta inválido.", parsedQuery.error);
+    }
+
+    const competence = parsedQuery.data.month;
+    const account = await this.accountsService.getAccountById({
+      userId,
+      accountId,
+      ...(competence !== undefined ? { month: competence.month, year: competence.year } : {}),
+    });
     sendSuccess(response, account);
   }
 

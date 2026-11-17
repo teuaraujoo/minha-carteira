@@ -87,6 +87,52 @@ export const updateAccountSchema = z
     "Informe ao menos um campo para atualizar.",
   );
 
+const MONTH_MM_YYYY_REGEX = /^(0[1-9]|1[0-2])\/(19\d{2}|20\d{2}|2100)$/;
+const MONTH_YYYY_MM_REGEX = /^(19\d{2}|20\d{2}|2100)-(0[1-9]|1[0-2])$/;
+
+function parseMonthCompetence(rawValue: string): { year: number; month: number } | null {
+  const mmYyyyMatch = MONTH_MM_YYYY_REGEX.exec(rawValue);
+  if (mmYyyyMatch) {
+    return {
+      month: Number(mmYyyyMatch[1]),
+      year: Number(mmYyyyMatch[2]),
+    };
+  }
+
+  const yyyyMmMatch = MONTH_YYYY_MM_REGEX.exec(rawValue);
+  if (yyyyMmMatch) {
+    return {
+      year: Number(yyyyMmMatch[1]),
+      month: Number(yyyyMmMatch[2]),
+    };
+  }
+
+  return null;
+}
+
+export const getAccountDetailQuerySchema = z
+  .object({
+    month: z
+      .string({ error: "A competência deve ser um texto no formato MM/YYYY ou YYYY-MM." })
+      .trim()
+      .transform((value) => (value === "" ? undefined : value))
+      .optional()
+      .transform((value, ctx) => {
+        if (value === undefined) return undefined;
+        const parsed = parseMonthCompetence(value);
+        if (!parsed) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "A competência deve estar no formato MM/YYYY ou YYYY-MM (ex.: 11/2026).",
+          });
+          return z.NEVER;
+        }
+        return parsed;
+      }),
+  })
+  .strict();
+
 export type CreateAccountRequestDto = z.infer<typeof createAccountSchema>;
 export type UpdateAccountRequestDto = z.infer<typeof updateAccountSchema>;
 export type ListAccountsQueryDto = z.infer<typeof listAccountsQuerySchema>;
+export type GetAccountDetailQueryDto = z.infer<typeof getAccountDetailQuerySchema>;

@@ -58,3 +58,43 @@ export interface PaginatedAccountsResult {
   total: number;
   summary: AccountListSummary;
 }
+
+export interface AccountDetailMetricsQuery {
+  userId: string;
+  accountId: string;
+  year: number;
+  month: number;
+}
+
+export interface AccountMonthlySeriesItem {
+  month: string;
+  label: string;
+  income: number;
+  expense: number;
+}
+
+export interface AccountCategorySpendItem {
+  categoryId: string | null;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  amount: number;
+  percentage: number;
+}
+
+export interface AccountDetailPendingMetrics {
+  count: number;
+  amount: number;
+  incomeAmount: number;
+  expenseAmount: number;
+}
+
+export interface AccountDetailMetricsData {
+  month: string;
+  income: number;
+  expense: number;
+  netResult: number;
+  pending: AccountDetailPendingMetrics;
+  monthlySeries: AccountMonthlySeriesItem[];
+  categorySpend: AccountCategorySpendItem[];
+}

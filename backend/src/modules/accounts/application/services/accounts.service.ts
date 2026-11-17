@@ -5,6 +5,7 @@ import { Account, normalizeAccountName } from "../../domain/entities/account.ent
 import { AccountStatus } from "../../domain/enums/account.enums.js";
 import type { IAccountRepository } from "../../domain/interfaces/account-repository.interface.js";
 import type {
+  AccountDetailResponseDto,
   AccountResponseDto,
   ChangeAccountStatusInputDto,
   CreateAccountInputDto,
@@ -14,7 +15,7 @@ import type {
   PaginatedAccountsResponseDto,
   UpdateAccountInputDto,
 } from "../dto/account.dto.js";
-import { toAccountResponseDto } from "../mappers/account.mapper.js";
+import { toAccountDetailResponseDto, toAccountResponseDto } from "../mappers/account.mapper.js";
 
 export class AccountsService {
   constructor(
@@ -86,10 +87,34 @@ export class AccountsService {
     };
   }
 
-  async getAccountById(input: GetAccountByIdInputDto): Promise<AccountResponseDto> {
+  async getAccountById(input: GetAccountByIdInputDto): Promise<AccountDetailResponseDto> {
     const account = await this.requireOwnedAccount(input.accountId, input.userId);
-    const transactionsCount = await this.accountRepository.countLinkedTransactions(account.id, input.userId);
-    return toAccountResponseDto(account, transactionsCount);
+    const now = new Date();
+    const year = input.year ?? now.getUTCFullYear();
+    const month = input.month ?? now.getUTCMonth() + 1;
+
+    const [transactionsCount, metricsData] = await Promise.all([
+      this.accountRepository.countLinkedTransactions(account.id, input.userId),
+      this.accountRepository.getDetailMetrics({
+        userId: input.userId,
+        accountId: account.id,
+        year,
+        month,
+      }),
+    ]);
+
+    const projectedBalance = Number(
+      (
+        account.currentBalance
+        + metricsData.pending.incomeAmount
+        - metricsData.pending.expenseAmount
+      ).toFixed(2),
+    );
+
+    return toAccountDetailResponseDto(account, transactionsCount, {
+      ...metricsData,
+      projectedBalance,
+    });
   }
 
   async updateAccount(input: UpdateAccountInputDto): Promise<AccountResponseDto> {
