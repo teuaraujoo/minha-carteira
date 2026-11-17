@@ -726,6 +726,13 @@ function mfaRateLimitExceeded(message: string, nextAttemptAt: Date | null): AppE
 }
 
 function generateNumericOtp(digits: number): string {
+  if (process.env.NODE_ENV !== "production") {
+    return "0".repeat(digits);
+  }
+  // Em ambientes que não são de produção, utiliza código fixo para facilitar testes locais e de integração.
+  if (process.env.NODE_ENV !== "production") {
+    return "0".repeat(digits);
+  }
   return String(randomInt(0, 10 ** digits)).padStart(digits, "0");
 }
 

@@ -391,3 +391,24 @@ test("validateMfa rejeita código expirado após 5 minutos", async (t) => {
     (error: unknown) => error instanceof AppError && error.status === 400 && error.code === ErrorCode.VALIDATION_ERROR,
   );
 });
+
+test("requestMfa gera código fixo 000000 fora de produção e código numérico de 6 dígitos em produção", async (t) => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  t.after(() => {
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  process.env.NODE_ENV = "development";
+  const devFixture = createMfaFixture();
+  await devFixture.service.requestMfa({ email: "dev-mfa@example.com", metadata: requestMetadata });
+  assert.equal(devFixture.sentEmails[0]?.code, "000000");
+
+  process.env.NODE_ENV = "production";
+  const prodFixture = createMfaFixture();
+  await prodFixture.service.requestMfa({ email: "prod-mfa@example.com", metadata: requestMetadata });
+  assert.match(prodFixture.sentEmails[0]!.code, /^\d{6}$/);
+});
