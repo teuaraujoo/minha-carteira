@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, CheckCircle2, LoaderCircle } from "lucide-react";
@@ -23,9 +24,14 @@ import {
   type AuthTheme,
 } from "@/components/ui/auth-smoke-shell";
 import {
+  clearPendingAuthSession,
+  readPendingMfaChallenge,
   savePendingAuthEmail,
+  savePendingMfaChallenge,
   usePendingAuthEmail,
 } from "@/lib/auth-onboarding-storage";
+import { ApiClientError } from "@/services/api-client";
+import { authService } from "@/services/auth.service";
 import { cn } from "@/lib/utils";
 
 const MFA_CODE_LENGTH = 6;
@@ -56,9 +62,6 @@ export type SmokeMfaVerifyProps = {
   className?: string;
 };
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 function formatCooldown(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
@@ -79,6 +82,7 @@ export function SmokeMfaVerify({
   defaultTheme = "light",
   className,
 }: SmokeMfaVerifyProps) {
+  const router = useRouter();
   const [digits, setDigits] = useState<string[]>(() =>
     Array.from({ length: MFA_CODE_LENGTH }, () => ""),
   );
@@ -221,10 +225,35 @@ export function SmokeMfaVerify({
         return;
       }
 
-      // Fluxo visual: validação local do código sem integração com o backend.
-      await wait(700);
+      const pendingChallenge = readPendingMfaChallenge();
+      if (!pendingChallenge?.challengeId) {
+        setStatusMessage(
+          "Solicite um novo código de verificação para continuar.",
+        );
+        return;
+      }
+
+      const result = await authService.validateMfa({
+        challengeId: pendingChallenge.challengeId,
+        code: values.code,
+      });
+
+      if (result.isRegistered) {
+        clearPendingAuthSession();
+        router.push("/accounts");
+      } else {
+        const targetEmail = email?.trim() || persistedEmail;
+        router.push(
+          targetEmail
+            ? `/register?email=${encodeURIComponent(targetEmail)}`
+            : "/register",
+        );
+      }
+    } catch (error) {
       setStatusMessage(
-        "Código validado na interface. A verificação no backend será integrada na próxima etapa.",
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível validar o código de verificação.",
       );
     } finally {
       setBusy(null);
@@ -239,10 +268,25 @@ export function SmokeMfaVerify({
       if (onResendCode) {
         await onResendCode();
       } else {
-        await wait(500);
+        const targetEmail = email?.trim() || persistedEmail;
+        if (!targetEmail) {
+          setStatusMessage("Informe seu e-mail novamente na tela de acesso.");
+          return;
+        }
+        const result = await authService.requestMfa({ email: targetEmail });
+        savePendingMfaChallenge({
+          challengeId: result.challengeId,
+          nextAttemptAt: result.nextAttemptAt,
+        });
       }
       setCooldown(cooldownSeconds);
       setStatusMessage("Um novo código de verificação foi enviado.");
+    } catch (error) {
+      setStatusMessage(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível reenviar o código de verificação.",
+      );
     } finally {
       setBusy(null);
     }

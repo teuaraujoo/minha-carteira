@@ -17,10 +17,6 @@ import {
   formatDisplayCurrency,
   resolveCategoryIcon,
 } from "@/components/accounts/account-catalog";
-import type {
-  AccountItem,
-  AccountTransactionItem,
-} from "@/components/accounts/accounts-mock-store";
 import { TRANSACTION_STATUS_META } from "@/components/transactions/transaction-catalog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,15 +29,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import type { AccountDto } from "@/services/accounts.service";
+import type { CategoryDto } from "@/services/categories.service";
+import type { TransactionDto } from "@/services/transactions.service";
 
 interface TransactionDetailDialogProps {
-  transaction: AccountTransactionItem | null;
-  account: AccountItem | null;
+  transaction: TransactionDto | null;
+  account: AccountDto | null;
+  category: CategoryDto | null;
   hideValues: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirmTransaction: (transaction: AccountTransactionItem) => void;
-  onDeleteTransaction: (transaction: AccountTransactionItem) => void;
+  onConfirmTransaction: (transaction: TransactionDto) => void;
+  onDeleteTransaction: (transaction: TransactionDto) => void;
 }
 
 function formatLongTransactionDate(dateString: string): string {
@@ -53,6 +53,7 @@ function formatLongTransactionDate(dateString: string): string {
 export function TransactionDetailDialog({
   transaction,
   account,
+  category,
   hideValues,
   open,
   onOpenChange,
@@ -61,9 +62,11 @@ export function TransactionDetailDialog({
 }: TransactionDetailDialogProps) {
   if (!transaction) return null;
 
-  const isIncome = transaction.kind === "INCOME";
+  const isIncome = transaction.type === "INCOME";
   const isPendingIncome = isIncome && transaction.status === "PENDING";
   const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+  const categoryName = category?.name ?? "Sem categoria";
+  const categoryColor = category?.color ?? "#64748B";
 
   const handleConfirm = () => {
     onConfirmTransaction(transaction);
@@ -95,7 +98,7 @@ export function TransactionDetailDialog({
           </div>
 
           <DialogTitle className="pt-1 text-xl">
-            {transaction.title}
+            {transaction.description}
           </DialogTitle>
           <DialogDescription>
             Detalhes completos do lançamento financeiro selecionado.
@@ -151,12 +154,12 @@ export function TransactionDetailDialog({
                 Categoria
               </p>
               <div className="mt-1.5 flex items-center gap-2 text-sm font-medium text-foreground">
-                {createElement(resolveCategoryIcon(transaction.category), {
+                {createElement(resolveCategoryIcon(categoryName), {
                   className: "size-4 shrink-0",
-                  style: { color: transaction.categoryColor },
+                  style: { color: categoryColor },
                   "aria-hidden": true,
                 })}
-                <span className="truncate">{transaction.category}</span>
+                <span className="truncate">{categoryName}</span>
               </div>
             </div>
 
@@ -169,7 +172,7 @@ export function TransactionDetailDialog({
                   className="size-4 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
-                <span>{formatLongTransactionDate(transaction.occurredAt)}</span>
+                <span>{formatLongTransactionDate(transaction.transactionDate)}</span>
               </div>
             </div>
           </div>

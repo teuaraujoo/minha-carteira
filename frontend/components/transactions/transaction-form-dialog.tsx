@@ -7,17 +7,15 @@ import { useForm, useWatch } from "react-hook-form";
 import toast from "react-hot-toast";
 import { z } from "zod";
 
+import { TRANSACTION_STATUS_META } from "@/components/transactions/transaction-catalog";
+import { ApiClientError } from "@/services/api-client";
+import type { AccountDto } from "@/services/accounts.service";
+import type { CategoryDto } from "@/services/categories.service";
 import {
-  createMockTransaction,
-  type AccountItem,
-  type AccountTransactionItem,
+  transactionsService,
+  type TransactionDto,
   type TransactionKind,
-} from "@/components/accounts/accounts-mock-store";
-import {
-  getCategoriesByKind,
-  resolveCategoryColor,
-  TRANSACTION_STATUS_META,
-} from "@/components/transactions/transaction-catalog";
+} from "@/services/transactions.service";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -71,12 +69,12 @@ const transactionFormSchema = z.object({
     ),
   occurredAt: z.string().trim().min(1, "Informe a data da transação."),
   accountId: z.string().trim().min(1, "Selecione uma conta."),
-  category: z.string().trim().min(1, "Selecione uma categoria."),
+  categoryId: z.string().trim(),
   status: z.enum(["CONFIRMED", "PENDING"]),
   notes: z
     .string()
     .trim()
-    .max(240, "A observação deve ter no máximo 240 caracteres."),
+    .max(500, "A observação deve ter no máximo 500 caracteres."),
 });
 
 type TransactionFormValues = z.infer<typeof transactionFormSchema>;
@@ -85,8 +83,9 @@ interface TransactionFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultKind: TransactionKind;
-  accounts: AccountItem[];
-  onSaved?: (transaction: AccountTransactionItem) => void;
+  accounts: AccountDto[];
+  categories: CategoryDto[];
+  onSaved?: (transaction: TransactionDto) => void;
 }
 
 function getTodayIsoDate(): string {
@@ -99,11 +98,13 @@ function getTodayIsoDate(): string {
 
 function buildDefaultValues(
   kind: TransactionKind,
-  accounts: AccountItem[],
+  accounts: AccountDto[],
+  categories: CategoryDto[],
 ): TransactionFormValues {
   const activeAccounts = accounts.filter((item) => item.status === "ACTIVE");
   const defaultAccountId = activeAccounts[0]?.id ?? accounts[0]?.id ?? "";
-  const defaultCategory = getCategoriesByKind(kind)[0]?.name ?? "Outros";
+  const activeCategories = categories.filter((item) => item.status === "ACTIVE");
+  const defaultCategoryId = activeCategories[0]?.id ?? "NONE";
 
   return {
     kind,
@@ -111,7 +112,7 @@ function buildDefaultValues(
     amountText: "",
     occurredAt: getTodayIsoDate(),
     accountId: defaultAccountId,
-    category: defaultCategory,
+    categoryId: defaultCategoryId,
     status: "CONFIRMED",
     notes: "",
   };
@@ -122,6 +123,7 @@ export function TransactionFormDialog({
   onOpenChange,
   defaultKind,
   accounts,
+  categories,
   onSaved,
 }: TransactionFormDialogProps) {
   const descriptionId = useId();
@@ -139,6 +141,13 @@ export function TransactionFormDialog({
   );
   const selectableAccounts = activeAccounts.length > 0 ? activeAccounts : accounts;
 
+  const activeCategories = useMemo(
+    () => categories.filter((item) => item.status === "ACTIVE"),
+    [categories],
+  );
+  const selectableCategories =
+    activeCategories.length > 0 ? activeCategories : categories;
+
   const {
     register,
     handleSubmit,
@@ -149,24 +158,25 @@ export function TransactionFormDialog({
     formState: { errors, isSubmitting },
   } = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionFormSchema),
-    defaultValues: buildDefaultValues(defaultKind, selectableAccounts),
+    defaultValues: buildDefaultValues(
+      defaultKind,
+      selectableAccounts,
+      selectableCategories,
+    ),
   });
 
   useEffect(() => {
     if (open) {
-      reset(buildDefaultValues(defaultKind, selectableAccounts));
+      reset(
+        buildDefaultValues(defaultKind, selectableAccounts, selectableCategories),
+      );
     }
-  }, [open, defaultKind, selectableAccounts, reset]);
+  }, [open, defaultKind, selectableAccounts, selectableCategories, reset]);
 
   const selectedKind = useWatch({ control, name: "kind" }) ?? defaultKind;
   const selectedAccountId = useWatch({ control, name: "accountId" }) ?? "";
-  const selectedCategory = useWatch({ control, name: "category" }) ?? "";
+  const selectedCategoryId = useWatch({ control, name: "categoryId" }) ?? "NONE";
   const selectedStatus = useWatch({ control, name: "status" }) ?? "CONFIRMED";
-
-  const availableCategories = useMemo(
-    () => getCategoriesByKind(selectedKind),
-    [selectedKind],
-  );
 
   const accountItemsRecord = useMemo(
     () =>
@@ -177,11 +187,13 @@ export function TransactionFormDialog({
   );
 
   const categoryItemsRecord = useMemo(
-    () =>
-      Object.fromEntries(
-        availableCategories.map((category) => [category.name, category.name]),
+    () => ({
+      NONE: "Sem categoria",
+      ...Object.fromEntries(
+        selectableCategories.map((category) => [category.id, category.name]),
       ),
-    [availableCategories],
+    }),
+    [selectableCategories],
   );
 
   const statusItemsRecord = useMemo(
@@ -194,44 +206,40 @@ export function TransactionFormDialog({
 
   const handleKindChange = (nextKind: TransactionKind) => {
     setValue("kind", nextKind, { shouldValidate: true });
-    const nextCategories = getCategoriesByKind(nextKind);
-    const stillValid = nextCategories.some(
-      (item) => item.name === selectedCategory,
-    );
-    if (!stillValid && nextCategories[0]) {
-      setValue("category", nextCategories[0].name, { shouldValidate: true });
-    }
   };
 
-  const onSubmit = (values: TransactionFormValues) => {
+  const onSubmit = async (values: TransactionFormValues) => {
     const amount = parsePositiveCurrencyInput(values.amountText);
-    const categoryColor = resolveCategoryColor(values.category, values.kind);
+    try {
+      const created = await transactionsService.createTransaction({
+        accountId: values.accountId,
+        categoryId:
+          values.categoryId && values.categoryId !== "NONE"
+            ? values.categoryId
+            : null,
+        description: values.description.trim(),
+        amount,
+        type: values.kind,
+        status: values.status,
+        transactionDate: values.occurredAt,
+        notes: values.notes.trim() || null,
+      });
 
-    const result = createMockTransaction({
-      accountId: values.accountId,
-      description: values.description,
-      category: values.category,
-      categoryColor,
-      kind: values.kind,
-      status: values.status,
-      amount,
-      occurredAt: values.occurredAt,
-      notes: values.notes || null,
-    });
-
-    if (!result.ok) {
-      setError("description", { message: result.error });
-      toast.error(result.error);
-      return;
+      toast.success(
+        values.kind === "INCOME"
+          ? "Receita lançada com sucesso."
+          : "Despesa lançada com sucesso.",
+      );
+      onSaved?.(created);
+      onOpenChange(false);
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        setError("description", { message: error.message });
+        toast.error(error.message);
+        return;
+      }
+      toast.error("Não foi possível registrar a transação.");
     }
-
-    toast.success(
-      values.kind === "INCOME"
-        ? "Receita lançada com sucesso."
-        : "Despesa lançada com sucesso.",
-    );
-    onSaved?.(result.transaction);
-    onOpenChange(false);
   };
 
   const isIncome = selectedKind === "INCOME";
@@ -383,11 +391,11 @@ export function TransactionFormDialog({
             <div className="space-y-1.5">
               <Label>Categoria</Label>
               <Select
-                value={selectedCategory}
+                value={selectedCategoryId}
                 items={categoryItemsRecord}
                 onValueChange={(value) => {
                   if (typeof value === "string") {
-                    setValue("category", value, { shouldValidate: true });
+                    setValue("categoryId", value, { shouldValidate: true });
                   }
                 }}
               >
@@ -395,16 +403,17 @@ export function TransactionFormDialog({
                   <SelectValue placeholder="Selecione uma categoria" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableCategories.map((category) => (
-                    <SelectItem key={category.name} value={category.name}>
+                  <SelectItem value="NONE">Sem categoria</SelectItem>
+                  {selectableCategories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
                       {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.category ? (
+              {errors.categoryId ? (
                 <p className="text-xs text-destructive">
-                  {errors.category.message}
+                  {errors.categoryId.message}
                 </p>
               ) : null}
             </div>

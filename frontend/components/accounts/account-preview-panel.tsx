@@ -18,10 +18,6 @@ import {
   resolveCategoryIcon,
 } from "@/components/accounts/account-catalog";
 import { AccountMetricCard } from "@/components/accounts/account-metric-card";
-import type {
-  AccountItem,
-  AccountTransactionItem,
-} from "@/components/accounts/accounts-mock-store";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -33,12 +29,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import type {
+  AccountDetailMetricsDto,
+  AccountDto,
+} from "@/services/accounts.service";
+import type { CategoryDto } from "@/services/categories.service";
+import type { TransactionDto } from "@/services/transactions.service";
 
 interface AccountPreviewPanelProps {
-  account: AccountItem;
-  transactions: AccountTransactionItem[];
+  account: AccountDto;
+  metrics?: AccountDetailMetricsDto | null;
+  transactions: TransactionDto[];
+  categoriesById: Map<string, CategoryDto>;
   hideValues: boolean;
-  onEdit: (account: AccountItem) => void;
+  onEdit: (account: AccountDto) => void;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -54,14 +58,18 @@ function formatTransactionDate(isoDate: string): string {
 
 export function AccountPreviewPanel({
   account,
+  metrics,
   transactions,
+  categoriesById,
   hideValues,
   onEdit,
 }: AccountPreviewPanelProps) {
   const typeMeta = ACCOUNT_TYPE_MAP[account.type];
   const brandMeta = resolveAccountBrand(account.brand);
   const latestTransactions = transactions.slice(0, 4);
-  const monthlyResult = account.monthlyIncome - account.monthlyExpense;
+  const monthlyIncome = metrics?.income ?? 0;
+  const monthlyExpense = metrics?.expense ?? 0;
+  const monthlyResult = metrics?.netResult ?? 0;
 
   return (
     <Card className="h-full justify-between">
@@ -118,14 +126,14 @@ export function AccountPreviewPanel({
               />
               <AccountMetricCard
                 label="Entradas do mês"
-                value={account.monthlyIncome}
+                value={monthlyIncome}
                 valueFormat="currency"
                 hideValue={hideValues}
                 tone="positive"
               />
               <AccountMetricCard
                 label="Saídas do mês"
-                value={account.monthlyExpense}
+                value={monthlyExpense}
                 valueFormat="currency"
                 hideValue={hideValues}
                 tone="negative"
@@ -168,8 +176,13 @@ export function AccountPreviewPanel({
             ) : (
               <ul className="divide-y divide-border/70 rounded-xl border border-border/80 bg-background/50">
                 {latestTransactions.map((tx) => {
-                  const isIncome = tx.kind === "INCOME";
-                  const CategoryIcon = resolveCategoryIcon(tx.category);
+                  const isIncome = tx.type === "INCOME";
+                  const category = tx.categoryId
+                    ? categoriesById.get(tx.categoryId)
+                    : undefined;
+                  const categoryName = category?.name ?? "Sem categoria";
+                  const categoryColor = category?.color ?? "#64748B";
+                  const CategoryIcon = resolveCategoryIcon(categoryName);
                   return (
                     <li
                       key={tx.id}
@@ -193,7 +206,7 @@ export function AccountPreviewPanel({
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <p className="truncate text-sm font-medium text-foreground">
-                              {tx.title}
+                              {tx.description}
                             </p>
                             {tx.status === "PENDING" ? (
                               <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
@@ -205,12 +218,12 @@ export function AccountPreviewPanel({
                           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                             <span
                               className="inline-flex size-4 shrink-0 items-center justify-center rounded-md text-white"
-                              style={{ backgroundColor: tx.categoryColor }}
+                              style={{ backgroundColor: categoryColor }}
                             >
                               <CategoryIcon className="size-2.5" aria-hidden="true" />
                             </span>
                             <span className="truncate">
-                              {tx.category} • {formatTransactionDate(tx.occurredAt)}
+                              {categoryName} • {formatTransactionDate(tx.transactionDate)}
                             </span>
                           </p>
                         </div>

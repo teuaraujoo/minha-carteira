@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ArrowLeftRight,
   Bell,
@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Toaster } from "react-hot-toast";
 import { WhatsappSupportCard } from "@/components/whatsapp-support-card";
+import { authService } from "@/services/auth.service";
+import { usersService, type UserProfileDto } from "@/services/users.service";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
@@ -105,12 +107,41 @@ function subscribeSidebarCollapsed(listener: () => void): () => void {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfileDto | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
   const collapsed = useSyncExternalStore(
     subscribeSidebarCollapsed,
     readSidebarCollapsed,
     () => false,
   );
+
+  useEffect(() => {
+    let active = true;
+    usersService
+      .getMe()
+      .then((user) => {
+        if (active) setCurrentUser(user);
+      })
+      .catch(() => {
+        // Erros 401 já redirecionam automaticamente via apiClient.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await authService.logout();
+      router.replace("/login");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   const activeItem = navigationItems.find(({ href }) =>
     href === "/"
@@ -330,10 +361,20 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </summary>
                 <div
                   className={cn(
-                    "absolute right-0 z-40 mt-2 w-52 rounded-xl border border-border",
+                    "absolute right-0 z-40 mt-2 w-56 rounded-xl border border-border",
                     "bg-popover p-1.5 text-popover-foreground shadow-lg",
                   )}
                 >
+                  {currentUser ? (
+                    <div className="mb-1 border-b border-border px-3 py-2">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {currentUser.name}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {currentUser.email}
+                      </p>
+                    </div>
+                  ) : null}
                   <Link
                     href="/profile"
                     className={cn(
@@ -357,17 +398,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="my-1 border-t border-border" />
                   <button
                     type="button"
+                    onClick={handleLogout}
+                    disabled={loggingOut}
                     className={cn(
                       "flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive outline-none transition-colors",
                       "hover:bg-destructive/15 focus-visible:bg-destructive/15 focus-visible:ring-2 focus-visible:ring-destructive/40",
                       "disabled:cursor-not-allowed disabled:opacity-75 motion-reduce:transition-none",
                     )}
-                    aria-label="Sair indisponível até a integração da sessão"
-                    disabled
-                    title="A integração de sessão ainda não está configurada"
+                    aria-label="Sair da conta"
                   >
                     <LogOut className="size-4" aria-hidden="true" />
-                    Sair
+                    {loggingOut ? "Saindo..." : "Sair"}
                   </button>
                 </div>
               </details>

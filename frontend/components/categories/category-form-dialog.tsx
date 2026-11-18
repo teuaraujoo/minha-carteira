@@ -12,11 +12,6 @@ import {
   CATEGORY_STATUS_META,
   resolveCategoryIconByKey,
 } from "@/components/categories/category-catalog";
-import {
-  createMockCategory,
-  updateMockCategory,
-  type CategoryItem,
-} from "@/components/categories/categories-mock-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ColorPalettePicker } from "@/components/ui/color-palette-picker";
@@ -38,6 +33,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { ApiClientError } from "@/services/api-client";
+import {
+  categoriesService,
+  type CategoryDto,
+} from "@/services/categories.service";
 
 const categoryFormSchema = z.object({
   name: z
@@ -58,11 +58,11 @@ type CategoryFormValues = z.infer<typeof categoryFormSchema>;
 interface CategoryFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  categoryToEdit?: CategoryItem | null;
-  onSaved?: (category: CategoryItem) => void;
+  categoryToEdit?: CategoryDto | null;
+  onSaved?: (category: CategoryDto) => void;
 }
 
-function buildDefaultValues(category?: CategoryItem | null): CategoryFormValues {
+function buildDefaultValues(category?: CategoryDto | null): CategoryFormValues {
   if (!category) {
     return {
       name: "",
@@ -120,25 +120,46 @@ export function CategoryFormDialog({
   const watchedIcon = useWatch({ control, name: "icon" }) ?? "tag";
   const watchedStatus = useWatch({ control, name: "status" }) ?? "ACTIVE";
 
-  const onSubmit = (values: CategoryFormValues) => {
-    const result =
-      isEditing && categoryToEdit
-        ? updateMockCategory(categoryToEdit.id, values)
-        : createMockCategory(values);
+  const onSubmit = async (values: CategoryFormValues) => {
+    try {
+      let saved: CategoryDto;
+      if (isEditing && categoryToEdit) {
+        saved = await categoriesService.updateCategory(categoryToEdit.id, {
+          name: values.name.trim(),
+          color: values.color,
+          icon: values.icon,
+        });
+        if (values.status !== saved.status) {
+          saved =
+            values.status === "INACTIVE"
+              ? await categoriesService.deactivateCategory(saved.id)
+              : await categoriesService.reactivateCategory(saved.id);
+        }
+      } else {
+        saved = await categoriesService.createCategory({
+          name: values.name.trim(),
+          color: values.color,
+          icon: values.icon,
+        });
+      }
 
-    if (!result.ok) {
-      setError("name", { message: result.error });
-      toast.error(result.error);
-      return;
+      toast.success(
+        isEditing
+          ? "Categoria atualizada com sucesso."
+          : "Categoria criada com sucesso.",
+      );
+      onSaved?.(saved);
+      onOpenChange(false);
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        if (error.status === 409) {
+          setError("name", { message: error.message });
+        }
+        toast.error(error.message);
+        return;
+      }
+      toast.error("Não foi possível salvar a categoria.");
     }
-
-    toast.success(
-      isEditing
-        ? "Categoria atualizada com sucesso."
-        : "Categoria criada com sucesso.",
-    );
-    onSaved?.(result.category);
-    onOpenChange(false);
   };
 
   return (

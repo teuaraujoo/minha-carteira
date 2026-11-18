@@ -1,18 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, RotateCcw, Search } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { AccountMetricCard } from "@/components/accounts/account-metric-card";
 import { AppShell } from "@/components/app-shell";
 import type { CategoryStatus } from "@/components/categories/category-catalog";
-import {
-  deleteMockCategory,
-  toggleMockCategoryStatus,
-  useCategoriesStore,
-  type CategoryItem,
-} from "@/components/categories/categories-mock-store";
 import { CategoriesTable } from "@/components/categories/categories-table";
 import { CategoryFormDialog } from "@/components/categories/category-form-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -20,56 +14,70 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ApiClientError } from "@/services/api-client";
+import {
+  categoriesService,
+  type CategoryDto,
+  type ListCategoriesMetaDto,
+} from "@/services/categories.service";
 
 type StatusFilter = CategoryStatus | "ALL";
 
 export default function CategoriesPage() {
-  const { categories } = useCategoriesStore();
-
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [meta, setMeta] = useState<ListCategoriesMetaDto>({
+    page: 1,
+    pageSize: 100,
+    total: 0,
+    totalPages: 1,
+    activeCount: 0,
+    inactiveCount: 0,
+    customCount: 0,
+  });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ACTIVE");
   const [searchTerm, setSearchTerm] = useState("");
+  const [refreshTick, setRefreshTick] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [categoryToEdit, setCategoryToEdit] = useState<CategoryItem | null>(
+  const [categoryToEdit, setCategoryToEdit] = useState<CategoryDto | null>(
     null,
   );
 
-  const activeCount = useMemo(
-    () => categories.filter((item) => item.status === "ACTIVE").length,
-    [categories],
-  );
-  const inactiveCount = useMemo(
-    () => categories.filter((item) => item.status === "INACTIVE").length,
-    [categories],
-  );
-  const customCount = useMemo(
-    () => categories.filter((item) => !item.isDefault).length,
-    [categories],
-  );
+  const reloadCategories = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
-  const filteredCategories = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-
-    return categories
-      .filter((item) => {
-        if (statusFilter !== "ALL" && item.status !== statusFilter) {
-          return false;
-        }
-        if (
-          normalizedSearch &&
-          !item.name.toLowerCase().includes(normalizedSearch)
-        ) {
-          return false;
-        }
-        return true;
+  useEffect(() => {
+    let active = true;
+    categoriesService
+      .listCategories({
+        pageSize: 100,
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+        search: searchTerm.trim() || undefined,
       })
-      .sort((a, b) => {
-        // Exibe categorias personalizadas primeiro e ordena alfabeticamente em pt-BR.
-        if (a.isDefault !== b.isDefault) {
-          return a.isDefault ? 1 : -1;
+      .then((response) => {
+        if (!active) return;
+        setCategories(response.items);
+        if (response.meta) {
+          setMeta(response.meta);
         }
-        return a.name.localeCompare(b.name, "pt-BR");
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (error instanceof ApiClientError && error.status !== 401) {
+          toast.error(error.message);
+        }
       });
-  }, [categories, statusFilter, searchTerm]);
+
+    return () => {
+      active = false;
+    };
+  }, [statusFilter, searchTerm, refreshTick]);
+
+  const activeCount = meta.activeCount;
+  const inactiveCount = meta.inactiveCount;
+  const customCount = meta.customCount;
+  const totalCount = activeCount + inactiveCount;
+  const filteredCategories = categories;
 
   const hasActiveFilters = Boolean(
     searchTerm.trim() || statusFilter !== "ACTIVE",
@@ -85,33 +93,45 @@ export default function CategoriesPage() {
     setDialogOpen(true);
   };
 
-  const openEditDialog = (category: CategoryItem) => {
+  const openEditDialog = (category: CategoryDto) => {
     setCategoryToEdit(category);
     setDialogOpen(true);
   };
 
-  const handleToggleStatus = (category: CategoryItem) => {
-    const result = toggleMockCategoryStatus(category.id);
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
-    }
+  const handleToggleStatus = async (category: CategoryDto) => {
+    try {
+      const updated =
+        category.status === "ACTIVE"
+          ? await categoriesService.deactivateCategory(category.id)
+          : await categoriesService.reactivateCategory(category.id);
 
-    toast.success(
-      result.category.status === "ACTIVE"
-        ? `Categoria "${result.category.name}" reativada.`
-        : `Categoria "${result.category.name}" desativada.`,
-    );
+      toast.success(
+        updated.status === "ACTIVE"
+          ? `Categoria "${updated.name}" reativada.`
+          : `Categoria "${updated.name}" desativada.`,
+      );
+      reloadCategories();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível alterar o status da categoria.",
+      );
+    }
   };
 
-  const handleDeleteCategory = (category: CategoryItem) => {
-    const result = deleteMockCategory(category.id);
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
+  const handleDeleteCategory = async (category: CategoryDto) => {
+    try {
+      await categoriesService.deleteCategory(category.id);
+      toast.success(`Categoria "${category.name}" excluída.`);
+      reloadCategories();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível excluir a categoria.",
+      );
     }
-
-    toast.success(`Categoria "${result.deleted.name}" excluída.`);
   };
 
   return (
@@ -192,7 +212,7 @@ export default function CategoriesPage() {
               <div className="grid grid-cols-1 gap-3 @[360px]:grid-cols-2 @[760px]:grid-cols-4">
                 <AccountMetricCard
                   label="Total cadastradas"
-                  value={categories.length}
+                  value={totalCount}
                   valueFormat="integer"
                 />
                 <AccountMetricCard
@@ -242,7 +262,7 @@ export default function CategoriesPage() {
                 </strong>{" "}
                 de{" "}
                 <strong className="font-semibold text-foreground">
-                  {categories.length}
+                  {meta.total}
                 </strong>{" "}
                 categorias
               </span>
@@ -277,6 +297,7 @@ export default function CategoriesPage() {
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           categoryToEdit={categoryToEdit}
+          onSaved={reloadCategories}
         />
       </section>
     </AppShell>

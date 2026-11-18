@@ -22,7 +22,12 @@ import {
   createRiseMotion,
   type AuthTheme,
 } from "@/components/ui/auth-smoke-shell";
-import { savePendingAuthEmail } from "@/lib/auth-onboarding-storage";
+import {
+  savePendingAuthEmail,
+  savePendingMfaChallenge,
+} from "@/lib/auth-onboarding-storage";
+import { ApiClientError } from "@/services/api-client";
+import { authService } from "@/services/auth.service";
 import { cn } from "@/lib/utils";
 
 const loginFormSchema = z.object({
@@ -68,6 +73,7 @@ export function SmokeLogin({
 }: SmokeLoginProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<null | "form" | "google">(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const reduce = useReducedMotion();
 
   const emailId = useId();
@@ -87,6 +93,7 @@ export function SmokeLogin({
   const submitForm = handleSubmit(async (values) => {
     if (busy) return;
     setBusy("form");
+    setErrorMessage(null);
     try {
       savePendingAuthEmail(values.email);
 
@@ -95,9 +102,18 @@ export function SmokeLogin({
         return;
       }
 
-      // Fluxo visual: após validar e salvar o e-mail, redireciona para a validação MFA.
-      await wait(400);
+      const result = await authService.requestMfa({ email: values.email });
+      savePendingMfaChallenge({
+        challengeId: result.challengeId,
+        nextAttemptAt: result.nextAttemptAt,
+      });
       router.push(`${mfaHref}?email=${encodeURIComponent(values.email)}`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível enviar o código de verificação.",
+      );
     } finally {
       setBusy(null);
     }
@@ -178,6 +194,14 @@ export function SmokeLogin({
               className="mt-1.5 text-[12px] font-medium text-[var(--error)]"
             >
               {errors.email.message}
+            </p>
+          )}
+          {errorMessage && (
+            <p
+              role="alert"
+              className="mt-1.5 text-[12px] font-medium text-[var(--error)]"
+            >
+              {errorMessage}
             </p>
           )}
         </motion.div>

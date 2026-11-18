@@ -4,6 +4,12 @@ import { useSyncExternalStore } from "react";
 
 const PENDING_AUTH_EMAIL_KEY = "minha-carteira:pending-auth-email";
 const PENDING_AUTH_EMAIL_EVENT = "mc-pending-auth-email-change";
+const PENDING_MFA_CHALLENGE_KEY = "minha-carteira:pending-mfa-challenge";
+
+export interface PendingMfaChallenge {
+  challengeId: string;
+  nextAttemptAt: string;
+}
 
 function subscribePendingAuthEmail(onStoreChange: () => void): () => void {
   if (typeof window === "undefined") {
@@ -52,4 +58,46 @@ export function usePendingAuthEmail(): string {
     readPendingAuthEmail,
     () => "",
   );
+}
+
+/** Salva o desafio MFA ativo retornado por POST /api/v1/auth/request-mfa. */
+export function savePendingMfaChallenge(challenge: PendingMfaChallenge): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      PENDING_MFA_CHALLENGE_KEY,
+      JSON.stringify(challenge),
+    );
+  } catch {
+    // Ignora indisponibilidade de sessionStorage em ambientes restritos.
+  }
+}
+
+/** Lê o desafio MFA salvo na sessão atual do navegador. */
+export function readPendingMfaChallenge(): PendingMfaChallenge | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_MFA_CHALLENGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingMfaChallenge>;
+    if (!parsed.challengeId) return null;
+    return {
+      challengeId: parsed.challengeId,
+      nextAttemptAt: parsed.nextAttemptAt ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Limpa os dados temporários do fluxo de autenticação/onboarding. */
+export function clearPendingAuthSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(PENDING_AUTH_EMAIL_KEY);
+    window.sessionStorage.removeItem(PENDING_MFA_CHALLENGE_KEY);
+    window.dispatchEvent(new Event(PENDING_AUTH_EMAIL_EVENT));
+  } catch {
+    // Ignora indisponibilidade de sessionStorage em ambientes restritos.
+  }
 }

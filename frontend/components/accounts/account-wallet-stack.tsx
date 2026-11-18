@@ -5,11 +5,11 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowUpRight } from "lucide-react";
 
 import { AccountWalletCard } from "@/components/accounts/account-wallet-card";
-import type { AccountItem } from "@/components/accounts/accounts-mock-store";
+import type { AccountDto } from "@/services/accounts.service";
 import { cn } from "@/lib/utils";
 
 interface AccountWalletStackProps {
-  accounts: AccountItem[];
+  accounts: AccountDto[];
   selectedAccountId: string | null;
   hideValues: boolean;
   viewMode: "stack" | "grid";

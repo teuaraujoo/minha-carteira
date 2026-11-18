@@ -15,10 +15,6 @@ import {
   formatDisplayCurrency,
   resolveCategoryIcon,
 } from "@/components/accounts/account-catalog";
-import type {
-  AccountItem,
-  AccountTransactionItem,
-} from "@/components/accounts/accounts-mock-store";
 import {
   formatTransactionDate,
   TRANSACTION_STATUS_META,
@@ -34,21 +30,25 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
+import type { AccountDto } from "@/services/accounts.service";
+import type { CategoryDto } from "@/services/categories.service";
+import type { TransactionDto } from "@/services/transactions.service";
 
 export type TransactionSortField = "date" | "amount";
 export type TransactionSortDirection = "asc" | "desc";
 
 interface TransactionsTableProps {
-  transactions: AccountTransactionItem[];
-  accountsById: Map<string, AccountItem>;
+  transactions: TransactionDto[];
+  accountsById: Map<string, AccountDto>;
+  categoriesById: Map<string, CategoryDto>;
   hideValues: boolean;
   sortField: TransactionSortField;
   sortDirection: TransactionSortDirection;
   hasActiveFilters: boolean;
   onToggleSort: (field: TransactionSortField) => void;
-  onSelectTransaction: (transaction: AccountTransactionItem) => void;
-  onConfirmTransaction: (transaction: AccountTransactionItem) => void;
-  onDeleteTransaction: (transaction: AccountTransactionItem) => void;
+  onSelectTransaction: (transaction: TransactionDto) => void;
+  onConfirmTransaction: (transaction: TransactionDto) => void;
+  onDeleteTransaction: (transaction: TransactionDto) => void;
   onClearFilters: () => void;
 }
 
@@ -78,6 +78,7 @@ function SortIndicator({
 export function TransactionsTable({
   transactions,
   accountsById,
+  categoriesById,
   hideValues,
   sortField,
   sortDirection,
@@ -184,11 +185,16 @@ export function TransactionsTable({
 
         <tbody className="divide-y divide-border/70">
           {transactions.map((tx) => {
-            const isIncome = tx.kind === "INCOME";
+            const isIncome = tx.type === "INCOME";
             const isPendingIncome = isIncome && tx.status === "PENDING";
             const statusMeta = TRANSACTION_STATUS_META[tx.status];
             const account = accountsById.get(tx.accountId);
-            const CategoryIcon = resolveCategoryIcon(tx.category);
+            const category = tx.categoryId
+              ? categoriesById.get(tx.categoryId)
+              : undefined;
+            const categoryName = category?.name ?? "Sem categoria";
+            const categoryColor = category?.color ?? "#64748B";
+            const CategoryIcon = resolveCategoryIcon(categoryName);
 
             return (
               <tr
@@ -204,7 +210,7 @@ export function TransactionsTable({
                     onSelectTransaction(tx);
                   }
                 }}
-                aria-label={`Ver detalhes da transação ${tx.title}`}
+                aria-label={`Ver detalhes da transação ${tx.description}`}
                 className="group cursor-pointer transition-colors hover:bg-muted/35 focus-visible:bg-muted/45 focus-visible:outline-none"
               >
                 {/* Descrição e observação opcional (notes) */}
@@ -226,7 +232,7 @@ export function TransactionsTable({
                     </span>
 
                     <div className="min-w-0">
-                      <p className="font-medium text-foreground">{tx.title}</p>
+                      <p className="font-medium text-foreground">{tx.description}</p>
                       {tx.notes ? (
                         <p
                           title={tx.notes}
@@ -258,10 +264,10 @@ export function TransactionsTable({
                   <Badge variant="outline" className="gap-1.5 font-normal">
                     <CategoryIcon
                       className="size-3.5 shrink-0"
-                      style={{ color: tx.categoryColor }}
+                      style={{ color: categoryColor }}
                       aria-hidden="true"
                     />
-                    <span>{tx.category}</span>
+                    <span>{categoryName}</span>
                   </Badge>
                 </td>
 
@@ -274,7 +280,7 @@ export function TransactionsTable({
 
                 {/* Data */}
                 <td className="px-4 py-3.5 align-middle whitespace-nowrap text-muted-foreground tabular-nums">
-                  {formatTransactionDate(tx.occurredAt)}
+                  {formatTransactionDate(tx.transactionDate)}
                 </td>
 
                 {/* Valor */}
@@ -307,7 +313,7 @@ export function TransactionsTable({
                           event.stopPropagation();
                           onConfirmTransaction(tx);
                         }}
-                        aria-label={`Confirmar receita ${tx.title}`}
+                        aria-label={`Confirmar receita ${tx.description}`}
                         title="Confirmar receita"
                         className="border-emerald-500/35 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
                       >
@@ -323,7 +329,7 @@ export function TransactionsTable({
                           event.stopPropagation();
                           onDeleteTransaction(tx);
                         }}
-                        aria-label={`Excluir receita ${tx.title}`}
+                        aria-label={`Excluir receita ${tx.description}`}
                         title="Excluir receita"
                       >
                         <Trash2 className="size-3.5" aria-hidden="true" />

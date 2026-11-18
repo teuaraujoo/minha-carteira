@@ -7,7 +7,6 @@ import {
   CATEGORY_STATUS_META,
   resolveCategoryIconByKey,
 } from "@/components/categories/category-catalog";
-import type { CategoryItem } from "@/components/categories/categories-mock-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,13 +17,14 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import type { CategoryDto } from "@/services/categories.service";
 
 interface CategoriesTableProps {
-  categories: CategoryItem[];
+  categories: CategoryDto[];
   hasActiveFilters: boolean;
-  onEditCategory: (category: CategoryItem) => void;
-  onToggleCategoryStatus: (category: CategoryItem) => void;
-  onDeleteCategory: (category: CategoryItem) => void;
+  onEditCategory: (category: CategoryDto) => void;
+  onToggleCategoryStatus: (category: CategoryDto) => void;
+  onDeleteCategory: (category: CategoryDto) => void;
   onClearFilters: () => void;
 }
 
@@ -104,7 +104,7 @@ export function CategoriesTable({
                   <div className="flex items-center gap-3">
                     <span
                       className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-background shadow-2xs"
-                      style={{ color: category.color }}
+                      style={{ color: category.color ?? "#64748B" }}
                     >
                       {createElement(resolveCategoryIconByKey(category.icon), {
                         className: "size-4",
@@ -129,11 +129,11 @@ export function CategoriesTable({
                   <div className="inline-flex items-center gap-2">
                     <span
                       className="size-4 shrink-0 rounded-full border border-border"
-                      style={{ backgroundColor: category.color }}
+                      style={{ backgroundColor: category.color ?? "#64748B" }}
                       aria-hidden="true"
                     />
                     <span className="font-mono text-xs text-muted-foreground uppercase">
-                      {category.color}
+                      {category.color ?? "#64748B"}
                     </span>
                   </div>
                 </td>

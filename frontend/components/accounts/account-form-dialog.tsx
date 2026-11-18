@@ -14,11 +14,8 @@ import {
   type AccountType,
 } from "@/components/accounts/account-catalog";
 import { AccountWalletCard } from "@/components/accounts/account-wallet-card";
-import {
-  createMockAccount,
-  updateMockAccount,
-  type AccountItem,
-} from "@/components/accounts/accounts-mock-store";
+import { ApiClientError } from "@/services/api-client";
+import { accountsService, type AccountDto } from "@/services/accounts.service";
 import { Button } from "@/components/ui/button";
 import { ColorPalettePicker } from "@/components/ui/color-palette-picker";
 import {
@@ -75,11 +72,11 @@ type AccountFormValues = z.infer<typeof accountFormSchema>;
 interface AccountFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  accountToEdit?: AccountItem | null;
-  onSaved?: (account: AccountItem) => void;
+  accountToEdit?: AccountDto | null;
+  onSaved?: (account: AccountDto) => void;
 }
 
-function buildDefaultValues(account?: AccountItem | null): AccountFormValues {
+function buildDefaultValues(account?: AccountDto | null): AccountFormValues {
   if (!account) {
     return {
       name: "",
@@ -156,45 +153,47 @@ export function AccountFormDialog({
     status: accountToEdit?.status ?? ("ACTIVE" as const),
   };
 
-  const onSubmit = (values: AccountFormValues) => {
-    if (accountToEdit) {
-      const result = updateMockAccount(accountToEdit.id, {
-        name: values.name,
+  const onSubmit = async (values: AccountFormValues) => {
+    try {
+      if (accountToEdit) {
+        const updated = await accountsService.updateAccount(accountToEdit.id, {
+          name: values.name.trim(),
+          type: values.type,
+          brand: values.brand.trim() || null,
+          institution: values.institution.trim() || null,
+          color: values.color || DEFAULT_ACCOUNT_COLOR,
+        });
+
+        toast.success(`Conta "${updated.name}" atualizada.`);
+        onSaved?.(updated);
+        onOpenChange(false);
+        return;
+      }
+
+      const parsedBalance = parseCurrencyInput(values.initialBalanceText);
+      const created = await accountsService.createAccount({
+        name: values.name.trim(),
         type: values.type,
+        initialBalance: Number.isFinite(parsedBalance) ? parsedBalance : 0,
         brand: values.brand.trim() || null,
         institution: values.institution.trim() || null,
         color: values.color || DEFAULT_ACCOUNT_COLOR,
       });
 
-      if (!result.ok) {
-        setError("name", { message: result.error });
+      toast.success(`Conta "${created.name}" adicionada.`);
+      onSaved?.(created);
+      onOpenChange(false);
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        if (error.status === 409) {
+          setError("name", { message: error.message });
+          return;
+        }
+        toast.error(error.message);
         return;
       }
-
-      toast.success(`Conta "${result.account.name}" atualizada.`);
-      onSaved?.(result.account);
-      onOpenChange(false);
-      return;
+      toast.error("Não foi possível salvar a conta financeira.");
     }
-
-    const parsedBalance = parseCurrencyInput(values.initialBalanceText);
-    const result = createMockAccount({
-      name: values.name,
-      type: values.type,
-      initialBalance: Number.isFinite(parsedBalance) ? parsedBalance : 0,
-      brand: values.brand.trim() || null,
-      institution: values.institution.trim() || null,
-      color: values.color || DEFAULT_ACCOUNT_COLOR,
-    });
-
-    if (!result.ok) {
-      setError("name", { message: result.error });
-      return;
-    }
-
-    toast.success(`Conta "${result.account.name}" adicionada.`);
-    onSaved?.(result.account);
-    onOpenChange(false);
   };
 
   return (

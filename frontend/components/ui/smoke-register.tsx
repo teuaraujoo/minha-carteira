@@ -9,6 +9,7 @@ import {
 } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -35,9 +36,12 @@ import {
   type AuthTheme,
 } from "@/components/ui/auth-smoke-shell";
 import {
+  clearPendingAuthSession,
   savePendingAuthEmail,
   usePendingAuthEmail,
 } from "@/lib/auth-onboarding-storage";
+import { ApiClientError } from "@/services/api-client";
+import { authService } from "@/services/auth.service";
 import { cn } from "@/lib/utils";
 
 const STEP_COUNT = 2;
@@ -95,9 +99,6 @@ export type SmokeRegisterProps = {
   className?: string;
 };
 
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 function formatBrMobileMask(rawValue: string): string {
   const digits = rawValue.replace(/\D/g, "").slice(0, 11);
 
@@ -115,6 +116,7 @@ export function SmokeRegister({
   defaultTheme = "light",
   className,
 }: SmokeRegisterProps) {
+  const router = useRouter();
   const [theme, setTheme] = useState<AuthTheme>(defaultTheme);
   const [step, setStep] = useState<1 | 2>(1);
   const [showPassword, setShowPassword] = useState(false);
@@ -189,10 +191,38 @@ export function SmokeRegister({
         return;
       }
 
-      // Fluxo visual: validação local dos dados sem integração com o backend.
-      await wait(700);
+      if (!payload.email) {
+        setStatusMessage(
+          "E-mail de confirmação não encontrado. Reinicie o acesso na tela de login.",
+        );
+        return;
+      }
+
+      await authService.register({
+        name: payload.name,
+        username: payload.username,
+        email: payload.email,
+        phone: payload.phone,
+        password: payload.password,
+      });
+
+      clearPendingAuthSession();
+
+      // Autentica automaticamente o usuário recém-cadastrado para abrir o painel já logado.
+      try {
+        await authService.login({
+          identifier: payload.email,
+          password: payload.password,
+        });
+        router.push("/accounts");
+      } catch {
+        router.push(loginHref);
+      }
+    } catch (error) {
       setStatusMessage(
-        "Dados de cadastro validados na interface. A integração com o backend será conectada na próxima etapa.",
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível concluir o cadastro.",
       );
     } finally {
       setBusy(false);

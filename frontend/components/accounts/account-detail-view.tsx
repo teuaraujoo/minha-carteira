@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -32,16 +32,24 @@ import {
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 import { AccountMetricCard } from "@/components/accounts/account-metric-card";
 import { AccountWalletCard } from "@/components/accounts/account-wallet-card";
-import {
-  COMPETENCE_MONTHS,
-  deleteMockAccount,
-  getAccountCategorySpend,
-  getAccountMonthlyFlowSeries,
-  toggleHideAccountValues,
-  toggleMockAccountStatus,
-  useAccountsStore,
-} from "@/components/accounts/accounts-mock-store";
 import { Badge } from "@/components/ui/badge";
+import {
+  toggleHideValuesPreference,
+  useHideValuesPreference,
+} from "@/lib/formatters";
+import {
+  accountsService,
+  type AccountDetailDto,
+} from "@/services/accounts.service";
+import { ApiClientError } from "@/services/api-client";
+import {
+  categoriesService,
+  type CategoryDto,
+} from "@/services/categories.service";
+import {
+  transactionsService,
+  type TransactionDto,
+} from "@/services/transactions.service";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -105,19 +113,113 @@ function formatIsoDatePtBr(isoValue: string | null): string {
   return monthFormatter.format(parsed);
 }
 
+const COMPETENCE_MONTH_NAMES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+] as const;
+
+function buildRecentCompetenceMonths(count = 6): Array<{ value: string; label: string }> {
+  const now = new Date();
+  const options: Array<{ value: string; label: string }> = [];
+  for (let offset = 0; offset < count; offset += 1) {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+    const year = date.getUTCFullYear();
+    const monthIndex = date.getUTCMonth();
+    const monthNumber = String(monthIndex + 1).padStart(2, "0");
+    options.push({
+      value: `${monthNumber}/${year}`,
+      label: `${COMPETENCE_MONTH_NAMES[monthIndex]} de ${year}`,
+    });
+  }
+  return options;
+}
+
 export function AccountDetailView({ accountId }: { accountId: string }) {
   const router = useRouter();
-  const { accounts, transactions, hideValues } = useAccountsStore();
+  const hideValues = useHideValuesPreference();
+  const competenceOptions = useMemo(() => buildRecentCompetenceMonths(6), []);
 
   const [selectedMonth, setSelectedMonth] = useState<string>(
-    COMPETENCE_MONTHS[0].value,
+    competenceOptions[0]!.value,
   );
+  const [account, setAccount] = useState<AccountDetailDto | null>(null);
+  const [accountTransactions, setAccountTransactions] = useState<TransactionDto[]>([]);
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const account = accounts.find((item) => item.id === accountId);
+  const reloadAccountDetails = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
-  if (!account) {
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      accountsService.getAccountById(accountId, selectedMonth),
+      transactionsService.listTransactions({
+        accountId,
+        pageSize: 10,
+        sortBy: "transactionDate",
+        sortOrder: "desc",
+      }),
+      categoriesService.listCategories({ pageSize: 100 }),
+    ])
+      .then(([detail, txResult, categoriesResult]) => {
+        if (!active) return;
+        setNotFound(false);
+        setAccount(detail);
+        setAccountTransactions(txResult.items);
+        setCategories(categoriesResult.items);
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (error instanceof ApiClientError && error.status === 404) {
+          setNotFound(true);
+          setAccount(null);
+        } else if (error instanceof ApiClientError && error.status !== 401) {
+          toast.error(error.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [accountId, selectedMonth, refreshTick]);
+
+  const categoriesById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
+
+  if (loading && !account) {
+    return (
+      <Card className="mx-auto max-w-xl">
+        <CardContent className="py-12 text-center text-sm text-muted-foreground">
+          Carregando detalhes da conta...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (notFound || !account) {
     return (
       <Card className="mx-auto max-w-xl">
         <CardHeader>
@@ -138,41 +240,26 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
 
   const typeMeta = ACCOUNT_TYPE_MAP[account.type];
   const brandMeta = resolveAccountBrand(account.brand);
-  const accountTransactions = transactions.filter(
-    (tx) => tx.accountId === account.id,
-  );
-  const pendingTransactions = accountTransactions.filter(
-    (tx) => tx.status === "PENDING",
-  );
-  const pendingTotal = pendingTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+  const { metrics } = account;
+  const monthlyFlowSeries = metrics.monthlySeries;
+  const categorySpend = metrics.categorySpend;
 
-  const monthlyFlowSeries = getAccountMonthlyFlowSeries(account);
-  const selectedMonthFlow =
-    monthlyFlowSeries.find((item) => item.monthKey === selectedMonth) ?? {
-      monthKey: selectedMonth,
-      label: selectedMonth,
-      income: account.monthlyIncome,
-      expense: account.monthlyExpense,
-    };
-
-  const monthResult = selectedMonthFlow.income - selectedMonthFlow.expense;
-  const categorySpend = getAccountCategorySpend(account.id, selectedMonth);
-  const categoryTotal = categorySpend.reduce((sum, item) => sum + item.amount, 0);
-
-  const categoryChartConfig = categorySpend.reduce<ChartConfig>((acc, item) => {
-    acc[item.key] = {
-      label: item.category,
-      color: item.color,
+  const categoryChartConfig = categorySpend.reduce<ChartConfig>((acc, item, index) => {
+    const key = item.categoryId ?? `uncategorized-${index}`;
+    acc[key] = {
+      label: item.name,
+      color: item.color ?? "#64748B",
     };
     return acc;
   }, {});
 
   const categoryChartData = categorySpend.map((item) => ({
-    ...item,
-    fill: item.color,
+    category: item.name,
+    amount: item.amount,
+    fill: item.color ?? "#64748B",
   }));
 
-  const monthItemsRecord = COMPETENCE_MONTHS.reduce<Record<string, string>>(
+  const monthItemsRecord = competenceOptions.reduce<Record<string, string>>(
     (acc, item) => {
       acc[item.value] = item.label;
       return acc;
@@ -182,27 +269,42 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
 
   const canPhysicallyDelete = account.transactionsCount === 0;
 
-  const handleToggleStatus = () => {
-    const updated = toggleMockAccountStatus(account.id);
-    if (!updated) return;
-    if (updated.status === "INACTIVE") {
-      toast.success(`Conta "${updated.name}" desativada.`);
-    } else {
-      toast.success(`Conta "${updated.name}" reativada.`);
+  const handleToggleStatus = async () => {
+    try {
+      const updated =
+        account.status === "ACTIVE"
+          ? await accountsService.deactivateAccount(account.id)
+          : await accountsService.reactivateAccount(account.id);
+
+      toast.success(
+        updated.status === "INACTIVE"
+          ? `Conta "${updated.name}" desativada.`
+          : `Conta "${updated.name}" reativada.`,
+      );
+      reloadAccountDetails();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível alterar o status da conta.",
+      );
     }
   };
 
-  const handleDeleteAccount = () => {
-    const result = deleteMockAccount(account.id);
-    if (!result.ok) {
-      toast.error(result.error);
+  const handleDeleteAccount = async () => {
+    try {
+      await accountsService.deleteAccount(account.id);
+      toast.success(`Conta "${account.name}" excluída permanentemente.`);
       setDeleteConfirmOpen(false);
-      return;
+      router.push("/accounts");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível excluir a conta.",
+      );
+      setDeleteConfirmOpen(false);
     }
-
-    toast.success(`Conta "${account.name}" excluída permanentemente.`);
-    setDeleteConfirmOpen(false);
-    router.push("/accounts");
   };
 
   return (
@@ -242,7 +344,7 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
             type="button"
             variant="ghost"
             size="icon"
-            onClick={toggleHideAccountValues}
+            onClick={toggleHideValuesPreference}
             aria-label={hideValues ? "Exibir saldos" : "Ocultar saldos"}
             title={hideValues ? "Exibir saldos" : "Ocultar saldos"}
           >
@@ -365,7 +467,7 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
                   <SelectValue placeholder="Escolha o mês" />
                 </SelectTrigger>
                 <SelectContent>
-                  {COMPETENCE_MONTHS.map((month) => (
+                  {competenceOptions.map((month) => (
                     <SelectItem key={month.value} value={month.value}>
                       {month.label}
                     </SelectItem>
@@ -397,7 +499,7 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
               <AccountMetricCard
                 surface="card"
                 label="Entradas do mês"
-                value={selectedMonthFlow.income}
+                value={metrics.income}
                 valueFormat="currency"
                 hideValue={hideValues}
                 tone="positive"
@@ -405,7 +507,7 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
               <AccountMetricCard
                 surface="card"
                 label="Saídas do mês"
-                value={selectedMonthFlow.expense}
+                value={metrics.expense}
                 valueFormat="currency"
                 hideValue={hideValues}
                 tone="negative"
@@ -413,18 +515,18 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
               <AccountMetricCard
                 surface="card"
                 label="Resultado do mês"
-                value={monthResult}
+                value={metrics.netResult}
                 valueFormat="currency"
                 hideValue={hideValues}
-                tone={monthResult >= 0 ? "positive" : "negative"}
+                tone={metrics.netResult >= 0 ? "positive" : "negative"}
               />
               <AccountMetricCard
                 surface="card"
                 label="Mov. pendentes"
-                value={pendingTransactions.length}
+                value={metrics.pending.count}
                 valueFormat="integer"
                 secondaryNumber={{
-                  value: pendingTotal,
+                  value: metrics.pending.amount,
                   format: "currency",
                   hidden: hideValues,
                   prefix: "(",
@@ -554,23 +656,21 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
                 </ChartContainer>
 
                 <ul className="space-y-2">
-                  {categorySpend.map((item) => {
-                    const share =
-                      categoryTotal > 0
-                        ? Math.round((item.amount / categoryTotal) * 100)
-                        : 0;
-                    const CategoryIcon = resolveCategoryIcon(item.category);
+                  {categorySpend.map((item, index) => {
+                    const share = Math.round(item.percentage);
+                    const CategoryIcon = resolveCategoryIcon(item.name);
+                    const categoryColor = item.color ?? "#64748B";
                     return (
-                      <li key={item.key} className="space-y-1 text-xs">
+                      <li key={item.categoryId ?? `uncat-${index}`} className="space-y-1 text-xs">
                         <div className="flex items-center justify-between gap-2">
                           <span className="flex items-center gap-2 font-medium text-foreground">
                             <span
                               className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-white"
-                              style={{ backgroundColor: item.color }}
+                              style={{ backgroundColor: categoryColor }}
                             >
                               <CategoryIcon className="size-3" aria-hidden="true" />
                             </span>
-                            {item.category}
+                            {item.name}
                           </span>
                           <span className="font-semibold text-foreground tabular-nums">
                             {formatDisplayCurrency(item.amount, hideValues)}{" "}
@@ -584,7 +684,7 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
                             className="h-full rounded-full"
                             style={{
                               width: `${share}%`,
-                              backgroundColor: item.color,
+                              backgroundColor: categoryColor,
                             }}
                           />
                         </div>
@@ -643,8 +743,13 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
                 </thead>
                 <tbody className="divide-y divide-border/70">
                   {accountTransactions.map((tx) => {
-                    const isIncome = tx.kind === "INCOME";
-                    const CategoryIcon = resolveCategoryIcon(tx.category);
+                    const isIncome = tx.type === "INCOME";
+                    const category = tx.categoryId
+                      ? categoriesById.get(tx.categoryId)
+                      : undefined;
+                    const categoryName = category?.name ?? "Sem categoria";
+                    const categoryColor = category?.color ?? "#64748B";
+                    const CategoryIcon = resolveCategoryIcon(categoryName);
                     return (
                       <tr key={tx.id}>
                         <td className="py-3 pr-3 font-medium text-foreground">
@@ -663,22 +768,22 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
                                 <ArrowDownLeft className="size-3.5" aria-hidden="true" />
                               )}
                             </span>
-                            <span>{tx.title}</span>
+                            <span>{tx.description}</span>
                           </div>
                         </td>
                         <td className="py-3 pr-3 text-muted-foreground">
                           <span className="inline-flex items-center gap-2">
                             <span
                               className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-white"
-                              style={{ backgroundColor: tx.categoryColor }}
+                              style={{ backgroundColor: categoryColor }}
                             >
                               <CategoryIcon className="size-3" aria-hidden="true" />
                             </span>
-                            {tx.category}
+                            {categoryName}
                           </span>
                         </td>
                         <td className="py-3 pr-3 text-muted-foreground tabular-nums">
-                          {formatIsoDatePtBr(tx.occurredAt)}
+                          {formatIsoDatePtBr(tx.transactionDate)}
                         </td>
                         <td className="py-3 pr-3">
                           {tx.status === "CONFIRMED" ? (
@@ -724,6 +829,7 @@ export function AccountDetailView({ accountId }: { accountId: string }) {
         open={editOpen}
         onOpenChange={setEditOpen}
         accountToEdit={account}
+        onSaved={reloadAccountDetails}
       />
 
       {/* Confirmação destrutiva apenas quando a conta não possui lançamentos */}

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import {
   Eye,
   EyeOff,
@@ -14,32 +15,90 @@ import {
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog";
 import { AccountPreviewPanel } from "@/components/accounts/account-preview-panel";
 import { AccountWalletStack } from "@/components/accounts/account-wallet-stack";
-import {
-  toggleHideAccountValues,
-  useAccountsStore,
-  type AccountItem,
-} from "@/components/accounts/accounts-mock-store";
 import { AppShell } from "@/components/app-shell";
 import { AnimatedMetricNumber } from "@/components/ui/animated-metric-number";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  toggleHideValuesPreference,
+  useHideValuesPreference,
+} from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+import {
+  accountsService,
+  type AccountDetailMetricsDto,
+  type AccountDto,
+} from "@/services/accounts.service";
+import { ApiClientError } from "@/services/api-client";
+import {
+  categoriesService,
+  type CategoryDto,
+} from "@/services/categories.service";
+import {
+  transactionsService,
+  type TransactionDto,
+} from "@/services/transactions.service";
 
 type StatusFilter = "ACTIVE" | "INACTIVE" | "ALL";
 type ViewMode = "stack" | "grid";
 
 export default function AccountsPage() {
   const router = useRouter();
-  const { accounts, transactions, hideValues } = useAccountsStore();
+  const hideValues = useHideValuesPreference();
 
+  const [accounts, setAccounts] = useState<AccountDto[]>([]);
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ACTIVE");
   const [viewMode, setViewMode] = useState<ViewMode>("stack");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    accounts[0]?.id ?? null,
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedMetrics, setSelectedMetrics] =
+    useState<AccountDetailMetricsDto | null>(null);
+  const [selectedTransactions, setSelectedTransactions] = useState<
+    TransactionDto[]
+  >([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [accountToEdit, setAccountToEdit] = useState<AccountItem | null>(null);
+  const [accountToEdit, setAccountToEdit] = useState<AccountDto | null>(null);
+
+  const reloadAccounts = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      accountsService.listAccounts({ pageSize: 100 }),
+      categoriesService.listCategories({ pageSize: 100 }),
+    ])
+      .then(([accountsRes, categoriesRes]) => {
+        if (!active) return;
+        setAccounts(accountsRes.items);
+        setCategories(categoriesRes.items);
+        setSelectedId((prev) => prev ?? accountsRes.items[0]?.id ?? null);
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (error instanceof ApiClientError && error.status !== 401) {
+          toast.error(error.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoadingAccounts(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [refreshTick]);
+
+  const categoriesById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
 
   const activeAccounts = accounts.filter((item) => item.status === "ACTIVE");
   const inactiveAccounts = accounts.filter((item) => item.status === "INACTIVE");
@@ -59,16 +118,48 @@ export default function AccountsPage() {
     filteredAccounts[0] ??
     null;
 
-  const selectedTransactions = selectedAccount
-    ? transactions.filter((tx) => tx.accountId === selectedAccount.id)
-    : [];
+  const activeSelectedAccountId = selectedAccount?.id ?? null;
+
+  useEffect(() => {
+    if (!activeSelectedAccountId) {
+      return;
+    }
+
+    let cancelled = false;
+    Promise.all([
+      accountsService.getAccountById(activeSelectedAccountId),
+      transactionsService.listTransactions({
+        accountId: activeSelectedAccountId,
+        pageSize: 5,
+        sortBy: "transactionDate",
+        sortOrder: "desc",
+      }),
+    ])
+      .then(([detail, txResult]) => {
+        if (cancelled) return;
+        setSelectedMetrics(detail.metrics);
+        setSelectedTransactions(txResult.items);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSelectedMetrics(null);
+        setSelectedTransactions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSelectedAccountId]);
+
+  const effectiveMetrics = activeSelectedAccountId ? selectedMetrics : null;
+  const effectiveTransactions = activeSelectedAccountId ? selectedTransactions : [];
 
   const openCreateDialog = () => {
     setAccountToEdit(null);
     setDialogOpen(true);
   };
 
-  const openEditDialog = (account: AccountItem) => {
+  const openEditDialog = (account: AccountDto) => {
     setAccountToEdit(account);
     setDialogOpen(true);
   };
@@ -108,7 +199,7 @@ export default function AccountsPage() {
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  onClick={toggleHideAccountValues}
+                  onClick={toggleHideValuesPreference}
                   aria-label={hideValues ? "Exibir saldos" : "Ocultar saldos"}
                   title={hideValues ? "Exibir saldos" : "Ocultar saldos"}
                 >
@@ -203,7 +294,13 @@ export default function AccountsPage() {
         </Card>
 
         {/* Área principal: Pilha/Grade + Prévia da conta */}
-        {filteredAccounts.length === 0 ? (
+        {loadingAccounts ? (
+          <Card>
+            <CardContent className="py-14 text-center text-sm text-muted-foreground">
+              Carregando contas financeiras...
+            </CardContent>
+          </Card>
+        ) : filteredAccounts.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-14 text-center">
               <div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
@@ -256,7 +353,9 @@ export default function AccountsPage() {
             {selectedAccount ? (
               <AccountPreviewPanel
                 account={selectedAccount}
-                transactions={selectedTransactions}
+                metrics={effectiveMetrics}
+                transactions={effectiveTransactions}
+                categoriesById={categoriesById}
                 hideValues={hideValues}
                 onEdit={openEditDialog}
               />
@@ -279,7 +378,9 @@ export default function AccountsPage() {
             {selectedAccount ? (
               <AccountPreviewPanel
                 account={selectedAccount}
-                transactions={selectedTransactions}
+                metrics={effectiveMetrics}
+                transactions={effectiveTransactions}
+                categoriesById={categoriesById}
                 hideValues={hideValues}
                 onEdit={openEditDialog}
               />
@@ -297,6 +398,7 @@ export default function AccountsPage() {
           if (statusFilter === "INACTIVE" && savedAccount.status === "ACTIVE") {
             setStatusFilter("ACTIVE");
           }
+          reloadAccounts();
         }}
       />
     </AppShell>

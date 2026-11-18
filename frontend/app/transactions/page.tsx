@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -12,17 +12,7 @@ import {
 import toast from "react-hot-toast";
 
 import { AccountMetricCard } from "@/components/accounts/account-metric-card";
-import {
-  confirmMockTransaction,
-  deleteMockTransaction,
-  toggleHideAccountValues,
-  useAccountsStore,
-  type AccountTransactionItem,
-  type TransactionKind,
-  type TransactionStatus,
-} from "@/components/accounts/accounts-mock-store";
 import { AppShell } from "@/components/app-shell";
-import { TRANSACTION_CATEGORIES } from "@/components/transactions/transaction-catalog";
 import { TransactionDetailDialog } from "@/components/transactions/transaction-detail-dialog";
 import { TransactionFormDialog } from "@/components/transactions/transaction-form-dialog";
 import {
@@ -41,6 +31,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  toggleHideValuesPreference,
+  useHideValuesPreference,
+} from "@/lib/formatters";
+import { accountsService, type AccountDto } from "@/services/accounts.service";
+import { ApiClientError } from "@/services/api-client";
+import {
+  categoriesService,
+  type CategoryDto,
+} from "@/services/categories.service";
+import {
+  transactionsService,
+  type TransactionDto,
+  type TransactionKind,
+  type TransactionListMetaDto,
+  type TransactionStatus,
+} from "@/services/transactions.service";
 
 type StatusFilterValue = "ALL" | TransactionStatus;
 type SortOptionValue = "date-desc" | "date-asc" | "amount-desc" | "amount-asc";
@@ -53,7 +60,22 @@ const SORT_OPTIONS: Record<SortOptionValue, string> = {
 };
 
 export default function TransactionsPage() {
-  const { accounts, transactions, hideValues } = useAccountsStore();
+  const hideValues = useHideValuesPreference();
+
+  const [accounts, setAccounts] = useState<AccountDto[]>([]);
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [transactions, setTransactions] = useState<TransactionDto[]>([]);
+  const [meta, setMeta] = useState<TransactionListMetaDto>({
+    page: 1,
+    pageSize: 50,
+    total: 0,
+    totalPages: 1,
+    totalIncome: 0,
+    totalExpense: 0,
+    netResult: 0,
+    pendingIncomeAmount: 0,
+    pendingIncomeCount: 0,
+  });
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("ALL");
@@ -62,6 +84,7 @@ export default function TransactionsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortOption, setSortOption] = useState<SortOptionValue>("date-desc");
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogKind, setDialogKind] = useState<TransactionKind>("INCOME");
@@ -69,9 +92,91 @@ export default function TransactionsPage() {
     string | null
   >(null);
 
+  const [sortField, sortDirection] = useMemo<
+    [TransactionSortField, TransactionSortDirection]
+  >(() => {
+    const [field, direction] = sortOption.split("-") as [
+      TransactionSortField,
+      TransactionSortDirection,
+    ];
+    return [field, direction];
+  }, [sortOption]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      accountsService.listAccounts({ pageSize: 100 }),
+      categoriesService.listCategories({ pageSize: 100 }),
+    ])
+      .then(([accountsRes, categoriesRes]) => {
+        if (!active) return;
+        setAccounts(accountsRes.items);
+        setCategories(categoriesRes.items);
+      })
+      .catch(() => {
+        // Erros de autenticação são tratados no apiClient.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const reloadTransactions = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    transactionsService
+      .listTransactions({
+        page: 1,
+        pageSize: 50,
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+        accountId: accountFilter === "ALL" ? undefined : accountFilter,
+        categoryId: categoryFilter === "ALL" ? undefined : categoryFilter,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        search: searchTerm.trim() || undefined,
+        sortBy: sortField === "amount" ? "amount" : "transactionDate",
+        sortOrder: sortDirection,
+      })
+      .then((response) => {
+        if (!active) return;
+        setTransactions(response.items);
+        if (response.meta) {
+          setMeta(response.meta);
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (error instanceof ApiClientError && error.status !== 401) {
+          toast.error(error.message);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    statusFilter,
+    accountFilter,
+    categoryFilter,
+    dateFrom,
+    dateTo,
+    searchTerm,
+    sortField,
+    sortDirection,
+    refreshTick,
+  ]);
+
   const accountsById = useMemo(
     () => new Map(accounts.map((account) => [account.id, account])),
     [accounts],
+  );
+
+  const categoriesById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
   );
 
   const selectedTransaction = useMemo(
@@ -87,12 +192,10 @@ export default function TransactionsPage() {
     ? (accountsById.get(selectedTransaction.accountId) ?? null)
     : null;
 
-  const availableCategories = useMemo(() => {
-    const unique = new Set<string>();
-    TRANSACTION_CATEGORIES.forEach((item) => unique.add(item.name));
-    transactions.forEach((tx) => unique.add(tx.category));
-    return Array.from(unique).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [transactions]);
+  const selectedTransactionCategory =
+    selectedTransaction?.categoryId
+      ? (categoriesById.get(selectedTransaction.categoryId) ?? null)
+      : null;
 
   const statusItemsRecord = useMemo(
     () => ({
@@ -117,106 +220,24 @@ export default function TransactionsPage() {
     () => ({
       ALL: "Todas as categorias",
       ...Object.fromEntries(
-        availableCategories.map((category) => [category, category]),
+        categories.map((category) => [category.id, category.name]),
       ),
     }),
-    [availableCategories],
+    [categories],
   );
 
-  const [sortField, sortDirection] = useMemo<
-    [TransactionSortField, TransactionSortDirection]
-  >(() => {
-    const [field, direction] = sortOption.split("-") as [
-      TransactionSortField,
-      TransactionSortDirection,
-    ];
-    return [field, direction];
-  }, [sortOption]);
+  const filteredAndSortedTransactions = transactions;
 
-  const filteredAndSortedTransactions = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-
-    const filtered = transactions.filter((tx) => {
-      if (statusFilter !== "ALL" && tx.status !== statusFilter) {
-        return false;
-      }
-      if (accountFilter !== "ALL" && tx.accountId !== accountFilter) {
-        return false;
-      }
-      if (categoryFilter !== "ALL" && tx.category !== categoryFilter) {
-        return false;
-      }
-      if (dateFrom && tx.occurredAt < dateFrom) {
-        return false;
-      }
-      if (dateTo && tx.occurredAt > dateTo) {
-        return false;
-      }
-      if (normalizedSearch) {
-        const matchesTitle = tx.title.toLowerCase().includes(normalizedSearch);
-        const matchesNotes = (tx.notes ?? "")
-          .toLowerCase()
-          .includes(normalizedSearch);
-        if (!matchesTitle && !matchesNotes) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    return [...filtered].sort((a, b) => {
-      if (sortField === "amount") {
-        const diff = a.amount - b.amount;
-        if (diff !== 0) {
-          return sortDirection === "asc" ? diff : -diff;
-        }
-      } else {
-        const dateCompare = a.occurredAt.localeCompare(b.occurredAt);
-        if (dateCompare !== 0) {
-          return sortDirection === "asc" ? dateCompare : -dateCompare;
-        }
-      }
-
-      return b.occurredAt.localeCompare(a.occurredAt);
-    });
-  }, [
-    transactions,
-    statusFilter,
-    accountFilter,
-    categoryFilter,
-    dateFrom,
-    dateTo,
-    searchTerm,
-    sortField,
-    sortDirection,
-  ]);
-
-  const metrics = useMemo(() => {
-    let totalIncome = 0;
-    let totalExpense = 0;
-    let pendingIncomeCount = 0;
-    let pendingIncomeAmount = 0;
-
-    for (const tx of filteredAndSortedTransactions) {
-      if (tx.kind === "INCOME") {
-        totalIncome += tx.amount;
-        if (tx.status === "PENDING") {
-          pendingIncomeCount += 1;
-          pendingIncomeAmount += tx.amount;
-        }
-      } else {
-        totalExpense += tx.amount;
-      }
-    }
-
-    return {
-      totalIncome,
-      totalExpense,
-      netResult: totalIncome - totalExpense,
-      pendingIncomeCount,
-      pendingIncomeAmount,
-    };
-  }, [filteredAndSortedTransactions]);
+  const metrics = useMemo(
+    () => ({
+      totalIncome: meta.totalIncome,
+      totalExpense: meta.totalExpense,
+      netResult: meta.netResult,
+      pendingIncomeCount: meta.pendingIncomeCount,
+      pendingIncomeAmount: meta.pendingIncomeAmount,
+    }),
+    [meta],
+  );
 
   const hasActiveFilters = Boolean(
     searchTerm.trim() ||
@@ -252,22 +273,32 @@ export default function TransactionsPage() {
     setDialogOpen(true);
   };
 
-  const handleConfirmTransaction = (tx: AccountTransactionItem) => {
-    const result = confirmMockTransaction(tx.id);
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
+  const handleConfirmTransaction = async (tx: TransactionDto) => {
+    try {
+      await transactionsService.confirmTransaction(tx.id);
+      toast.success(`Receita "${tx.description}" confirmada.`);
+      reloadTransactions();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível confirmar a transação.",
+      );
     }
-    toast.success(`Receita "${tx.title}" confirmada.`);
   };
 
-  const handleDeleteTransaction = (tx: AccountTransactionItem) => {
-    const result = deleteMockTransaction(tx.id);
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
+  const handleDeleteTransaction = async (tx: TransactionDto) => {
+    try {
+      await transactionsService.deleteTransaction(tx.id);
+      toast.success(`Transação "${tx.description}" excluída.`);
+      reloadTransactions();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError
+          ? error.message
+          : "Não foi possível excluir a transação.",
+      );
     }
-    toast.success(`Receita "${tx.title}" excluída.`);
   };
 
   return (
@@ -301,7 +332,7 @@ export default function TransactionsPage() {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    onClick={toggleHideAccountValues}
+                    onClick={toggleHideValuesPreference}
                     aria-label={hideValues ? "Exibir valores" : "Ocultar valores"}
                     title={hideValues ? "Exibir valores" : "Ocultar valores"}
                   >
@@ -463,9 +494,9 @@ export default function TransactionsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Todas as categorias</SelectItem>
-                  {availableCategories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -499,7 +530,7 @@ export default function TransactionsPage() {
                   </strong>{" "}
                   de{" "}
                   <strong className="font-semibold text-foreground">
-                    {transactions.length}
+                    {meta.total}
                   </strong>{" "}
                   transações
                 </span>
@@ -565,6 +596,7 @@ export default function TransactionsPage() {
         <TransactionsTable
           transactions={filteredAndSortedTransactions}
           accountsById={accountsById}
+          categoriesById={categoriesById}
           hideValues={hideValues}
           sortField={sortField}
           sortDirection={sortDirection}
@@ -582,12 +614,15 @@ export default function TransactionsPage() {
           onOpenChange={setDialogOpen}
           defaultKind={dialogKind}
           accounts={accounts}
+          categories={categories}
+          onSaved={reloadTransactions}
         />
 
         {/* Modal de detalhes da transação */}
         <TransactionDetailDialog
           transaction={selectedTransaction}
           account={selectedTransactionAccount}
+          category={selectedTransactionCategory}
           hideValues={hideValues}
           open={Boolean(selectedTransaction)}
           onOpenChange={(open) => {
