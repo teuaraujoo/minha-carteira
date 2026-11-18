@@ -3,6 +3,7 @@ import test from "node:test";
 import { inflateSync } from "node:zlib";
 import bcrypt from "bcrypt";
 import {
+  createCustomCategories,
   createDefaultCategories,
   createDemoAccounts,
   createDemoHistory,
@@ -109,8 +110,8 @@ test("histórico de demonstração contém apenas autenticações expiradas ou c
 
 test("contas financeiras de demonstração respeitam invariantes de domínio e pertencem ao usuário padrão", () => {
   const accounts = createDemoAccounts(now);
-  assert.equal(accounts.length, 3);
-  assert.equal(new Set(accounts.map(account => account.id)).size, 3);
+  assert.equal(accounts.length, 6);
+  assert.equal(new Set(accounts.map(account => account.id)).size, 6);
   for (const props of accounts) {
     const account = new Account({
       id: props.id,
@@ -130,7 +131,8 @@ test("contas financeiras de demonstração respeitam invariantes de domínio e p
     assert.equal(account.userId, DEMO_USERS[1]!.id);
     assert.ok(account.initialBalance >= 0);
   }
-  assert.equal(accounts.filter(account => account.status === "ACTIVE").length, 2);
+  assert.equal(accounts.length, 6);
+  assert.equal(accounts.filter(account => account.status === "ACTIVE").length, 5);
   assert.equal(accounts.filter(account => account.status === "INACTIVE").length, 1);
 });
 
@@ -158,10 +160,21 @@ test("categorias padrão do seed cobrem 16 itens agnósticos de tipo com cores e
   }
 });
 
+test("categorias personalizadas do seed espelham os mocks do frontend", () => {
+  const customCategories = createCustomCategories(now);
+  assert.equal(customCategories.length, 3);
+  assert.equal(customCategories.filter(category => category.status === "ACTIVE").length, 2);
+  assert.equal(customCategories.filter(category => category.status === "INACTIVE").length, 1);
+  for (const props of customCategories) {
+    assert.equal(props.isDefault, false);
+    assert.equal(props.userId, DEMO_USERS[1]!.id);
+  }
+});
+
 test("transações de demonstração respeitam invariantes de domínio e pertencem ao usuário padrão", () => {
   const transactions = createDemoTransactions(now);
-  assert.equal(transactions.length, 3);
-  assert.equal(new Set(transactions.map(tx => tx.id)).size, 3);
+  assert.equal(transactions.length, 17);
+  assert.equal(new Set(transactions.map(tx => tx.id)).size, 17);
   for (const props of transactions) {
     const entity = new Transaction({
       id: props.id,
@@ -182,6 +195,6 @@ test("transações de demonstração respeitam invariantes de domínio e pertenc
     assert.equal(entity.userId, DEMO_USERS[1]!.id);
     assert.ok(entity.amount > 0);
   }
-  assert.equal(transactions.filter(tx => tx.status === "CONFIRMED").length, 2);
-  assert.equal(transactions.filter(tx => tx.status === "PENDING").length, 1);
+  assert.equal(transactions.filter(tx => tx.status === "CONFIRMED").length, 13);
+  assert.equal(transactions.filter(tx => tx.status === "PENDING").length, 4);
 });

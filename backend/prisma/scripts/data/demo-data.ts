@@ -75,47 +75,89 @@ export function createDemoHistory(now: Date) {
 
 export function createDemoAccounts(now: Date): Array<Prisma.AccountUncheckedCreateInput & { id: string }> {
   const ownerUserId = DEMO_USERS[1]!.id;
-  const createdAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const inactivatedAt = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+  const fallbackCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-  const digital = Account.create({
+  const nubank = Account.create({
     id: "76000000-0000-4000-8000-000000000001",
     userId: ownerUserId,
     name: "Nubank Principal",
     type: AccountType.DIGITAL,
     brand: "mastercard",
     institution: "Nubank",
-    color: "#8A05BE",
-    initialBalance: 3500,
-    now: createdAt,
+    color: "#5B21B6",
+    initialBalance: 1200,
+    now: new Date("2026-01-12T10:00:00.000Z"),
   });
 
-  const checking = Account.create({
+  const itau = Account.create({
     id: "76000000-0000-4000-8000-000000000002",
     userId: ownerUserId,
-    name: "Banco do Brasil",
+    name: "Itaú Uniclass",
     type: AccountType.CHECKING,
-    brand: "visa",
-    institution: "Banco do Brasil",
-    color: "#0038A8",
-    initialBalance: 1200.5,
-    now: createdAt,
+    brand: "hipercard",
+    institution: "Itaú",
+    color: "#C2410C",
+    initialBalance: 3500,
+    now: new Date("2025-11-04T09:15:00.000Z"),
   });
 
   const inactive = Account.create({
     id: "76000000-0000-4000-8000-000000000003",
     userId: ownerUserId,
-    name: "Cartão Antigo",
-    type: AccountType.DIGITAL,
+    name: "Conta Antiga Universitária",
+    type: AccountType.CHECKING,
     brand: "elo",
-    institution: "Banco Inter",
-    color: "#64748B",
-    initialBalance: 0,
-    now: createdAt,
+    institution: "Santander",
+    color: "#881337",
+    initialBalance: 500,
+    now: new Date("2024-03-10T09:00:00.000Z"),
   });
-  inactive.deactivate(inactivatedAt);
+  inactive.deactivate(new Date("2026-09-14T10:30:00.000Z"));
 
-  return [digital.toJSON(), checking.toJSON(), inactive.toJSON()];
+  const reserva = Account.create({
+    id: "76000000-0000-4000-8000-000000000004",
+    userId: ownerUserId,
+    name: "Reserva Turquesa",
+    type: AccountType.SAVINGS,
+    brand: "mastercard",
+    institution: "Inter",
+    color: "#015363",
+    initialBalance: 15000,
+    now: new Date("2025-08-20T14:00:00.000Z"),
+  });
+
+  const caixa = Account.create({
+    id: "76000000-0000-4000-8000-000000000005",
+    userId: ownerUserId,
+    name: "Caixa Econômica",
+    type: AccountType.CHECKING,
+    brand: "elo",
+    institution: "Caixa",
+    color: "#0F766E",
+    initialBalance: 420,
+    now: new Date("2026-11-01T08:30:00.000Z") ?? fallbackCreatedAt,
+  });
+
+  const xp = Account.create({
+    id: "76000000-0000-4000-8000-000000000006",
+    userId: ownerUserId,
+    name: "XP Renda Fixa",
+    type: AccountType.INVESTMENT,
+    brand: "visa",
+    institution: "XP Investimentos",
+    color: "#012048",
+    initialBalance: 25000,
+    now: new Date("2025-06-15T12:00:00.000Z"),
+  });
+
+  return [
+    nubank.toJSON(),
+    itau.toJSON(),
+    reserva.toJSON(),
+    caixa.toJSON(),
+    xp.toJSON(),
+    inactive.toJSON(),
+  ];
 }
 
 export const DEFAULT_CATEGORY_DEFINITIONS = [
@@ -157,58 +199,271 @@ export function createDefaultCategories(
   });
 }
 
+export function createCustomCategories(
+  _now: Date,
+): Array<Prisma.CategoryUncheckedCreateInput & { id: string }> {
+  const ownerUserId = DEMO_USERS[1]!.id;
+
+  const academia = new Category({
+    id: "77000000-0000-4000-8000-000000000101",
+    userId: ownerUserId,
+    name: "Academia & Bem-estar",
+    color: "#0F766E",
+    icon: "heart-pulse",
+    isDefault: false,
+    status: CategoryStatus.ACTIVE,
+    createdAt: new Date("2026-10-05T14:20:00.000Z"),
+    updatedAt: new Date("2026-10-05T14:20:00.000Z"),
+  });
+
+  const viagens = new Category({
+    id: "77000000-0000-4000-8000-000000000102",
+    userId: ownerUserId,
+    name: "Viagens",
+    color: "#5B21B6",
+    icon: "shopping-bag",
+    isDefault: false,
+    status: CategoryStatus.ACTIVE,
+    createdAt: new Date("2026-10-18T11:00:00.000Z"),
+    updatedAt: new Date("2026-10-18T11:00:00.000Z"),
+  });
+
+  const cursosAntigos = new Category({
+    id: "77000000-0000-4000-8000-000000000103",
+    userId: ownerUserId,
+    name: "Cursos Antigos",
+    color: "#1E293B",
+    icon: "graduation-cap",
+    isDefault: false,
+    status: CategoryStatus.INACTIVE,
+    createdAt: new Date("2026-08-12T09:30:00.000Z"),
+    updatedAt: new Date("2026-09-29T16:10:00.000Z"),
+  });
+
+  return [academia, viagens, cursosAntigos].map((category) => category.toJSON());
+}
+
+const CATEGORY_ID_BY_NAME = new Map<string, string>(
+  DEFAULT_CATEGORY_DEFINITIONS.map((definition) => [definition.name, definition.id]),
+);
+
+const DEMO_ACCOUNT_IDS = {
+  nubank: "76000000-0000-4000-8000-000000000001",
+  itau: "76000000-0000-4000-8000-000000000002",
+  santanderOld: "76000000-0000-4000-8000-000000000003",
+  reserva: "76000000-0000-4000-8000-000000000004",
+  xp: "76000000-0000-4000-8000-000000000006",
+} as const;
+
 export function createDemoTransactions(
   now: Date,
 ): Array<Prisma.TransactionUncheckedCreateInput & { id: string }> {
   const ownerUserId = DEMO_USERS[1]!.id;
   const createdAt = new Date(now.getTime() - 60 * 60 * 1000);
-  const transactionDate = now.toISOString().slice(0, 10);
 
-  const salaryIncome = Transaction.create({
-    id: "78000000-0000-4000-8000-000000000001",
-    userId: ownerUserId,
-    accountId: "76000000-0000-4000-8000-000000000002",
-    categoryId: DEFAULT_CATEGORY_DEFINITIONS[0].id,
-    description: "Salário mensal",
-    amount: 4500,
-    type: TransactionType.INCOME,
-    status: TransactionStatus.CONFIRMED,
-    transactionDate,
-    notes: "Crédito em folha de pagamento.",
-    now: createdAt,
+  const seedSpecs: Array<{
+    id: string;
+    accountId: string;
+    categoryName: string;
+    description: string;
+    amount: number;
+    type: TransactionType;
+    status: TransactionStatus;
+    transactionDate: string;
+    notes?: string | null;
+  }> = [
+    {
+      id: "78000000-0000-4000-8000-000000000001",
+      accountId: DEMO_ACCOUNT_IDS.nubank,
+      categoryName: "Alimentação",
+      description: "Supermercado Zona Sul",
+      amount: 468.9,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-14",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000002",
+      accountId: DEMO_ACCOUNT_IDS.nubank,
+      categoryName: "Serviços",
+      description: "Reembolso Consultoria UI",
+      amount: 1450.0,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-12",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000003",
+      accountId: DEMO_ACCOUNT_IDS.nubank,
+      categoryName: "Assinaturas",
+      description: "Streaming e Nuvem",
+      amount: 119.8,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.PENDING,
+      transactionDate: "2026-11-16",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000004",
+      accountId: DEMO_ACCOUNT_IDS.nubank,
+      categoryName: "Saúde",
+      description: "Farmácia São Paulo",
+      amount: 184.5,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-08",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000005",
+      accountId: DEMO_ACCOUNT_IDS.nubank,
+      categoryName: "Lazer",
+      description: "Restaurante Vila Madalena",
+      amount: 242.0,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-05",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000006",
+      accountId: DEMO_ACCOUNT_IDS.itau,
+      categoryName: "Salário",
+      description: "Salário Mensal",
+      amount: 9400.0,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-05",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000007",
+      accountId: DEMO_ACCOUNT_IDS.itau,
+      categoryName: "Moradia",
+      description: "Aluguel Apartamento",
+      amount: 2450.0,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-06",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000008",
+      accountId: DEMO_ACCOUNT_IDS.itau,
+      categoryName: "Moradia",
+      description: "Condomínio e Água",
+      amount: 690.0,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.PENDING,
+      transactionDate: "2026-11-18",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000009",
+      accountId: DEMO_ACCOUNT_IDS.itau,
+      categoryName: "Transporte",
+      description: "Posto Shell",
+      amount: 289.4,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-11",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000010",
+      accountId: DEMO_ACCOUNT_IDS.reserva,
+      categoryName: "Poupança",
+      description: "Aporte Reserva Novembro",
+      amount: 1500.0,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-07",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000011",
+      accountId: DEMO_ACCOUNT_IDS.reserva,
+      categoryName: "Rendimentos",
+      description: "Rendimento Mensal",
+      amount: 350.0,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-02",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000012",
+      accountId: DEMO_ACCOUNT_IDS.xp,
+      categoryName: "Investimentos",
+      description: "Tesouro Selic 2029",
+      amount: 2450.0,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-09",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000013",
+      accountId: DEMO_ACCOUNT_IDS.xp,
+      categoryName: "Tarifas",
+      description: "Taxa de Custódia B3",
+      amount: 400.0,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-11-03",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000014",
+      accountId: DEMO_ACCOUNT_IDS.santanderOld,
+      categoryName: "Transferências",
+      description: "Transferência de encerramento",
+      amount: 500.0,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-09-14",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000015",
+      accountId: DEMO_ACCOUNT_IDS.santanderOld,
+      categoryName: "Reembolsos",
+      description: "Estorno tarifa bancária",
+      amount: 45.9,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.CONFIRMED,
+      transactionDate: "2026-09-10",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000016",
+      accountId: DEMO_ACCOUNT_IDS.nubank,
+      categoryName: "Serviços",
+      description: "Freela Redesign App",
+      amount: 2800.0,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.PENDING,
+      transactionDate: "2026-11-20",
+      notes: "Parcela final após entrega das telas no Figma.",
+    },
+    {
+      id: "78000000-0000-4000-8000-000000000017",
+      accountId: DEMO_ACCOUNT_IDS.xp,
+      categoryName: "Rendimentos",
+      description: "Dividendos FIIs Novembro",
+      amount: 420.0,
+      type: TransactionType.INCOME,
+      status: TransactionStatus.PENDING,
+      transactionDate: "2026-11-19",
+      notes: "Provento previsto para crédito na corretora.",
+    },
+  ];
+
+  return seedSpecs.map((spec) => {
+    const entity = Transaction.create({
+      id: spec.id,
+      userId: ownerUserId,
+      accountId: spec.accountId,
+      categoryId: CATEGORY_ID_BY_NAME.get(spec.categoryName) ?? null,
+      description: spec.description,
+      amount: spec.amount,
+      type: spec.type,
+      status: spec.status,
+      transactionDate: spec.transactionDate,
+      notes: spec.notes ?? null,
+      now: createdAt,
+    });
+    return {
+      ...entity.toJSON(),
+      amount: entity.amount.toFixed(2),
+      transactionDate: new Date(`${entity.transactionDate}T00:00:00.000Z`),
+    };
   });
-
-  const groceryExpense = Transaction.create({
-    id: "78000000-0000-4000-8000-000000000002",
-    userId: ownerUserId,
-    accountId: "76000000-0000-4000-8000-000000000001",
-    categoryId: DEFAULT_CATEGORY_DEFINITIONS[6].id,
-    description: "Supermercado da semana",
-    amount: 180.5,
-    type: TransactionType.EXPENSE,
-    status: TransactionStatus.CONFIRMED,
-    transactionDate,
-    notes: null,
-    now: createdAt,
-  });
-
-  const pendingSubscription = Transaction.create({
-    id: "78000000-0000-4000-8000-000000000003",
-    userId: ownerUserId,
-    accountId: "76000000-0000-4000-8000-000000000001",
-    categoryId: DEFAULT_CATEGORY_DEFINITIONS[11].id,
-    description: "Assinatura de nuvem",
-    amount: 59.9,
-    type: TransactionType.EXPENSE,
-    status: TransactionStatus.PENDING,
-    transactionDate,
-    notes: "Débito previsto para o fechamento da fatura.",
-    now: createdAt,
-  });
-
-  return [salaryIncome, groceryExpense, pendingSubscription].map((transaction) => ({
-    ...transaction.toJSON(),
-    amount: transaction.amount.toFixed(2),
-    transactionDate: new Date(`${transaction.transactionDate}T00:00:00.000Z`),
-  }));
 }

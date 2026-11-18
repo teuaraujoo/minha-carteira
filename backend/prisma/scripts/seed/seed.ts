@@ -8,6 +8,7 @@ import { createR2Client } from "../../../src/modules/storage/infrastructure/prov
 import { R2StorageService } from "../../../src/modules/storage/infrastructure/providers/cloudflare-r2/r2-storage.service.js";
 import { validateStoredFile } from "../../../src/modules/storage/domain/validation/file-validation.js";
 import {
+  createCustomCategories,
   createDefaultCategories,
   createDemoAccounts,
   createDemoHistory,
@@ -52,6 +53,7 @@ try {
     const history = createDemoHistory(now);
     const accounts = createDemoAccounts(now);
     const defaultCategories = createDefaultCategories(now);
+    const customCategories = createCustomCategories(now);
     const demoTransactions = createDemoTransactions(now);
     await prisma.$transaction(async transaction => {
       // IDs e identidades reservados impedem promover ou sobrescrever contas preexistentes.
@@ -74,21 +76,33 @@ try {
       if (previousSession && (previousSession.userId !== history.refreshToken.userId || previousSession.tokenHash !== history.refreshToken.tokenHash)) {
         throw new Error("Uma sessão existente conflita com o histórico reservado do seed.");
       }
-      for (const account of accounts) {
-        const previousAccount = await transaction.account.findUnique({ where: { id: account.id } });
-        if (previousAccount && previousAccount.userId !== account.userId) {
+      for (const account of await transaction.account.findMany({ where: { id: { in: accounts.map(a => a.id) } } })) {
+        const expected = accounts.find(a => a.id === account.id);
+        if (expected && account.userId !== expected.userId) {
           throw new Error("Uma conta financeira existente conflita com os identificadores reservados do seed.");
         }
       }
-      for (const category of defaultCategories) {
-        const previousCategory = await transaction.category.findUnique({ where: { id: category.id } });
-        if (previousCategory && (!previousCategory.isDefault || previousCategory.name.toLowerCase() !== category.name.toLowerCase())) {
+      const existingCategories = await transaction.category.findMany({
+        where: { id: { in: [...defaultCategories, ...customCategories].map(c => c.id) } },
+      });
+      for (const previousCategory of existingCategories) {
+        const defaultMatch = defaultCategories.find(c => c.id === previousCategory.id);
+        if (defaultMatch && (!previousCategory.isDefault || previousCategory.name.toLowerCase() !== defaultMatch.name.toLowerCase())) {
           throw new Error("Uma categoria existente conflita com os identificadores padrão reservados do seed.");
         }
+        const customMatch = customCategories.find(c => c.id === previousCategory.id);
+        if (customMatch && previousCategory.userId !== customMatch.userId) {
+          throw new Error("Uma categoria personalizada existente conflita com os identificadores reservados do seed.");
+        }
       }
-      for (const tx of demoTransactions) {
-        const previousTx = await transaction.transaction.findUnique({ where: { id: tx.id } });
-        if (previousTx && previousTx.userId !== tx.userId) {
+      const existingTransactions = await transaction.transaction.findMany({
+        where: { id: { in: demoTransactions.map(tx => tx.id) } },
+        select: { id: true, userId: true },
+      });
+      const existingTransactionIds = new Set(existingTransactions.map(tx => tx.id));
+      for (const previousTx of existingTransactions) {
+        const expected = demoTransactions.find(tx => tx.id === previousTx.id);
+        if (expected && previousTx.userId !== expected.userId) {
           throw new Error("Uma transação existente conflita com os identificadores reservados do seed.");
         }
       }
@@ -97,9 +111,9 @@ try {
       await transaction.refreshToken.upsert({ where: { id: history.refreshToken.id! }, update: {}, create: history.refreshToken });
       for (const account of accounts) await transaction.account.upsert({ where: { id: account.id }, update: {}, create: account });
       for (const category of defaultCategories) await transaction.category.upsert({ where: { id: category.id }, update: {}, create: category });
+      for (const category of customCategories) await transaction.category.upsert({ where: { id: category.id }, update: {}, create: category });
       for (const tx of demoTransactions) {
-        const existingTx = await transaction.transaction.findUnique({ where: { id: tx.id } });
-        if (!existingTx) {
+        if (!existingTransactionIds.has(tx.id)) {
           await transaction.transaction.create({ data: tx });
           if (tx.status === "CONFIRMED") {
             const numericAmount = Number(tx.amount);
@@ -112,7 +126,7 @@ try {
           }
         }
       }
-    });
+    }, { maxWait: 10_000, timeout: 60_000 });
     for (const [index, user] of DEMO_USERS.slice(0, 3).entries()) {
       const id = `75000000-0000-4000-8000-00000000000${index + 1}`;
       const storageKey = `seed/users/${user.id}/avatar.png`;
